@@ -1,0 +1,36 @@
+{
+  "url": "http://127.0.0.1:8080/",
+  "viewports": {
+    "desktop": {
+      "width": 1280,
+      "height": 800,
+      "status": 200,
+      "title": "Kanaf",
+      "hasCanvas": false,
+      "bodyTextLen": 254,
+      "bodyTextHash": "631c775286453aadd313e17ca45d8f4296dbe772a97f8dd1bd70cfba941c6595",
+      "bodyTextPrefix": "Kanaf Scan your device. The decision is yours. عربي Preparing si",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/app-builder-preview.png"
+    },
+    "mobile": {
+      "width": 390,
+      "height": 844,
+      "status": 200,
+      "title": "Kanaf",
+      "hasCanvas": false,
+      "bodyTextLen": 254,
+      "bodyTextHash": "631c775286453aadd313e17ca45d8f4296dbe772a97f8dd1bd70cfba941c6595",
+      "bodyTextPrefix": "Kanaf Scan your device. The decision is yours. عربي Preparing si",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/app-builder-preview-mobile.png"
+    }
+  },
+  "brandWarnings": [],
+  "authWarnings": [],
+  "verdictFile": "/workspace/screenshots/app-builder-preview.json"
+}

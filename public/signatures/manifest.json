@@ -1,0 +1,94 @@
+{
+  "builtAt": "2026-10-19T04:37:00Z",
+  "hashRecords": 263882,
+  "md5": 262878,
+  "sha1": 2,
+  "sha256": 1002,
+  "urls": 73351,
+  "hosts": 18054,
+  "certs": 408,
+  "sources": [
+    {
+      "id": "clamav-daily",
+      "version": "28157",
+      "updatedAt": "18 Oct 2026 06-24 +0000",
+      "publishedAt": 1792304654,
+      "count": 54705,
+      "reportedSignatures": 355765,
+      "license": "ClamAV CVD, hash records only (hdb/hsb). Digital signature verified. libclamav is not included.",
+      "terms": "https://www.clamav.net/"
+    },
+    {
+      "id": "clamav-main",
+      "version": "63",
+      "updatedAt": "16 Dec 2025 23-18 +0000",
+      "publishedAt": 1765927102,
+      "count": 207432,
+      "reportedSignatures": 3287027,
+      "license": "ClamAV main.cvd, filtered hash families. Signature verified.",
+      "terms": "https://www.clamav.net/",
+      "filtered": true
+    },
+    {
+      "id": "urlhaus",
+      "version": "2026-10-19",
+      "updatedAt": "2026-10-19T04:37:00Z",
+      "count": 73351,
+      "license": "abuse.ch URLhaus — free for non-commercial and commercial use with attribution.",
+      "terms": "https://urlhaus.abuse.ch/api/"
+    },
+    {
+      "id": "malwarebazaar",
+      "version": "2026-10-19",
+      "updatedAt": "2026-10-19T04:37:00Z",
+      "count": 1747,
+      "license": "abuse.ch MalwareBazaar recent hash export.",
+      "terms": "https://bazaar.abuse.ch/faq/#tos"
+    },
+    {
+      "id": "cscb",
+      "version": "2026-10-19",
+      "updatedAt": "2026-10-19T04:37:00Z",
+      "count": 408,
+      "license": "MalwareBazaar code-signing certificate blocklist.",
+      "terms": "https://bazaar.abuse.ch/faq/#cscb"
+    },
+    {
+      "id": "threatfox",
+      "version": "recent",
+      "updatedAt": "",
+      "count": 0,
+      "license": "abuse.ch ThreatFox recent IOCs. Confidence under 75 is ignored.",
+      "terms": "https://threatfox.abuse.ch/faq/#tos"
+    },
+    {
+      "id": "feodo",
+      "version": "ipblocklist",
+      "updatedAt": "",
+      "count": 0,
+      "license": "abuse.ch Feodo Tracker botnet C2 IP blocklist.",
+      "terms": "https://feodotracker.abuse.ch/blocklist/"
+    },
+    {
+      "id": "openphish",
+      "version": "feed",
+      "updatedAt": "",
+      "count": 0,
+      "license": "OpenPhish community phishing URL feed. Non-commercial use.",
+      "terms": "https://openphish.com/faq.html"
+    },
+    {
+      "id": "et-open",
+      "version": "compromised-ips",
+      "updatedAt": "",
+      "count": 0,
+      "license": "Proofpoint Emerging Threats Open compromised IP list.",
+      "terms": "https://rules.emergingthreats.net/"
+    }
+  ],
+  "notes": [
+    "ndb, ldb and bytecode signatures are not loaded because they require libclamav (GPLv2), which Kanaf does not ship.",
+    "main.cvd hash records are filtered to Android, Java, script, archive and document families when that file is present.",
+    "MalwareBazaar recent exports do not include file size, so those hashes match on the digest alone."
+  ]
+}
