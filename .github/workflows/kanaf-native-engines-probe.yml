@@ -56,7 +56,10 @@ jobs:
           export CC_aarch64_linux_android="$CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER"
           cd yarax-src
           CARGO_BUILD_JOBS=2 CARGO_INCREMENTAL=0 timeout 900 cargo build --locked --release --target aarch64-linux-android -p yara-x-capi 2>&1 | tee ../yara-build.log
-          find target/aarch64-linux-android/release -maxdepth 1 -name '*yara*' -type f -print | tee ../yara-output.txt\n          test -s target/aarch64-linux-android/release/libyara_x_capi.so\n          readelf -h target/aarch64-linux-android/release/libyara_x_capi.so | grep AArch64\n          cp target/aarch64-linux-android/release/libyara_x_capi.so ../libyara_x_capi-arm64.so
+          find target/aarch64-linux-android/release -maxdepth 1 -name '*yara*' -type f -print | tee ../yara-output.txt
+          test -s target/aarch64-linux-android/release/libyara_x_capi.so
+          readelf -h target/aarch64-linux-android/release/libyara_x_capi.so | grep AArch64
+          cp target/aarch64-linux-android/release/libyara_x_capi.so ../libyara_x_capi-arm64.so
       - name: Attempt ClamAV Android ARM64 CMake configure
         id: clamav
         continue-on-error: true
@@ -74,12 +77,15 @@ jobs:
         run: |
           echo "YARA-X build outcome: ${{ steps.yara.outcome }}" >> "$GITHUB_STEP_SUMMARY"
           echo "ClamAV configure outcome: ${{ steps.clamav.outcome }}" >> "$GITHUB_STEP_SUMMARY"
-          echo "Neither engine is enabled in the Android app by this workflow." >> "$GITHUB_STEP_SUMMARY"\n          if [[ -f libyara_x_capi-arm64.so ]]; then sha256sum libyara_x_capi-arm64.so >> "$GITHUB_STEP_SUMMARY"; fi
+          echo "Neither engine is enabled in the Android app by this workflow." >> "$GITHUB_STEP_SUMMARY"
+          if [[ -f libyara_x_capi-arm64.so ]]; then sha256sum libyara_x_capi-arm64.so >> "$GITHUB_STEP_SUMMARY"; fi
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: kanaf-arm64-probe
           path: |
-            libkanaf_arm64_probe.so\n            libyara_x_capi-arm64.so
+            libkanaf_arm64_probe.so
+            libyara_x_capi-arm64.so
             clamav-commit.txt
             yarax-commit.txt
             yara-build.log
