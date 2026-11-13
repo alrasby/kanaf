@@ -24,8 +24,30 @@ class SignatureRepository(private val context: Context) {
         }
     }
 
+    /**
+     * Only verified, monotonic updates may be installed from remote sources.
+     * The public key must be pinned by the app, never taken from the download.
+     */
     @Synchronized
-    fun install(bytes: ByteArray, expectedSha256: String) {
+    fun installVerified(
+        bytes: ByteArray,
+        manifest: SignedSignatureUpdate.Manifest,
+        pinnedPublicKeyDer: ByteArray
+    ) {
+        require(SignedSignatureUpdate.verify(manifest, pinnedPublicKeyDer)) {
+            "Untrusted signature database manifest"
+        }
+        val prefs = context.getSharedPreferences("signature-db", Context.MODE_PRIVATE)
+        require(manifest.version > prefs.getLong("highestVersion", 0L)) {
+            "Database version rollback rejected"
+        }
+        installValidated(bytes, manifest.sha256)
+        check(prefs.edit().putLong("highestVersion", manifest.version).commit()) {
+            "Could not persist signature version"
+        }
+    }
+
+    private fun installValidated(bytes: ByteArray, expectedSha256: String) {
         require(expectedSha256.matches(Regex("[0-9a-fA-F]{64}"))) { "Invalid digest" }
         require(bytes.size <= 32 * 1024 * 1024) { "Database exceeds limit" }
         val actual = MessageDigest.getInstance("SHA-256").digest(bytes)
