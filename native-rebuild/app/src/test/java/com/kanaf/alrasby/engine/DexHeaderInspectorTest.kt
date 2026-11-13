@@ -12,7 +12,7 @@ import java.util.zip.ZipOutputStream
 class DexHeaderInspectorTest {
     private fun dex(): ByteArray {
         val data = ByteArray(112)
-        "dex\\n035\\u0000".toByteArray(Charsets.US_ASCII).copyInto(data)
+        "dex\n035\u0000".toByteArray(Charsets.US_ASCII).copyInto(data)
         ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN).apply {
             putInt(32, 112)
             putInt(36, 112)
