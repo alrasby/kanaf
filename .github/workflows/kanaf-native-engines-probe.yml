@@ -1,0 +1,52 @@
+name: Kanaf ARM64 native engine feasibility
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  arm64-probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+      - uses: android-actions/setup-android@v3
+      - name: Install Android NDK
+        run: sdkmanager "ndk;27.2.12479018"
+      - name: Verify NDK toolchain and ABI
+        shell: bash
+        run: |
+          set -euo pipefail
+          NDK="$ANDROID_HOME/ndk/27.2.12479018"
+          test -x "$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang"
+          "$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang" --version
+      - name: Retrieve pinned engine source revisions
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch clamav-1.4.3 https://github.com/Cisco-Talos/clamav.git clamav-src
+          git clone --depth 1 --branch v0.13.0 https://github.com/VirusTotal/yara-x.git yarax-src
+          git -C clamav-src rev-parse HEAD | tee clamav-commit.txt
+          git -C yarax-src rev-parse HEAD | tee yarax-commit.txt
+      - name: Cross-compile minimal Android ARM64 NDK probe
+        shell: bash
+        run: |
+          set -euo pipefail
+          CLANG="$ANDROID_HOME/ndk/27.2.12479018/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang"
+          printf '%s\n' '#include <stdint.h>' 'int kanaf_arm64_probe(void) { return sizeof(uint64_t) == 8 ? 0 : 1; }' > probe.c
+          "$CLANG" -shared -fPIC probe.c -o libkanaf_arm64_probe.so
+          file libkanaf_arm64_probe.so
+          readelf -h libkanaf_arm64_probe.so | grep -E 'AArch64|ELF64'
+      - name: Report ClamAV cross-build prerequisites
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f clamav-src/CMakeLists.txt
+          echo "ClamAV source fetched; Android cross-build NOT performed: Android-target dependencies and Rust toolchain must be provisioned."
+          echo "YARA-X source fetched; Rust Android C API cross-build and runtime scan NOT performed."
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kanaf-arm64-probe
+          path: |
+            libkanaf_arm64_probe.so
+            clamav-commit.txt
+            yarax-commit.txt
