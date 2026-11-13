@@ -75,13 +75,6 @@ jobs:
           echo "YARA-X build outcome: ${{ steps.yara.outcome }}" >> "$GITHUB_STEP_SUMMARY"
           echo "ClamAV configure outcome: ${{ steps.clamav.outcome }}" >> "$GITHUB_STEP_SUMMARY"
           echo "Neither engine is enabled in the Android app by this workflow." >> "$GITHUB_STEP_SUMMARY"
-      - name: Report ClamAV cross-build prerequisites
-        shell: bash
-        run: |
-          set -euo pipefail
-          test -f clamav-src/CMakeLists.txt
-          echo "ClamAV source fetched; Android cross-build NOT performed: Android-target dependencies and Rust toolchain must be provisioned."
-          echo "YARA-X source fetched; Rust Android C API cross-build and runtime scan NOT performed."
       - uses: actions/upload-artifact@v4
         with:
           name: kanaf-arm64-probe
