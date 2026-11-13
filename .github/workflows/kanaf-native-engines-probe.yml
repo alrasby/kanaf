@@ -13,9 +13,16 @@ jobs:
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
-      - uses: android-actions/setup-android@v3
+      - name: Locate preinstalled Android SDK manager
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager -print -quit)"
+          test -x "$SDKMANAGER"
+          echo "SDKMANAGER=$SDKMANAGER" >> "$GITHUB_ENV"
+          "$SDKMANAGER" --version
       - name: Install Android NDK
-        run: sdkmanager "ndk;27.2.12479018"
+        run: "$SDKMANAGER" "ndk;27.2.12479018"
       - name: Verify NDK toolchain and ABI
         shell: bash
         run: |
