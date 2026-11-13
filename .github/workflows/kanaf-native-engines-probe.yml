@@ -71,6 +71,13 @@ jobs:
             -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-26 \
             -DENABLE_LIBCLAMAV_ONLY=ON -DENABLE_TESTS=OFF \
             -DENABLE_MAN_PAGES=OFF -DENABLE_DOXYGEN=OFF 2>&1 | tee clamav-configure.log
+          timeout 600 cmake --build clamav-build --parallel 2 2>&1 | tee clamav-build.log
+          find clamav-build -type f \( -name "libclamav.so*" -o -name "libclamav.a" \) -print | tee clamav-output.txt
+          test -s clamav-output.txt
+          while IFS= read -r lib; do
+            file "$lib"
+            readelf -h "$lib" | grep AArch64
+          done < clamav-output.txt
       - name: Summarize real engine build status
         if: always()
         shell: bash
@@ -91,6 +98,8 @@ jobs:
             yara-build.log
             yara-output.txt
             clamav-configure.log
+            clamav-build.log
+            clamav-output.txt
       - name: Enforce native engine build result
         if: always()
         shell: bash
@@ -101,7 +110,7 @@ jobs:
             exit 1
           fi
           if [[ "${{ steps.clamav.outcome }}" != "success" ]]; then
-            echo "::error::ClamAV Android ARM64 CMake configure failed; inspect clamav-configure.log"
+            echo "::error::ClamAV Android ARM64 build failed; inspect clamav-configure.log and clamav-build.log"
             exit 1
           fi
-          echo "YARA-X ARM64 library produced; ClamAV configuration succeeded. ClamAV compilation and runtime tests remain pending."
+          echo "YARA-X ARM64 library produced; ClamAV ARM64 library produced. Runtime detection and performance tests remain pending."
