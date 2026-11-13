@@ -1,6 +1,8 @@
 package com.kanaf.alrasby
 
 import android.app.Activity
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -126,6 +128,13 @@ private fun KanafScreen(activity: Activity) {
     KanafGlassHome(
         busy = busy,
         status = status,
-        onPickFile = { picker.launch(arrayOf("*/*")) }
+        onPickFile = { picker.launch(arrayOf("*/*")) },
+        onOpenWebsite = {
+            runCatching {
+                activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://nabdhserv.net")))
+            }.onFailure {
+                android.widget.Toast.makeText(activity, "تعذر فتح المتصفح", android.widget.Toast.LENGTH_SHORT).show()
+            }
+        }
     )
 }
