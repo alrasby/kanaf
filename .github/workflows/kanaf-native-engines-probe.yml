@@ -1,5 +1,6 @@
 name: Kanaf ARM64 native engine feasibility
 on:
+  workflow_call:
   workflow_dispatch:
   push:
     branches: [rebuild/kanaf-native-v1]
