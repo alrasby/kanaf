@@ -12,8 +12,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.kanaf.alrasby.engine.StreamScanner
-import com.kanaf.alrasby.engine.SignatureIndex
-import java.io.InputStreamReader
+import com.kanaf.alrasby.engine.SignatureRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -31,11 +30,7 @@ private fun KanafScreen(activity: Activity) {
     var status by remember { mutableStateOf("اختر ملفًا لفحص بصمته محليًا") }
     var busy by remember { mutableStateOf(false) }
     val signatures = remember {
-        runCatching {
-            activity.assets.open("signatures.tsv").use { input ->
-                SignatureIndex.parse(InputStreamReader(input, Charsets.UTF_8))
-            }
-        }.getOrNull()
+        runCatching { SignatureRepository(activity).load() }.getOrNull()
     }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
