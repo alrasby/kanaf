@@ -22,3 +22,11 @@ The native Android app under `native-rebuild/` is the replacement. Legacy web co
 
 ## Merge policy
 Keep PR as draft until CI and core feature gates pass. No claims of comprehensive protection.
+
+## Update security status (November 2026)
+- RSA SHA256withRSA manifest verification and negative tampering tests have been added.
+- `SignatureRepository.installVerified` requires an authenticated manifest and checks a locally persisted version floor.
+- No production public key has been pinned and no trusted release pipeline has been implemented. Network updating MUST remain disabled until that exists.
+- Database activation and version-floor persistence are not one crash-atomic transaction. Recovery/rollback hardening is required before shipping updates.
+- Archive inspection enforces actual expanded byte limits, but still needs time budgets, nested inspection, and complete APK/DEX analysis.
+- CI execution, Android build, device install, and all tests remain unverified.
