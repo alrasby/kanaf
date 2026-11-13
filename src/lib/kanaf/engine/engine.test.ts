@@ -87,6 +87,18 @@ test("archive inspection finds a nested EICAR and stops zip bombs and excess dep
   assert.ok(deep.some((item) => item.reasonId === "archive-depth"));
 });
 
+test("ZIP rejects corrupt central metadata and declared decompression size", async () => {
+  const sample = makeZip([{ name: "safe.txt", data: new TextEncoder().encode("hello") }]);
+  const central = new DataView(sample.buffer).getUint32(sample.length - 6, true);
+  const truncatedName = sample.slice();
+  new DataView(truncatedName.buffer).setUint16(central + 28, 0xffff, true);
+  await assert.rejects(() => readZip(truncatedName), (error: unknown) => error instanceof ZipLimitError && error.code === "corrupt");
+
+  const wrongSize = sample.slice();
+  new DataView(wrongSize.buffer).setUint32(central + 24, 100, true);
+  await assert.rejects(() => readZip(wrongSize), (error: unknown) => error instanceof ZipLimitError && error.code === "corrupt");
+});
+
 test("url and message analysis stay local and respect trusted senders", () => {
   const hosts = new Set(["evil.example"]);
   const urls = new Set(["http://evil.example/payload"]);
