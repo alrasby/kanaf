@@ -11,6 +11,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.kanaf.alrasby.engine.TrustJourney
 import com.kanaf.alrasby.engine.ThreatEvidence
 import com.kanaf.alrasby.engine.StreamScanner
 import com.kanaf.alrasby.engine.SignatureRepository
@@ -105,7 +106,13 @@ private fun KanafScreen(activity: Activity) {
                                 ThreatEvidence.Severity.INCONCLUSIVE -> "تقييم الأدلة: تحليل غير مكتمل"
                                 ThreatEvidence.Severity.NO_KNOWN_MATCH -> "تقييم الأدلة: لا توجد مؤشرات معروفة؛ السلامة غير مؤكدة"
                             }
-                            listOf(assessmentNote, verdict, apkNote, dexNote, zipNote)
+                            val journey = TrustJourney.build(
+                                assessment,
+                                scanCompleted = scanResult is StreamScanner.Result.Completed,
+                                signaturesAvailable = signatures != null
+                            )
+                            val decisionNote = "خطوتك التالية: ${journey.title} — ${journey.nextStep}"
+                            listOf(decisionNote, assessmentNote, verdict, apkNote, dexNote, zipNote)
                                 .filter { it.isNotEmpty() }.joinToString("\n")
                         } ?: "تعذر فتح الملف"
                     } catch (e: Exception) {
