@@ -72,3 +72,8 @@ jobs:
           name: kanaf-native-debug
           path: native-rebuild/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
+
+  arm64-engines:
+    uses: ./.github/workflows/kanaf-native-engines-probe.yml
+    permissions:
+      contents: read
