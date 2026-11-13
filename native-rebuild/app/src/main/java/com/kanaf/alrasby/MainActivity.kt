@@ -98,12 +98,9 @@ private fun KanafScreen(activity: Activity) {
             }
         }
     }
-    Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        Text("كنف | Kanaf", style = MaterialTheme.typography.headlineMedium)
-        Text("فحص محلي أولي — لا يحذف أو يرفع ملفاتك")
-        Button(enabled = !busy, onClick = { picker.launch(arrayOf("*/*")) }) {
-            Text(if (busy) "جارٍ الفحص" else "اختيار ملف للفحص")
-        }
-        Text(status)
-    }
+    KanafGlassHome(
+        busy = busy,
+        status = status,
+        onPickFile = { picker.launch(arrayOf("*/*")) }
+    )
 }
