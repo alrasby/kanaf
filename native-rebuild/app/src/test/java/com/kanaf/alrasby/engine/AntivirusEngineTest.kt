@@ -5,7 +5,7 @@ import org.junit.Test
 import java.io.ByteArrayInputStream
 
 class AntivirusEngineTest {
-    private val digest = "ba7816bf8f01cfea414140de5dae2223b00361f20015ad".replace("414140", "414140")
+    private val digest = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
     @Test fun knownSignatureDetected() {
         val engine = HashSignatureEngine(mapOf(digest to "test-only"))
         val verdict = engine.scan({ ByteArrayInputStream("abc".toByteArray()) })
