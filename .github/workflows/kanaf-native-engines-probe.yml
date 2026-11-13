@@ -91,3 +91,17 @@ jobs:
             yara-build.log
             yara-output.txt
             clamav-configure.log
+      - name: Enforce native engine build result
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ steps.yara.outcome }}" != "success" ]]; then
+            echo "::error::YARA-X ARM64 shared library build or ELF verification failed; inspect yara-build.log"
+            exit 1
+          fi
+          if [[ "${{ steps.clamav.outcome }}" != "success" ]]; then
+            echo "::error::ClamAV Android ARM64 CMake configure failed; inspect clamav-configure.log"
+            exit 1
+          fi
+          echo "YARA-X ARM64 library produced; ClamAV configuration succeeded. ClamAV compilation and runtime tests remain pending."
