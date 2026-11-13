@@ -15,7 +15,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.kanaf.alrasby.engine.TrustJourney
 import com.kanaf.alrasby.engine.ThreatEvidence
-import com.kanaf.alrasby.engine.StreamScanner
+import com.kanaf.alrasby.engine.AntivirusEngine
+import com.kanaf.alrasby.engine.HashSignatureEngine
 import com.kanaf.alrasby.engine.SignatureRepository
 import com.kanaf.alrasby.engine.DexHeaderInspector
 import com.kanaf.alrasby.engine.ApkStructureInspector
@@ -85,22 +86,23 @@ private fun KanafScreen(activity: Activity) {
                                 }
                             } ?: "تعذر فتح الأرشيف"
                         } else ""
-                        activity.contentResolver.openInputStream(uri)?.use { input ->
-                            val scanResult = StreamScanner(signatures = signatures ?: emptyMap()).scan(input)
-                            val verdict = when (val result = scanResult) {
-                                is StreamScanner.Result.Completed ->
-                                    when {
-                                        signatures == null -> "تعذر تحميل قاعدة التوقيعات؛ النتيجة غير معروفة. SHA-256: ${result.sha256}"
-                                        result.signature != null -> "تطابق توقيع تهديد: ${result.signature}\nSHA-256: ${result.sha256}"
-                                        else -> "لم يُعثر على تطابق في ${signatures.size} توقيع محلي. هذا لا يعني أن الملف آمن.\nSHA-256: ${result.sha256}"
-                                    }
-                                is StreamScanner.Result.Skipped -> "الفحص غير مكتمل: ${result.reason}"
+                        run {
+                            val scanResult = HashSignatureEngine(signatures).scan({
+                                activity.contentResolver.openInputStream(uri)
+                            })
+                            val verdict = when (scanResult) {
+                                is AntivirusEngine.Verdict.Detected ->
+                                    "تطابق توقيع تهديد: ${scanResult.threatName}\nSHA-256: ${scanResult.sha256}"
+                                is AntivirusEngine.Verdict.NoKnownMatch ->
+                                    "لم يُعثر على تطابق في ${signatures?.size ?: 0} توقيع محلي. هذا لا يعني أن الملف آمن.\nSHA-256: ${scanResult.sha256}"
+                                is AntivirusEngine.Verdict.Incomplete ->
+                                    "الفحص غير مكتمل: ${scanResult.reason}"
                             }
                             val assessment = ThreatEvidence.assess(
-                                (scanResult as? StreamScanner.Result.Completed)?.signature,
+                                (scanResult as? AntivirusEngine.Verdict.Detected)?.threatName,
                                 apkEvidence, dexEvidence, zipEvidence
                             )
-                            val assessmentNote = if (scanResult is StreamScanner.Result.Skipped || signatures == null) {
+                            val assessmentNote = if (scanResult is AntivirusEngine.Verdict.Incomplete || signatures == null) {
                                 "تقييم الأدلة: الفحص غير مكتمل أو قاعدة التوقيعات غير متاحة"
                             } else when (assessment.severity) {
                                 ThreatEvidence.Severity.CONFIRMED -> "تقييم الأدلة: تطابق تهديد معروف"
@@ -110,13 +112,13 @@ private fun KanafScreen(activity: Activity) {
                             }
                             val journey = TrustJourney.build(
                                 assessment,
-                                scanCompleted = scanResult is StreamScanner.Result.Completed,
+                                scanCompleted = scanResult !is AntivirusEngine.Verdict.Incomplete,
                                 signaturesAvailable = signatures != null
                             )
                             val decisionNote = "خطوتك التالية: ${journey.title} — ${journey.nextStep}"
                             listOf(decisionNote, assessmentNote, verdict, apkNote, dexNote, zipNote)
                                 .filter { it.isNotEmpty() }.joinToString("\n")
-                        } ?: "تعذر فتح الملف"
+                        }
                     } catch (e: Exception) {
                         "تعذر إكمال الفحص: ${e.javaClass.simpleName}"
                     }
