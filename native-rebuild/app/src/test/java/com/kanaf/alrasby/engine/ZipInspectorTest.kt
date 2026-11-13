@@ -22,7 +22,7 @@ class ZipInspectorTest {
     @Test fun scansSimpleArchive() {
         val result = ZipInspector().inspect(ByteArrayInputStream(zip("a.txt" to "abc".toByteArray())))
         assertEquals(1, (result as ZipInspector.Result.Complete).summary.entries)
-        assertEquals(3L, result.summary.bytesExpanded)
+        assertEquals(3L, (result as ZipInspector.Result.Complete).summary.bytesExpanded)
     }
     @Test fun limitsActualInflatedBytes() {
         val result = ZipInspector(maxEntryBytes = 8).inspect(
