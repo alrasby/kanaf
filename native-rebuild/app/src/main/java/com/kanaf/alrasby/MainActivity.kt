@@ -1,7 +1,6 @@
 package com.kanaf.alrasby
 
 import android.app.Activity
-import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -13,6 +12,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.kanaf.alrasby.engine.StreamScanner
+import com.kanaf.alrasby.engine.SignatureIndex
+import java.io.InputStreamReader
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -29,6 +30,13 @@ private fun KanafScreen(activity: Activity) {
     val scope = rememberCoroutineScope()
     var status by remember { mutableStateOf("اختر ملفًا لفحص بصمته محليًا") }
     var busy by remember { mutableStateOf(false) }
+    val signatures = remember {
+        runCatching {
+            activity.assets.open("signatures.tsv").use { input ->
+                SignatureIndex.parse(InputStreamReader(input, Charsets.UTF_8))
+            }
+        }.getOrNull()
+    }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
             busy = true
@@ -37,9 +45,13 @@ private fun KanafScreen(activity: Activity) {
                 status = withContext(Dispatchers.IO) {
                     try {
                         activity.contentResolver.openInputStream(uri)?.use { input ->
-                            when (val result = StreamScanner().scan(input)) {
+                            when (val result = StreamScanner(signatures = signatures ?: emptyMap()).scan(input)) {
                                 is StreamScanner.Result.Completed ->
-                                    "اكتمل حساب SHA-256: ${result.sha256}\nلا توجد قاعدة تهديدات محمّلة؛ لا يمكن الحكم على سلامة الملف."
+                                    when {
+                                        signatures == null -> "تعذر تحميل قاعدة التوقيعات؛ النتيجة غير معروفة. SHA-256: ${result.sha256}"
+                                        result.signature != null -> "تطابق توقيع تهديد: ${result.signature}\nSHA-256: ${result.sha256}"
+                                        else -> "لم يُعثر على تطابق في ${signatures.size} توقيع محلي. هذا لا يعني أن الملف آمن.\nSHA-256: ${result.sha256}"
+                                    }
                                 is StreamScanner.Result.Skipped -> "الفحص غير مكتمل: ${result.reason}"
                             }
                         } ?: "تعذر فتح الملف"
