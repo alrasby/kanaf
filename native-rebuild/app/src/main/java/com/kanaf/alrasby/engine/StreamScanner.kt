@@ -17,11 +17,16 @@ class StreamScanner(
         val digest = MessageDigest.getInstance("SHA-256")
         val buffer = ByteArray(64 * 1024)
         var total = 0L
+        var emptyReads = 0
         while (true) {
             if (cancelled()) return Result.Skipped("cancelled", total)
             val read = stream.read(buffer)
             if (read == -1) break
-            if (read == 0) continue
+            if (read == 0) {
+                if (++emptyReads >= 16) return Result.Skipped("stalled-stream", total)
+                continue
+            }
+            emptyReads = 0
             if (read.toLong() > maxBytes - total) return Result.Skipped("size-limit", total)
             digest.update(buffer, 0, read)
             total += read
