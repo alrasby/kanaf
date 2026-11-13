@@ -1,5 +1,5 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <application android:icon="@drawable/kanaf_launcher_foreground" android:roundIcon="@mipmap/ic_launcher" android:label="Kanaf" android:theme="@android:style/Theme.Material.Light.NoActionBar" android:usesCleartextTraffic="false">
+    <application android:icon="@drawable/kanaf_launcher_legacy" android:roundIcon="@mipmap/ic_launcher" android:label="Kanaf" android:theme="@android:style/Theme.Material.Light.NoActionBar" android:usesCleartextTraffic="false">
         <activity android:name=".MainActivity" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
