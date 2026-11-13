@@ -9,7 +9,7 @@ permissions:
 jobs:
   arm64-probe:
     runs-on: ubuntu-24.04
-    timeout-minutes: 55
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
       - uses: android-actions/setup-android@v3
@@ -39,6 +39,42 @@ jobs:
           "$CLANG" -shared -fPIC probe.c -o libkanaf_arm64_probe.so
           file libkanaf_arm64_probe.so
           readelf -h libkanaf_arm64_probe.so | grep -E 'AArch64|ELF64'
+      - name: Install Android Rust target
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup target add aarch64-linux-android
+          rustc --version
+          cargo --version
+      - name: Attempt YARA-X Android ARM64 C API build
+        id: yara
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$ANDROID_HOME/ndk/27.2.12479018/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang"
+          export CC_aarch64_linux_android="$CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER"
+          cd yarax-src
+          timeout 900 cargo build --release --target aarch64-linux-android -p yara-x-capi 2>&1 | tee ../yara-build.log
+          find target/aarch64-linux-android/release -maxdepth 1 -name '*yara*' -type f -print | tee ../yara-output.txt
+      - name: Attempt ClamAV Android ARM64 CMake configure
+        id: clamav
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          timeout 360 cmake -S clamav-src -B clamav-build -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE="$ANDROID_HOME/ndk/27.2.12479018/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-26 \
+            -DENABLE_LIBCLAMAV_ONLY=ON -DENABLE_TESTS=OFF \
+            -DENABLE_MAN_PAGES=OFF -DENABLE_DOXYGEN=OFF 2>&1 | tee clamav-configure.log
+      - name: Summarize real engine build status
+        if: always()
+        shell: bash
+        run: |
+          echo "YARA-X build outcome: ${{ steps.yara.outcome }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "ClamAV configure outcome: ${{ steps.clamav.outcome }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Neither engine is enabled in the Android app by this workflow." >> "$GITHUB_STEP_SUMMARY"
       - name: Report ClamAV cross-build prerequisites
         shell: bash
         run: |
@@ -53,3 +89,6 @@ jobs:
             libkanaf_arm64_probe.so
             clamav-commit.txt
             yarax-commit.txt
+            yara-build.log
+            yara-output.txt
+            clamav-configure.log
