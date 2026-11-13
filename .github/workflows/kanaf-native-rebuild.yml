@@ -27,12 +27,26 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
+      - name: Print toolchain versions
+        run: |
+          java -version
+          gradle --version
+          echo "ANDROID_HOME=$ANDROID_HOME"
       - name: Run native unit tests
         run: gradle --no-daemon :app:testDebugUnitTest --stacktrace
       - name: Android lint
         run: gradle --no-daemon :app:lintDebug --stacktrace
       - name: Build native debug APK
         run: gradle --no-daemon :app:assembleDebug --stacktrace
+      - name: Upload diagnostic reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kanaf-native-diagnostics
+          path: |
+            native-rebuild/app/build/reports/
+            native-rebuild/app/build/test-results/
+          if-no-files-found: warn
       - uses: actions/upload-artifact@v4
         with:
           name: kanaf-native-debug
