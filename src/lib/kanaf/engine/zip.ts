@@ -76,6 +76,7 @@ export async function readZip(
     const extraLen = u16(view, cursor + 30);
     const commentLen = u16(view, cursor + 32);
     const localOffset = u32(view, cursor + 42);
+    if (cursor + 46 + nameLen + extraLen + commentLen > centralOffset + centralSize) throw new ZipLimitError("corrupt");
     const name = new TextDecoder("utf-8", { fatal: false }).decode(
       data.subarray(cursor + 46, cursor + 46 + nameLen),
     );
@@ -112,9 +113,8 @@ export async function readZip(
     if (method === 0) bytes = compressed;
     else if (method === 8) bytes = await inflateRaw(compressed);
     else continue;
-    if (bytes.length !== uncompSize && uncompSize !== 0) {
-      if (bytes.length > limits.maxSingle) throw new ZipLimitError("size");
-    }
+    if (bytes.length !== uncompSize) throw new ZipLimitError("corrupt");
+    if (bytes.length > limits.maxSingle) throw new ZipLimitError("size");
     entries.push({
       name,
       method,
