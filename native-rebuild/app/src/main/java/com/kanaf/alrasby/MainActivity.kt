@@ -13,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.kanaf.alrasby.engine.StreamScanner
 import com.kanaf.alrasby.engine.SignatureRepository
+import com.kanaf.alrasby.engine.ZipInspector
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -39,8 +40,22 @@ private fun KanafScreen(activity: Activity) {
             scope.launch {
                 status = withContext(Dispatchers.IO) {
                     try {
+                        val mime = activity.contentResolver.getType(uri).orEmpty()
+                        val archive = mime == "application/zip" ||
+                            mime == "application/x-zip-compressed" ||
+                            mime == "application/vnd.android.package-archive"
+                        val zipNote = if (archive) {
+                            activity.contentResolver.openInputStream(uri)?.use { stream ->
+                                when (val inspected = ZipInspector().inspect(stream)) {
+                                    is ZipInspector.Result.Complete ->
+                                        "ZIP: ${inspected.summary.entries} مدخل، ${inspected.summary.bytesExpanded} بايت بعد الفك، مسارات خطرة: ${inspected.summary.unsafeNames}. لا يشمل تحليل المحتوى الخبيث."
+                                    is ZipInspector.Result.Incomplete ->
+                                        "تحليل الأرشيف غير مكتمل: ${inspected.reason}"
+                                }
+                            } ?: "تعذر فتح الأرشيف"
+                        } else ""
                         activity.contentResolver.openInputStream(uri)?.use { input ->
-                            when (val result = StreamScanner(signatures = signatures ?: emptyMap()).scan(input)) {
+                            val verdict = when (val result = StreamScanner(signatures = signatures ?: emptyMap()).scan(input)) {
                                 is StreamScanner.Result.Completed ->
                                     when {
                                         signatures == null -> "تعذر تحميل قاعدة التوقيعات؛ النتيجة غير معروفة. SHA-256: ${result.sha256}"
@@ -49,6 +64,7 @@ private fun KanafScreen(activity: Activity) {
                                     }
                                 is StreamScanner.Result.Skipped -> "الفحص غير مكتمل: ${result.reason}"
                             }
+                            if (zipNote.isEmpty()) verdict else "$verdict\n$zipNote"
                         } ?: "تعذر فتح الملف"
                     } catch (e: Exception) {
                         "تعذر إكمال الفحص: ${e.javaClass.simpleName}"
