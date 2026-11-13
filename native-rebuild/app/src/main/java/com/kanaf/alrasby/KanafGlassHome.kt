@@ -17,9 +17,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 
-private val Teal = Color(0xFF137C82)
-private val Aqua = Color(0xFF66E2D1)
-private val Night = Color(0xFF0B2530)
+private val Teal = Color(0xFF146C70)
+private val Aqua = Color(0xFF3DDFB0)
+private val Night = Color(0xFF0A1729)
 
 @Composable
 fun KanafGlassHome(
@@ -28,10 +28,10 @@ fun KanafGlassHome(
     onPickFile: () -> Unit
 ) {
     val dark = isSystemInDarkTheme()
-    val background = if (dark) Night else Color(0xFFF1F8F9)
+    val background = if (dark) Night else Color(0xFFF2F7F7)
     val ink = if (dark) Color(0xFFF0FBFA) else Night
     val secondary = if (dark) Color(0xFFB4CDCF) else Color(0xFF47666C)
-    val card = if (dark) Color(0xFF24444E).copy(alpha = 0.85f) else Color.White.copy(alpha = 0.84f)
+    val card = if (dark) Color(0xFF1D3447).copy(alpha = 0.85f) else Color.White.copy(alpha = 0.84f)
     val stroke = if (dark) Aqua.copy(alpha = 0.24f) else Color.White.copy(alpha = 0.95f)
 
     MaterialTheme(colorScheme = if (dark) darkColorScheme(primary = Aqua, surface = Night, onSurface = ink)
@@ -39,8 +39,8 @@ fun KanafGlassHome(
         Box(
             Modifier.fillMaxSize().background(
                 Brush.verticalGradient(
-                    if (dark) listOf(Night, Color(0xFF12414B), Night)
-                    else listOf(Color(0xFFDDF5F2), background, Color(0xFFE5F0F6))
+                    if (dark) listOf(Night, Color(0xFF123C47), Night)
+                    else listOf(Color(0xFFE2F5F0), background, Color(0xFFE8EEF8))
                 )
             )
         ) {
@@ -50,15 +50,18 @@ fun KanafGlassHome(
                 verticalArrangement = Arrangement.spacedBy(18.dp)
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("◈", color = if (dark) Aqua else Teal, style = MaterialTheme.typography.headlineLarge)
+                    Text("⬡", color = if (dark) Aqua else Teal, style = MaterialTheme.typography.headlineLarge)
                     Spacer(Modifier.width(12.dp))
                     Column {
                         Text("كنف", color = ink, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-                        Text("KANAF · LOCAL SECURITY", color = secondary, style = MaterialTheme.typography.labelSmall)
+                        Text("KANAF · SECURITY STUDIO", color = secondary, style = MaterialTheme.typography.labelSmall)
                     }
                 }
                 GlassPanel(card, stroke) {
                     Text("مركز الحماية", color = secondary, style = MaterialTheme.typography.titleMedium)
+                    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        KanafShieldEmblem(busy = busy, dark = dark)
+                    }
                     Spacer(Modifier.height(12.dp))
                     Text(
                         if (busy) "الفحص جارٍ…" else "جاهز لفحص ملف",
