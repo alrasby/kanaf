@@ -28,6 +28,6 @@ object EngineConsensus {
         val negatives = all.mapNotNull { (it.verdict as? AntivirusEngine.Verdict.NoKnownMatch)?.sha256 }
         if (incomplete.isNotEmpty() || negatives.distinct().size > 1)
             return Decision.Inconclusive(incomplete, negatives.size)
-        return Decision.NoKnownMatch(negatives.size, negatives.single())
+        return Decision.NoKnownMatch(negatives.size, negatives.first())
     }
 }
