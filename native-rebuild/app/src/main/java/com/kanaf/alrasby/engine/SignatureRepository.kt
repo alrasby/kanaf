@@ -1,19 +1,20 @@
 package com.kanaf.alrasby.engine
 
 import android.content.Context
+import android.util.AtomicFile
 import java.io.File
 import java.io.InputStreamReader
 import java.security.MessageDigest
 
 /**
- * Crash-safe local signature snapshots. The expected digest MUST be supplied by
- * a separately authenticated manifest; a hash supplied alongside untrusted bytes
- * is not an authenticity guarantee.
+ * Local signature repository. Network updates require an authenticated manifest
+ * and an app-pinned public key. The database and its version are activated together.
  */
 class SignatureRepository(private val context: Context) {
-    private val directory: File get() = File(context.filesDir, "signature-db").also { it.mkdirs() }
+    private val directory: File get() = File(context.filesDir, "signature-db").also { check(it.mkdirs() || it.isDirectory) }
     private val active: File get() = File(directory, "active.tsv")
-    private val pending: File get() = File(directory, "pending.tsv")
+    private val metadata: File get() = File(directory, "version.txt")
+    private val maxDatabaseBytes = 32 * 1024 * 1024
 
     fun load(): Map<String, String> {
         if (active.isFile) {
@@ -25,8 +26,12 @@ class SignatureRepository(private val context: Context) {
     }
 
     /**
-     * Only verified, monotonic updates may be installed from remote sources.
-     * The public key must be pinned by the app, never taken from the download.
+     * Never accept the public key from the remote response. A production caller
+     * must pin it in the application binary.
+     *
+     * The version is written before the database to fail closed on interruption:
+     * after an interrupted update the app may have an older database but must
+     * not accept a rollback update.
      */
     @Synchronized
     fun installVerified(
@@ -37,27 +42,29 @@ class SignatureRepository(private val context: Context) {
         require(SignedSignatureUpdate.verify(manifest, pinnedPublicKeyDer)) {
             "Untrusted signature database manifest"
         }
-        val prefs = context.getSharedPreferences("signature-db", Context.MODE_PRIVATE)
-        require(manifest.version > prefs.getLong("highestVersion", 0L)) {
-            "Database version rollback rejected"
-        }
-        installValidated(bytes, manifest.sha256)
-        check(prefs.edit().putLong("highestVersion", manifest.version).commit()) {
-            "Could not persist signature version"
-        }
-    }
-
-    private fun installValidated(bytes: ByteArray, expectedSha256: String) {
-        require(expectedSha256.matches(Regex("[0-9a-fA-F]{64}"))) { "Invalid digest" }
-        require(bytes.size <= 32 * 1024 * 1024) { "Database exceeds limit" }
+        val highest = if (metadata.isFile) {
+            metadata.readText(Charsets.US_ASCII).trim().toLong()
+        } else 0L
+        require(manifest.version > highest) { "Database version rollback rejected" }
+        require(bytes.size <= maxDatabaseBytes) { "Database exceeds limit" }
         val actual = MessageDigest.getInstance("SHA-256").digest(bytes)
             .joinToString("") { "%02x".format(it) }
-        require(actual.equals(expectedSha256, ignoreCase = true)) { "Database digest mismatch" }
-        SignatureIndex.parse(InputStreamReader(bytes.inputStream(), Charsets.UTF_8))
-        pending.outputStream().use { out ->
-            out.write(bytes)
-            out.fd.sync()
+        require(actual == manifest.sha256) { "Database digest mismatch" }
+        InputStreamReader(bytes.inputStream(), Charsets.UTF_8).use { SignatureIndex.parse(it) }
+
+        writeAtomic(metadata, manifest.version.toString().toByteArray(Charsets.US_ASCII))
+        writeAtomic(active, bytes)
+    }
+
+    private fun writeAtomic(file: File, bytes: ByteArray) {
+        val atomic = AtomicFile(file)
+        val output = atomic.startWrite()
+        try {
+            output.write(bytes)
+            atomic.finishWrite(output)
+        } catch (e: Exception) {
+            atomic.failWrite(output)
+            throw e
         }
-        check(pending.renameTo(active)) { "Atomic signature activation failed" }
     }
 }
