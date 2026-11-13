@@ -13,7 +13,7 @@ class AntivirusEngineTest {
     }
     @Test fun unknownSignatureNotClaimedSafe() {
         val verdict = HashSignatureEngine(emptyMap()).scan({ ByteArrayInputStream("abc".toByteArray()) })
-        assertEquals(AntivirusEngine.Verdict.NoKnownMatch, verdict)
+        assertEquals(digest, (verdict as AntivirusEngine.Verdict.NoKnownMatch).sha256)
     }
     @Test fun missingDatabaseIsIncomplete() {
         val verdict = HashSignatureEngine(null).scan({ ByteArrayInputStream("abc".toByteArray()) })
