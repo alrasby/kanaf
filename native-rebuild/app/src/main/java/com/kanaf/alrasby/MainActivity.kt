@@ -107,7 +107,9 @@ private fun KanafScreen(activity: Activity) {
                                 (scanResult as? AntivirusEngine.Verdict.Detected)?.threatName,
                                 apkEvidence, dexEvidence, zipEvidence
                             )
-                            val assessmentNote = if (scanResult is AntivirusEngine.Verdict.Incomplete || signatures == null) {
+                            val structuralMissing = (apk && (apkEvidence == null || dexEvidence == null)) ||
+                                ((archive || apk) && zipEvidence == null)
+                            val assessmentNote = if (scanResult is AntivirusEngine.Verdict.Incomplete || signatures == null || structuralMissing) {
                                 "تقييم الأدلة: الفحص غير مكتمل أو قاعدة التوقيعات غير متاحة"
                             } else when (assessment.severity) {
                                 ThreatEvidence.Severity.CONFIRMED -> "تقييم الأدلة: تطابق تهديد معروف"
@@ -117,7 +119,7 @@ private fun KanafScreen(activity: Activity) {
                             }
                             val journey = TrustJourney.build(
                                 assessment,
-                                scanCompleted = scanResult !is AntivirusEngine.Verdict.Incomplete,
+                                scanCompleted = scanResult !is AntivirusEngine.Verdict.Incomplete && !structuralMissing,
                                 signaturesAvailable = signatures != null
                             )
                             val decisionNote = "خطوتك التالية: ${journey.title} — ${journey.nextStep}"
