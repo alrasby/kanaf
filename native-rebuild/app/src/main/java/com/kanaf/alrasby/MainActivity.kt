@@ -13,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.kanaf.alrasby.engine.StreamScanner
 import com.kanaf.alrasby.engine.SignatureRepository
+import com.kanaf.alrasby.engine.DexHeaderInspector
 import com.kanaf.alrasby.engine.ApkStructureInspector
 import com.kanaf.alrasby.engine.ZipInspector
 import kotlinx.coroutines.Dispatchers
@@ -57,6 +58,16 @@ private fun KanafScreen(activity: Activity) {
                                 }
                             } ?: "تعذر فتح APK"
                         } else ""
+                        val dexNote = if (apk) {
+                            activity.contentResolver.openInputStream(uri)?.use { stream ->
+                                when (val result = DexHeaderInspector().inspect(stream)) {
+                                    is DexHeaderInspector.Result.Complete ->
+                                        "DEX: ${result.summary.dexFiles} ملف، رؤوس غير سليمة: ${result.summary.invalidHeaders}. فحص سلامة بنية فقط."
+                                    is DexHeaderInspector.Result.Incomplete ->
+                                        "فحص DEX غير مكتمل: ${result.reason}"
+                                }
+                            } ?: "تعذر فتح APK لفحص DEX"
+                        } else ""
                         val zipNote = if (archive || apk) {
                             activity.contentResolver.openInputStream(uri)?.use { stream ->
                                 when (val inspected = ZipInspector().inspect(stream)) {
@@ -77,7 +88,7 @@ private fun KanafScreen(activity: Activity) {
                                     }
                                 is StreamScanner.Result.Skipped -> "الفحص غير مكتمل: ${result.reason}"
                             }
-                            listOf(verdict, apkNote, zipNote).filter { it.isNotEmpty() }.joinToString("\n")
+                            listOf(verdict, apkNote, dexNote, zipNote).filter { it.isNotEmpty() }.joinToString("\n")
                         } ?: "تعذر فتح الملف"
                     } catch (e: Exception) {
                         "تعذر إكمال الفحص: ${e.javaClass.simpleName}"
