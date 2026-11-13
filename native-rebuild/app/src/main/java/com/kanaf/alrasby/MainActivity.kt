@@ -20,6 +20,7 @@ import com.kanaf.alrasby.engine.TrustJourney
 import com.kanaf.alrasby.engine.ThreatEvidence
 import com.kanaf.alrasby.engine.AntivirusEngine
 import com.kanaf.alrasby.engine.HashSignatureEngine
+import com.kanaf.alrasby.engine.EngineConsensus
 import com.kanaf.alrasby.engine.SignatureRepository
 import com.kanaf.alrasby.engine.DexHeaderInspector
 import com.kanaf.alrasby.engine.ApkStructureInspector
@@ -93,6 +94,17 @@ private fun KanafScreen(activity: Activity) {
                             val scanResult = HashSignatureEngine(signatures).scan({
                                 activity.contentResolver.openInputStream(uri)
                             })
+                            // Only engines actually configured for this release are expected.
+                            // Do not mark ClamAV/YARA-X as active before native integration.
+                            val consensus = EngineConsensus.evaluate(
+                                listOf(EngineConsensus.Report("kanaf-sha256", scanResult)),
+                                setOf("kanaf-sha256")
+                            )
+                            val consensusNote = when (consensus) {
+                                is EngineConsensus.Decision.Threat -> "نتيجة المحركات: تم اكتشاف تهديد معروف"
+                                is EngineConsensus.Decision.Inconclusive -> "نتيجة المحركات: غير مكتملة"
+                                is EngineConsensus.Decision.NoKnownMatch -> "نتيجة المحركات: لا يوجد تطابق معروف؛ السلامة غير مؤكدة"
+                            }
                             val verdict = when (scanResult) {
                                 is AntivirusEngine.Verdict.Detected ->
                                     "تطابق توقيع تهديد: ${scanResult.threatName}\nSHA-256: ${scanResult.sha256}"
@@ -127,7 +139,7 @@ private fun KanafScreen(activity: Activity) {
                                 is ThreatModel.Prediction.Unavailable -> "التحليل بالذكاء الاصطناعي غير متاح بعد؛ لم يتم تشغيل نموذج مدرّب."
                                 is ThreatModel.Prediction.Scored -> "نتيجة النموذج: ${modelResult.riskProbability}"
                             }
-                            listOf(decisionNote, assessmentNote, aiNote, verdict, apkNote, dexNote, zipNote)
+                            listOf(decisionNote, assessmentNote, consensusNote, aiNote, verdict, apkNote, dexNote, zipNote)
                                 .filter { it.isNotEmpty() }.joinToString("\n")
                         }
                     } catch (e: Exception) {
