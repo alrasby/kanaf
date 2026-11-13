@@ -18,7 +18,7 @@ class SignatureRepository(private val context: Context) {
 
     fun load(): Map<String, String> {
         if (active.isFile) {
-            return active.reader(Charsets.UTF_8).use { SignatureIndex.parse(it) }
+            return AtomicFile(active).openRead().reader(Charsets.UTF_8).use { SignatureIndex.parse(it) }
         }
         return context.assets.open("signatures.tsv").use { input ->
             InputStreamReader(input, Charsets.UTF_8).use { SignatureIndex.parse(it) }
@@ -43,7 +43,7 @@ class SignatureRepository(private val context: Context) {
             "Untrusted signature database manifest"
         }
         val highest = if (metadata.isFile) {
-            metadata.readText(Charsets.US_ASCII).trim().toLong()
+            AtomicFile(metadata).openRead().reader(Charsets.US_ASCII).use { it.readText().trim().toLong() }
         } else 0L
         require(manifest.version > highest) { "Database version rollback rejected" }
         require(bytes.size <= maxDatabaseBytes) { "Database exceeds limit" }
