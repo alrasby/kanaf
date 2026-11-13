@@ -13,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.kanaf.alrasby.engine.StreamScanner
 import com.kanaf.alrasby.engine.SignatureRepository
+import com.kanaf.alrasby.engine.ApkStructureInspector
 import com.kanaf.alrasby.engine.ZipInspector
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -44,7 +45,19 @@ private fun KanafScreen(activity: Activity) {
                         val archive = mime == "application/zip" ||
                             mime == "application/x-zip-compressed" ||
                             mime == "application/vnd.android.package-archive"
-                        val zipNote = if (archive) {
+                        val apk = mime == "application/vnd.android.package-archive" ||
+                            uri.lastPathSegment.orEmpty().substringBefore('?').endsWith(".apk", ignoreCase = true)
+                        val apkNote = if (apk) {
+                            activity.contentResolver.openInputStream(uri)?.use { stream ->
+                                when (val result = ApkStructureInspector().inspect(stream)) {
+                                    is ApkStructureInspector.Result.Complete ->
+                                        "APK: DEX=${result.summary.dexFiles}، مكتبات أصلية=${result.summary.nativeLibraries}، مسارات مريبة=${result.summary.unsafePaths}. فحص بنية فقط وليس كشف برمجيات خبيثة."
+                                    is ApkStructureInspector.Result.Incomplete ->
+                                        "فحص بنية APK غير مكتمل: ${result.reason}"
+                                }
+                            } ?: "تعذر فتح APK"
+                        } else ""
+                        val zipNote = if (archive || apk) {
                             activity.contentResolver.openInputStream(uri)?.use { stream ->
                                 when (val inspected = ZipInspector().inspect(stream)) {
                                     is ZipInspector.Result.Complete ->
@@ -64,7 +77,7 @@ private fun KanafScreen(activity: Activity) {
                                     }
                                 is StreamScanner.Result.Skipped -> "الفحص غير مكتمل: ${result.reason}"
                             }
-                            if (zipNote.isEmpty()) verdict else "$verdict\n$zipNote"
+                            listOf(verdict, apkNote, zipNote).filter { it.isNotEmpty() }.joinToString("\n")
                         } ?: "تعذر فتح الملف"
                     } catch (e: Exception) {
                         "تعذر إكمال الفحص: ${e.javaClass.simpleName}"
