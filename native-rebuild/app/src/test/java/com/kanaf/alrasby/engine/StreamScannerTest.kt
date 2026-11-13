@@ -22,6 +22,14 @@ class StreamScannerTest {
         val result = StreamScanner(maxBytes = 2).scan(ByteArrayInputStream("abc".toByteArray()))
         assertEquals("size-limit", (result as StreamScanner.Result.Skipped).reason)
     }
+    @Test fun rejectsStalledStream() {
+        val stalled = object : java.io.InputStream() {
+            override fun read(): Int = 0
+            override fun read(b: ByteArray, off: Int, len: Int): Int = 0
+        }
+        val result = StreamScanner().scan(stalled)
+        assertEquals("stalled-stream", (result as StreamScanner.Result.Skipped).reason)
+    }
     @Test fun respectsCancellation() {
         val result = StreamScanner().scan(ByteArrayInputStream("abc".toByteArray())) { true }
         assertEquals("cancelled", (result as StreamScanner.Result.Skipped).reason)
