@@ -6,20 +6,23 @@ import java.security.MessageDigest
 /** A bounded, streaming local scanner primitive. No network or file modification. */
 class StreamScanner(
     private val maxBytes: Long = 512L * 1024 * 1024,
+    private val maxDurationNanos: Long = 30L * 1_000_000_000,
     private val signatures: Map<String, String> = emptyMap()
 ) {
-    init { require(maxBytes > 0) }
+    init { require(maxBytes > 0 && maxDurationNanos > 0) }
     sealed interface Result {
         data class Completed(val sha256: String, val bytesRead: Long, val signature: String?) : Result
         data class Skipped(val reason: String, val bytesRead: Long) : Result
     }
     fun scan(stream: InputStream, cancelled: () -> Boolean = { false }): Result {
+        val startedAt = System.nanoTime()
         val digest = MessageDigest.getInstance("SHA-256")
         val buffer = ByteArray(64 * 1024)
         var total = 0L
         var emptyReads = 0
         while (true) {
             if (cancelled()) return Result.Skipped("cancelled", total)
+            if (System.nanoTime() - startedAt >= maxDurationNanos) return Result.Skipped("time-limit", total)
             val read = stream.read(buffer)
             if (read == -1) break
             if (read == 0) {
