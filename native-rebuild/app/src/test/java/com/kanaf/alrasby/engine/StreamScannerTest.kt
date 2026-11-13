@@ -5,6 +5,31 @@ import org.junit.Test
 import java.io.ByteArrayInputStream
 
 class StreamScannerTest {
+    @Test fun rejectsInvalidTimeBudget() {
+        try {
+            StreamScanner(maxDurationNanos = 0)
+            fail("Expected invalid budget to be rejected")
+        } catch (_: IllegalArgumentException) {
+            // Expected.
+        }
+    }
+    @Test fun timeBudgetFailsClosed() {
+        val slow = object : java.io.InputStream() {
+            private var remaining = 3
+            override fun read(): Int {
+                Thread.sleep(2)
+                return if (remaining-- > 0) 42 else -1
+            }
+            override fun read(b: ByteArray, off: Int, len: Int): Int {
+                Thread.sleep(2)
+                if (remaining-- <= 0) return -1
+                b[off] = 42
+                return 1
+            }
+        }
+        val result = StreamScanner(maxDurationNanos = 1).scan(slow)
+        assertEquals("time-limit", (result as StreamScanner.Result.Skipped).reason)
+    }
     @Test fun hashesKnownContent() {
         val result = StreamScanner().scan(ByteArrayInputStream("abc".toByteArray()))
         assertTrue(result is StreamScanner.Result.Completed)
