@@ -1,5 +1,6 @@
 package com.kanaf.alrasby
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -25,7 +26,8 @@ private val Night = Color(0xFF0A1729)
 fun KanafGlassHome(
     busy: Boolean,
     status: String,
-    onPickFile: () -> Unit
+    onPickFile: () -> Unit,
+    onOpenWebsite: () -> Unit
 ) {
     val dark = isSystemInDarkTheme()
     val background = if (dark) Night else Color(0xFFF2F7F7)
@@ -106,6 +108,18 @@ fun KanafGlassHome(
                         color = secondary, style = MaterialTheme.typography.bodySmall
                     )
                 }
+                Text(
+                    "Made with ❤️ By NabdhServ.Net",
+                    modifier = Modifier.fillMaxWidth()
+                        .border(1.dp, stroke, RoundedCornerShape(50))
+                        .background(card, RoundedCornerShape(50))
+                        .clickable(onClick = onOpenWebsite)
+                        .padding(horizontal = 16.dp, vertical = 13.dp),
+                    color = ink,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    textAlign = TextAlign.Center
+                )
                 Text(
                     "نسخة تطويرية · لا توفر حماية شاملة أو فحصًا تلقائيًا للجهاز",
                     modifier = Modifier.fillMaxWidth(),
