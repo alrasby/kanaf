@@ -17,12 +17,7 @@ class SignatureRepository(private val context: Context) {
 
     fun load(): Map<String, String> {
         if (active.isFile) {
-            try {
-                return active.reader(Charsets.UTF_8).use { SignatureIndex.parse(it) }
-            } catch (_: Exception) {
-                // An invalid installed database is not safe to use.
-                return emptyMap()
-            }
+            return active.reader(Charsets.UTF_8).use { SignatureIndex.parse(it) }
         }
         return context.assets.open("signatures.tsv").use { input ->
             InputStreamReader(input, Charsets.UTF_8).use { SignatureIndex.parse(it) }
