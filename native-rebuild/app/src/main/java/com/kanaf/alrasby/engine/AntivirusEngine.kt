@@ -11,8 +11,8 @@ interface AntivirusEngine {
     fun scan(openStream: () -> InputStream?, cancelled: () -> Boolean = { false }): Verdict
 
     sealed interface Verdict {
-        data class Detected(val threatName: String) : Verdict
-        data object NoKnownMatch : Verdict
+        data class Detected(val threatName: String, val sha256: String) : Verdict
+        data class NoKnownMatch(val sha256: String) : Verdict
         data class Incomplete(val reason: String) : Verdict
     }
 }
@@ -31,8 +31,8 @@ class HashSignatureEngine(
             stream.use {
                 when (val result = scanner.scan(it, cancelled)) {
                     is StreamScanner.Result.Completed -> {
-                        if (result.signature != null) AntivirusEngine.Verdict.Detected(result.signature)
-                        else AntivirusEngine.Verdict.NoKnownMatch
+                        if (result.signature != null) AntivirusEngine.Verdict.Detected(result.signature, result.sha256)
+                        else AntivirusEngine.Verdict.NoKnownMatch(result.sha256)
                     }
                     is StreamScanner.Result.Skipped -> AntivirusEngine.Verdict.Incomplete(result.reason)
                 }
