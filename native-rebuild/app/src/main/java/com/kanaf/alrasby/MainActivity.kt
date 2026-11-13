@@ -13,6 +13,9 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.kanaf.alrasby.engine.ThreatFeatureVector
+import com.kanaf.alrasby.engine.UnavailableThreatModel
+import com.kanaf.alrasby.engine.ThreatModel
 import com.kanaf.alrasby.engine.TrustJourney
 import com.kanaf.alrasby.engine.ThreatEvidence
 import com.kanaf.alrasby.engine.AntivirusEngine
@@ -98,6 +101,8 @@ private fun KanafScreen(activity: Activity) {
                                 is AntivirusEngine.Verdict.Incomplete ->
                                     "الفحص غير مكتمل: ${scanResult.reason}"
                             }
+                            val features = ThreatFeatureVector.from(apkEvidence, dexEvidence, zipEvidence)
+                            val modelResult = UnavailableThreatModel.classify(features)
                             val assessment = ThreatEvidence.assess(
                                 (scanResult as? AntivirusEngine.Verdict.Detected)?.threatName,
                                 apkEvidence, dexEvidence, zipEvidence
@@ -116,7 +121,11 @@ private fun KanafScreen(activity: Activity) {
                                 signaturesAvailable = signatures != null
                             )
                             val decisionNote = "خطوتك التالية: ${journey.title} — ${journey.nextStep}"
-                            listOf(decisionNote, assessmentNote, verdict, apkNote, dexNote, zipNote)
+                            val aiNote = when (modelResult) {
+                                is ThreatModel.Prediction.Unavailable -> "التحليل بالذكاء الاصطناعي غير متاح بعد؛ لم يتم تشغيل نموذج مدرّب."
+                                is ThreatModel.Prediction.Scored -> "نتيجة النموذج: ${modelResult.riskProbability}"
+                            }
+                            listOf(decisionNote, assessmentNote, aiNote, verdict, apkNote, dexNote, zipNote)
                                 .filter { it.isNotEmpty() }.joinToString("\n")
                         }
                     } catch (e: Exception) {
