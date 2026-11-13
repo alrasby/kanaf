@@ -83,7 +83,8 @@ private fun KanafScreen(activity: Activity) {
                             } ?: "تعذر فتح الأرشيف"
                         } else ""
                         activity.contentResolver.openInputStream(uri)?.use { input ->
-                            val verdict = when (val result = StreamScanner(signatures = signatures ?: emptyMap()).scan(input)) {
+                            val scanResult = StreamScanner(signatures = signatures ?: emptyMap()).scan(input)
+                            val verdict = when (val result = scanResult) {
                                 is StreamScanner.Result.Completed ->
                                     when {
                                         signatures == null -> "تعذر تحميل قاعدة التوقيعات؛ النتيجة غير معروفة. SHA-256: ${result.sha256}"
@@ -93,10 +94,12 @@ private fun KanafScreen(activity: Activity) {
                                 is StreamScanner.Result.Skipped -> "الفحص غير مكتمل: ${result.reason}"
                             }
                             val assessment = ThreatEvidence.assess(
-                                (result as? StreamScanner.Result.Completed)?.signature,
+                                (scanResult as? StreamScanner.Result.Completed)?.signature,
                                 apkEvidence, dexEvidence, zipEvidence
                             )
-                            val assessmentNote = when (assessment.severity) {
+                            val assessmentNote = if (scanResult is StreamScanner.Result.Skipped || signatures == null) {
+                                "تقييم الأدلة: الفحص غير مكتمل أو قاعدة التوقيعات غير متاحة"
+                            } else when (assessment.severity) {
                                 ThreatEvidence.Severity.CONFIRMED -> "تقييم الأدلة: تطابق تهديد معروف"
                                 ThreatEvidence.Severity.SUSPICIOUS -> "تقييم الأدلة: مؤشرات مشبوهة تستدعي المراجعة"
                                 ThreatEvidence.Severity.INCONCLUSIVE -> "تقييم الأدلة: تحليل غير مكتمل"
