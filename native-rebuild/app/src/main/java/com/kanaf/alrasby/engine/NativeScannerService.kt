@@ -48,9 +48,9 @@ class NativeScannerService : Service() {
             Thread({
                 val result = try {
                     if (requestType == NativeScanProtocol.REQUEST_SELF_TEST) {
-                        NativeScannerBridge.selfTestInWorker(this)
+                        NativeScannerBridge.selfTestInWorker(this@NativeScannerService)
                     } else {
-                        NativeScannerBridge.scanInWorker(this, requireNotNull(uri))
+                        NativeScannerBridge.scanInWorker(this@NativeScannerService, requireNotNull(uri))
                     }
                 } catch (_: Exception) {
                     NativeScanProtocol.unavailable("worker-scan-failed")
