@@ -16,7 +16,7 @@ import java.security.MessageDigest
  */
 object NativeScannerBridge {
     private const val MAX_FILE_BYTES = 16L * 1024 * 1024
-    private const val CLAM_RULE_HASH = "579191ed0267e5cacf5dd1b69d83cfd890ba6f180a56a1ea7746d79249156514"
+    private const val CLAM_RULE_HASH = "f7a0ea8212c9251375ccf756743c34f59732e4edb29ee9cf58e48397c53c93be"
     private const val YARA_RULE_HASH = "6512c037bf11c594476492bd9e1cef968349a79a3a06f50aafa26e4ef3fc0993"
 
     data class Report(
@@ -89,11 +89,11 @@ object NativeScannerBridge {
         var test: File? = null
         var target: File? = null
         try {
-            val clamBytes = context.assets.open("kanaf_test.hdb").use { it.readBytes() }
+            val clamBytes = context.assets.open("kanaf_test.ndb").use { it.readBytes() }
             val yaraBytes = context.assets.open("kanaf_test.yar").use { it.readBytes() }
             val clamRulesOK = digest(clamBytes) == CLAM_RULE_HASH
             val yaraRulesOK = digest(yaraBytes) == YARA_RULE_HASH
-            val rulesFile = stagedFile(context, "kanaf-clam-", ".hdb", clamBytes)
+            val rulesFile = stagedFile(context, "kanaf-clam-", ".ndb", clamBytes)
             db = rulesFile
             val testFile = stagedFile(context, "kanaf-eicar-", ".txt", eicar)
             test = testFile

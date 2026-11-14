@@ -77,7 +77,7 @@ jobs:
           for so in libclamav.so libclammspack.so libyara_x_capi.so libkanaf_scan.so; do
             unzip -Z1 "$apk" | grep -Fx "lib/arm64-v8a/$so"
           done
-          unzip -Z1 "$apk" | grep -Fx 'assets/kanaf_test.hdb'
+          unzip -Z1 "$apk" | grep -Fx 'assets/kanaf_test.ndb'
           unzip -Z1 "$apk" | grep -Fx 'assets/kanaf_test.yar'
           unzip -p "$apk" lib/arm64-v8a/libkanaf_scan.so > /tmp/kanaf-scan-verified.so
           python3 native-rebuild/tools/verify_arm64_elf.py /tmp/kanaf-scan-verified.so
