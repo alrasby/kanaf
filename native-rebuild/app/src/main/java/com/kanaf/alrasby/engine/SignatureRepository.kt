@@ -20,9 +20,14 @@ class SignatureRepository(private val context: Context) {
     private val legacyActive: File get() = File(directory, "active.tsv")
     private val legacyVersion: File get() = File(directory, "version.txt")
 
+    /** Android AtomicFile has no exists(): its legacy .bak also represents committed data.
+     * Ignore the .new file; a partially written update is never a committed release. */
+    private fun hasCommittedState(file: File): Boolean =
+        file.isFile || File(file.path + ".bak").isFile
+
     fun load(): Map<String, String> {
         val atomic = AtomicFile(verifiedBundle)
-        if (atomic.exists()) {
+        if (hasCommittedState(verifiedBundle)) {
             // Read + hash-verify the WHOLE bundle before exposing any signature rows.
             val record = atomic.openRead().use { VerifiedSignatureBundle.read(it) }
             val parsed = InputStreamReader(record.bytes.inputStream(), Charsets.UTF_8).use {
@@ -33,7 +38,7 @@ class SignatureRepository(private val context: Context) {
         }
         // Previous versions committed these two values separately. Without a signed
         // manifest tying them together, their state cannot be trusted after a crash.
-        if (legacyActive.exists() || AtomicFile(legacyVersion).exists()) {
+        if (legacyActive.isFile || hasCommittedState(legacyVersion)) {
             error("legacy-signature-db-requires-verified-reinstall")
         }
         return context.assets.open("signatures.tsv").use { input ->
@@ -66,11 +71,11 @@ class SignatureRepository(private val context: Context) {
         val active = AtomicFile(verifiedBundle)
         // Invalid/corrupted active data fails closed: never discard a version
         // floor merely because one copy is unreadable.
-        val currentVersion = if (active.exists()) {
+        val currentVersion = if (hasCommittedState(verifiedBundle)) {
             active.openRead().use { VerifiedSignatureBundle.read(it).version }
         } else 0L
         val legacy = AtomicFile(legacyVersion)
-        val legacyFloor = if (legacy.exists()) {
+        val legacyFloor = if (hasCommittedState(legacyVersion)) {
             legacy.openRead().reader(Charsets.US_ASCII).use { it.readText().trim().toLong() }
         } else 0L
         VerifiedSignatureBundle.requireNewer(manifest.version, currentVersion, legacyFloor)
