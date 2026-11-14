@@ -119,14 +119,21 @@ private fun KanafScreen(activity: Activity) {
                                 nativeLabel("ClamAV", native.clamav),
                                 nativeLabel("YARA-X", native.yaraX)
                             ).joinToString("\n")
+                            val eicarOnly = consensus is EngineConsensus.Decision.Threat &&
+                                consensus.detections.all {
+                                    (it.verdict as AntivirusEngine.Verdict.Detected)
+                                        .threatName.contains("eicar", ignoreCase = true)
+                                }
                             val consensusNote = when (consensus) {
-                                is EngineConsensus.Decision.Threat -> "نتيجة المحركات: تم اكتشاف تهديد معروف"
+                                is EngineConsensus.Decision.Threat ->
+                                    if (eicarOnly) "نتيجة المحركات: نجاح اكتشاف EICAR التجريبي غير الضار"
+                                    else "نتيجة المحركات: تم اكتشاف تهديد معروف"
                                 is EngineConsensus.Decision.Inconclusive -> "نتيجة المحركات: غير مكتملة"
                                 is EngineConsensus.Decision.NoKnownMatch -> "نتيجة المحركات: لا يوجد تطابق معروف؛ السلامة غير مؤكدة"
                             }
                             val verdict = when (scanResult) {
                                 is AntivirusEngine.Verdict.Detected ->
-                                    "تطابق توقيع تهديد: ${scanResult.threatName}\nSHA-256: ${scanResult.sha256}"
+                                    (if (scanResult.threatName.contains("eicar", true)) "تطابق عينة اختبار EICAR الآمنة" else "تطابق توقيع تهديد: ${scanResult.threatName}") + "\nSHA-256: ${scanResult.sha256}"
                                 is AntivirusEngine.Verdict.NoKnownMatch ->
                                     "لم يُعثر على تطابق في ${signatures?.size ?: 0} توقيع محلي. هذا لا يعني أن الملف آمن.\nSHA-256: ${scanResult.sha256}"
                                 is AntivirusEngine.Verdict.Incomplete ->
@@ -143,7 +150,9 @@ private fun KanafScreen(activity: Activity) {
                             )
                             val structuralMissing = (apk && (apkEvidence == null || dexEvidence == null)) ||
                                 ((archive || apk) && zipEvidence == null)
-                            val assessmentNote = if (scanResult is AntivirusEngine.Verdict.Incomplete || signatures == null || structuralMissing || consensus is EngineConsensus.Decision.Inconclusive) {
+                            val assessmentNote = if (eicarOnly) {
+                                "عينة EICAR اختبارية آمنة؛ نجاح الكشف لا يثبت القدرة على كشف فيروسات فعلية"
+                            } else if (scanResult is AntivirusEngine.Verdict.Incomplete || signatures == null || structuralMissing || consensus is EngineConsensus.Decision.Inconclusive) {
                                 "تقييم الأدلة: الفحص غير مكتمل أو قاعدة التوقيعات غير متاحة"
                             } else when (assessment.severity) {
                                 ThreatEvidence.Severity.CONFIRMED -> "تقييم الأدلة: تطابق تهديد معروف"
@@ -156,7 +165,9 @@ private fun KanafScreen(activity: Activity) {
                                 scanCompleted = scanResult !is AntivirusEngine.Verdict.Incomplete && !structuralMissing && consensus !is EngineConsensus.Decision.Inconclusive,
                                 signaturesAvailable = signatures != null
                             )
-                            val decisionNote = "خطوتك التالية: ${journey.title} — ${journey.nextStep}"
+                            val decisionNote = if (eicarOnly) {
+                                "اختبار EICAR ناجح. اختبر ملفًا آخر أو راجع حدود قواعد الكشف التجريبية."
+                            } else "خطوتك التالية: ${journey.title} — ${journey.nextStep}"
                             val aiNote = when (modelResult) {
                                 is ThreatModel.Prediction.Unavailable -> "التحليل بالذكاء الاصطناعي غير متاح بعد؛ لم يتم تشغيل نموذج مدرّب."
                                 is ThreatModel.Prediction.Scored -> "نتيجة النموذج: ${modelResult.riskProbability}"
