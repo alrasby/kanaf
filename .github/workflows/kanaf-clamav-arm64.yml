@@ -72,10 +72,25 @@ jobs:
           test -s "$BZIP2_LIBRARY"
           export BZIP2_LIBRARY_RELEASE="$BZIP2_LIBRARY"
           export BZIP2_LIBRARIES="$BZIP2_LIBRARY"
+          # Cross-compile libxml2 for Android; Ubuntu headers/libraries are not Android artifacts.
+          git clone --depth 1 --branch v2.12.9 https://github.com/GNOME/libxml2.git libxml2-upstream
+          cmake -S libxml2-upstream -B libxml2-build -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE="$NDK/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-26 \
+            -DCMAKE_INSTALL_PREFIX="$GITHUB_WORKSPACE/libxml2-android" \
+            -DBUILD_SHARED_LIBS=OFF -DLIBXML2_WITH_PYTHON=OFF \
+            -DLIBXML2_WITH_ICONV=OFF -DLIBXML2_WITH_LZMA=OFF \
+            -DLIBXML2_WITH_ZLIB=OFF -DLIBXML2_WITH_TESTS=OFF
+          cmake --build libxml2-build --parallel 2
+          cmake --install libxml2-build
+          test -s libxml2-android/include/libxml2/libxml/parser.h
+          test -s libxml2-android/lib/libxml2.a
           timeout 480 cmake -S clamav-upstream -B out -G Ninja \
             -DCMAKE_TOOLCHAIN_FILE="$NDK/build/cmake/android.toolchain.cmake" \
             -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-26 \
             -DENABLE_LIBCLAMAV_ONLY=ON -DENABLE_TESTS=OFF \
+            -DLIBXML2_INCLUDE_DIR="$GITHUB_WORKSPACE/libxml2-android/include/libxml2" \
+            -DLIBXML2_LIBRARY="$GITHUB_WORKSPACE/libxml2-android/lib/libxml2.a" \
             -DBZIP2_INCLUDE_DIR="$BZIP2_INCLUDE_DIR" -DBZIP2_LIBRARY_RELEASE="$BZIP2_LIBRARY_RELEASE" \
             -DBZIP2_LIBRARIES="$BZIP2_LIBRARIES" -DBZIP2_LIBRARY="$BZIP2_LIBRARY" \
             -DOPENSSL_ROOT_DIR="$OPENSSL_ROOT_DIR" -DOPENSSL_INCLUDE_DIR="$OPENSSL_INCLUDE_DIR" \
