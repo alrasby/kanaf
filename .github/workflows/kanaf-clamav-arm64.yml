@@ -290,9 +290,15 @@ jobs:
           set -euo pipefail
           apk=native-rebuild/app/build/outputs/apk/debug/app-debug.apk
           test -s "$apk"
-          for so in libclamav.so libclammspack.so libyara_x_capi.so; do
+          for so in libclamav.so libclammspack.so libyara_x_capi.so libkanaf_scan.so; do
             unzip -Z1 "$apk" | grep -Fx "lib/arm64-v8a/$so"
           done
+          unzip -Z1 "$apk" | grep -Fx 'assets/kanaf_test.hdb'
+          unzip -Z1 "$apk" | grep -Fx 'assets/kanaf_test.yar'
+          unzip -p "$apk" lib/arm64-v8a/libkanaf_scan.so > /tmp/kanaf-scan-verified.so
+          python3 native-rebuild/tools/verify_arm64_elf.py /tmp/kanaf-scan-verified.so
+          readelf -Ws /tmp/kanaf-scan-verified.so | grep Java_com_kanaf_alrasby_engine_NativeScannerBridge_clamScanNative
+          readelf -Ws /tmp/kanaf-scan-verified.so | grep Java_com_kanaf_alrasby_engine_NativeScannerBridge_yaraScanNative
       - uses: actions/upload-artifact@v4
         if: always()
         with:
