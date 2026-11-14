@@ -1,6 +1,7 @@
 #include "../app/src/main/cpp/file_snapshot.h"
 #include <cassert>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <fcntl.h>
 #include <sys/stat.h>
