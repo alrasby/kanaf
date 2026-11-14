@@ -136,7 +136,7 @@ std::string yaraScan(const char* file, const char* rulesSource) {
             YaraMatch match{"", identifier};
             if (onMatch(scanner, onYaraMatch, &match) != 0) {
                 answer = incomplete("yara-callback-failed");
-            } else if (scan(scanner, bytes.empty() ? nullptr : bytes.data(), bytes.size()) != 0) {
+            } else if (scan(scanner, bytes.empty() ? reinterpret_cast<const uint8_t*>("") : bytes.data(), bytes.size()) != 0) {
                 answer = incomplete("yara-scan-failed");
             } else {
                 answer = match.name.empty() ? "NO_MATCH" : "DETECTED:" + match.name;
