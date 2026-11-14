@@ -9,11 +9,8 @@ on:
 permissions:
   contents: read
 jobs:
-  native-engines-apk:
-    uses: ./.github/workflows/kanaf-package-native-engines.yml
-    permissions:
-      contents: read
-      actions: read
+  # The packaged APK with verified native libraries is built by the dedicated
+  # kanaf-package-native-engines workflow; do not duplicate or upload a bare APK.
   native:
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -59,12 +56,8 @@ jobs:
           java -version
           gradle --version
           echo "ANDROID_HOME=$ANDROID_HOME"
-      - name: Run native unit tests
-        run: gradle --no-daemon :app:testDebugUnitTest --stacktrace
-      - name: Android lint
-        run: gradle --no-daemon :app:lintDebug --stacktrace
-      - name: Build native debug APK
-        run: gradle --no-daemon :app:assembleDebug --stacktrace
+      - name: Run native unit tests and Android lint
+        run: gradle --no-daemon :app:testDebugUnitTest :app:lintDebug --stacktrace
       - name: Upload diagnostic reports
         if: always()
         uses: actions/upload-artifact@v4
@@ -74,12 +67,6 @@ jobs:
             native-rebuild/app/build/reports/
             native-rebuild/app/build/test-results/
           if-no-files-found: warn
-      - uses: actions/upload-artifact@v4
-        with:
-          name: kanaf-native-debug
-          path: native-rebuild/app/build/outputs/apk/debug/*.apk
-          if-no-files-found: error
-
 
   arm64-probe:
     # Legacy full-feasibility probe is expensive and is superseded by isolated engine CI.
