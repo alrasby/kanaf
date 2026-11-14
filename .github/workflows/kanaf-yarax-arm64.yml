@@ -29,13 +29,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          git clone --depth 1 --branch v0.13.0 https://github.com/VirusTotal/yara-x.git src
-          git -C src rev-parse HEAD | tee revision.txt
+          git clone --depth 1 --branch v0.13.0 https://github.com/VirusTotal/yara-x.git yarax-upstream
+          git -C yarax-upstream rev-parse HEAD | tee revision.txt
           export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang"
           export CC_aarch64_linux_android="$CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER"
           export AR_aarch64_linux_android="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar"
           export CARGO_TARGET_AARCH64_LINUX_ANDROID_AR="$AR_aarch64_linux_android"
-          cd src
+          cd yarax-upstream
           CARGO_BUILD_JOBS=2 CARGO_INCREMENTAL=0 timeout 1800 cargo build --locked --release --target aarch64-linux-android -p yara-x-capi 2>&1 | tee ../build.log
           test -s target/aarch64-linux-android/release/libyara_x_capi.so
           python3 ../native-rebuild/tools/verify_arm64_elf.py target/aarch64-linux-android/release/libyara_x_capi.so
