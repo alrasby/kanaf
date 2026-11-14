@@ -56,10 +56,24 @@ jobs:
           export OPENSSL_INCLUDE_DIR="$OPENSSL_ROOT_DIR/include"
           export OPENSSL_CRYPTO_LIBRARY="$OPENSSL_LIBDIR/libcrypto.a"
           export OPENSSL_SSL_LIBRARY="$OPENSSL_LIBDIR/libssl.a"
+          # BZip2 is not supplied as an Android NDK library; build it for ARM64.
+          curl --fail --location --retry 3 --output bzip2-1.0.8.tar.gz https://sourceware.org/pub/bzip2/bzip2-1.0.8.tar.gz
+          echo 'ab5a03176ee106d3f0fa90e381da478ddae405918153cca248e682cd0c4a2269  bzip2-1.0.8.tar.gz' | sha256sum -c -
+          mkdir -p bzip2-upstream bzip2-android/lib
+          tar -xzf bzip2-1.0.8.tar.gz -C bzip2-upstream --strip-components=1
+          BZIP2_CC="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang"
+          BZIP2_AR="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar"
+          for source in blocksort bzlib compress crctable decompress huffman randtable; do
+            "$BZIP2_CC" -O2 -fPIC -I bzip2-upstream -c "bzip2-upstream/$source.c" -o "bzip2-android/$source.o"
+          done
+          "$BZIP2_AR" rcs bzip2-android/lib/libbz2.a bzip2-android/*.o
+          export BZIP2_INCLUDE_DIR="$GITHUB_WORKSPACE/bzip2-upstream"
+          export BZIP2_LIBRARY="$GITHUB_WORKSPACE/bzip2-android/lib/libbz2.a"
           timeout 480 cmake -S clamav-upstream -B out -G Ninja \
             -DCMAKE_TOOLCHAIN_FILE="$NDK/build/cmake/android.toolchain.cmake" \
             -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-26 \
             -DENABLE_LIBCLAMAV_ONLY=ON -DENABLE_TESTS=OFF \
+            -DBZIP2_INCLUDE_DIR="$BZIP2_INCLUDE_DIR" -DBZIP2_LIBRARY="$BZIP2_LIBRARY" \
             -DOPENSSL_ROOT_DIR="$OPENSSL_ROOT_DIR" -DOPENSSL_INCLUDE_DIR="$OPENSSL_INCLUDE_DIR" \
             -DOPENSSL_CRYPTO_LIBRARY="$OPENSSL_CRYPTO_LIBRARY" -DOPENSSL_SSL_LIBRARY="$OPENSSL_SSL_LIBRARY" \
             -DENABLE_MAN_PAGES=OFF -DENABLE_DOXYGEN=OFF 2>&1 | tee configure.log
