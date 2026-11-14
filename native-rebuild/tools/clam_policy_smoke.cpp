@@ -26,7 +26,7 @@ int main() {
     assert(!kanaf::configureClamLimits(&fails, &setNumber));
     assert(fails.calls == 3);
     assert(!kanaf::configureClamLimits<FakeEngine>(nullptr, &setNumber));
-    assert(!kanaf::configureClamLimits(&ready, nullptr));
+    assert(!kanaf::configureClamLimits<FakeEngine>(&ready, nullptr));
     assert(kanaf::isIncompleteLimitAlert("Heuristics.Limits.Exceeded"));
     assert(kanaf::isIncompleteLimitAlert("Heuristics.Limits.Exceeded.MaxScanSize"));
     assert(!kanaf::isIncompleteLimitAlert(nullptr));
