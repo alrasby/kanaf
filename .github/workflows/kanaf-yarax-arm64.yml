@@ -12,6 +12,8 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
+      - name: Run native library verification regression tests
+        run: python3 -m unittest discover -s native-rebuild/tools -p 'test_*.py' -v
       - name: Prepare Android NDK and Rust
         shell: bash
         run: |
@@ -34,6 +36,7 @@ jobs:
           cd src
           CARGO_BUILD_JOBS=2 CARGO_INCREMENTAL=0 timeout 1800 cargo build --locked --release --target aarch64-linux-android -p yara-x-capi 2>&1 | tee ../build.log
           test -s target/aarch64-linux-android/release/libyara_x_capi.so
+          python3 native-rebuild/tools/verify_arm64_elf.py target/aarch64-linux-android/release/libyara_x_capi.so
           readelf -h target/aarch64-linux-android/release/libyara_x_capi.so | grep AArch64
           readelf -d target/aarch64-linux-android/release/libyara_x_capi.so | tee ../dynamic-dependencies.txt
           cp target/aarch64-linux-android/release/libyara_x_capi.so ../libyara_x_capi.so
