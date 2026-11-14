@@ -107,11 +107,11 @@ private fun KanafScreen(activity: Activity) {
                             fun nativeLabel(name: String, result: AntivirusEngine.Verdict): String =
                                 when (result) {
                                     is AntivirusEngine.Verdict.Detected ->
-                                        "$" + "{name}: كشف تجريبي EICAR — $" + "{result.threatName}"
+                                        "$name: كشف تجريبي EICAR — ${result.threatName}"
                                     is AntivirusEngine.Verdict.NoKnownMatch ->
-                                        "$" + "{name}: لا تطابق مع قاعدة EICAR الاختبارية"
+                                        "$name: لا تطابق مع قاعدة EICAR الاختبارية"
                                     is AntivirusEngine.Verdict.Incomplete ->
-                                        "$" + "{name}: لم يكتمل الفحص ($" + "{result.reason})"
+                                        "$name: لم يكتمل الفحص (${result.reason})"
                                 }
                             val nativeNote = listOf(
                                 "فحص أصلي محلي (قاعدة اختبار EICAR فقط؛ ليست حماية شاملة):",
