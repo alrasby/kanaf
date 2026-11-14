@@ -27,8 +27,8 @@ object NativeScannerBridge {
 
     // These are the official non-executable EICAR test bytes, used only for an engine self-test.
     private val eicar = (
-        "X5O!P%@AP[4\\PZX54(P^)7CC)7}" +
-            "${'
+        "X5O!P%@AP[4\\PZX54(P^)7CC)7}" + 36.toChar() +
+            "EICAR-STANDARD-ANTIVIRUS-TEST-FILE!" + 36.toChar() + "H+H*"
     ).toByteArray(Charsets.US_ASCII)
 
     private fun digest(bytes: ByteArray): String =
@@ -56,10 +56,15 @@ object NativeScannerBridge {
         dest.outputStream().use { output ->
             source.use { input ->
                 val chunk = ByteArray(64 * 1024)
+                var emptyReads = 0
                 while (true) {
                     val n = input.read(chunk)
                     if (n == -1) break
-                    if (n == 0) continue
+                    if (n == 0) {
+                        if (++emptyReads >= 4) error("input-stream-stalled")
+                        continue
+                    }
+                    emptyReads = 0
                     count += n
                     if (count > MAX_FILE_BYTES) error("file-exceeds-native-16MiB-limit")
                     hash.update(chunk, 0, n)
