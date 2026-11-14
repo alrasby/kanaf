@@ -28,6 +28,10 @@ jobs:
         run: |
           g++ -std=c++17 -Wall -Wextra -Werror -pedantic tools/clam_policy_smoke.cpp -o /tmp/kanaf-clam-policy-test
           /tmp/kanaf-clam-policy-test
+      - name: Test YARA-X callback and timeout fail-closed policy
+        run: |
+          g++ -std=c++17 -Wall -Wextra -Werror -pedantic tests/yara_policy_smoke.cpp -o /tmp/kanaf-yara-policy-test
+          /tmp/kanaf-yara-policy-test
       - uses: actions/setup-java@v4
         with:
           distribution: temurin

@@ -12,6 +12,7 @@ antivirus until native detection, update trust, and on-device tests are complete
 - ClamAV 1.4.3 and YARA-X 0.13.0 Android ARM64 libraries built in isolated CI jobs.
 - JNI bridge with a 16 MiB staging ceiling and 30-second cooperative copy deadline. Native calls are delegated to the separate `:scanner` process; the parent process never calls the JNI scan symbols.
 - ClamAV 1.4.3 native engine now sets decompressed scan budget (32 MiB), contained-file limit (16 MiB), recursion depth (8), file-count cap (512), and engine scan time (20 seconds). Limit-exceeded heuristic alerts are deliberately reported as **incomplete**, not malware or clean; missing/failed limit configuration aborts that engine. ABI ordinals are pinned to ClamAV 1.4.3 and host C++ regression-tested.
+- YARA-X 0.13.0 now requires a 20-second per-scan timeout; an unsupported/failed timeout or scanner error yields **incomplete**. A received matching-rule callback with an unreadable, oversized or invalid identifier also yields **incomplete**, never a false `NO_MATCH`. Host C++ regression tests cover the callback policy.
 - **EICAR-only** ClamAV HDB and YARA-X rule, with pinned SHA-256 digests.
 - Both engines must pass a positive EICAR and a negative benign-sample self-test
   before their file-scan results are accepted. No match is NOT proof of safety.

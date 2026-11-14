@@ -1,5 +1,6 @@
 #include <jni.h>
 #include "clam_scan_policy.h"
+#include "yara_scan_policy.h"
 #include <dlfcn.h>
 #include <cstdint>
 #include <cstdio>
@@ -92,17 +93,16 @@ std::string clamScan(const char* file, const char* database) {
 }
 
 struct YaraMatch {
-    std::string name;
+    kanaf::YaraMatchState state;
     int (*identifier)(const void*, const uint8_t**, size_t*);
 };
 void onYaraMatch(const void* rule, void* userData) {
     auto* ctx = static_cast<YaraMatch*>(userData);
-    if (!ctx || !ctx->name.empty() || !ctx->identifier) return;
+    if (!ctx) return;
     const uint8_t* name = nullptr;
     size_t length = 0;
-    if (ctx->identifier(rule, &name, &length) == 0 && name && length > 0 && length <= 128) {
-        ctx->name.assign(reinterpret_cast<const char*>(name), length);
-    }
+    const int status = ctx->identifier ? ctx->identifier(rule, &name, &length) : -1;
+    kanaf::observeYaraMatch(ctx->state, status, name, length);
 }
 
 std::string yaraScan(const char* file, const char* rulesSource) {
@@ -136,7 +136,8 @@ std::string yaraScan(const char* file, const char* rulesSource) {
     auto onMatch = symbol<int (*)(void*, void (*)(const void*, void*), void*)>(lib, "yrx_scanner_on_matching_rule");
     auto scan = symbol<int (*)(void*, const uint8_t*, size_t)>(lib, "yrx_scanner_scan");
     auto identifier = symbol<int (*)(const void*, const uint8_t**, size_t*)>(lib, "yrx_rule_identifier");
-    if (!compile || !destroyRules || !createScanner || !destroyScanner || !onMatch || !scan || !identifier) {
+    auto setTimeout = symbol<int (*)(void*, uint64_t)>(lib, "yrx_scanner_set_timeout");
+    if (!compile || !destroyRules || !createScanner || !destroyScanner || !onMatch || !scan || !identifier || !setTimeout) {
         dlclose(lib);
         return incomplete("yara-api-unavailable");
     }
@@ -145,13 +146,17 @@ std::string yaraScan(const char* file, const char* rulesSource) {
     if (compile(rulesSource, &rules) == 0 && rules) {
         void* scanner = nullptr;
         if (createScanner(rules, &scanner) == 0 && scanner) {
-            YaraMatch match{"", identifier};
-            if (onMatch(scanner, onYaraMatch, &match) != 0) {
+            YaraMatch match{{}, identifier};
+            // YARA-X 0.13.0 supplies a cooperative timeout in seconds.
+            // The scanner process watchdog still handles a hung native parser.
+            if (setTimeout(scanner, kanaf::kYaraTimeoutSeconds) != 0) {
+                answer = incomplete("yara-timeout-unavailable");
+            } else if (onMatch(scanner, onYaraMatch, &match) != 0) {
                 answer = incomplete("yara-callback-failed");
             } else if (scan(scanner, bytes.empty() ? reinterpret_cast<const uint8_t*>("") : bytes.data(), bytes.size()) != 0) {
-                answer = incomplete("yara-scan-failed");
+                answer = incomplete("yara-scan-failed-or-timeout");
             } else {
-                answer = match.name.empty() ? "NO_MATCH" : "DETECTED:" + match.name;
+                answer = kanaf::classifyYaraMatches(match.state);
             }
             destroyScanner(scanner);
         } else {
