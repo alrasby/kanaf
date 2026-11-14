@@ -6,6 +6,9 @@ on:
   workflow_dispatch:
   pull_request:
     paths: ['native-rebuild/tools/**', '.github/workflows/kanaf-yarax-arm64.yml', '.github/workflows/kanaf-clamav-arm64.yml']
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:
