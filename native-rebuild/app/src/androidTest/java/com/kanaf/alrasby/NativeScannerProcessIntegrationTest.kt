@@ -8,6 +8,8 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.kanaf.alrasby.engine.AntivirusEngine
 import com.kanaf.alrasby.engine.NativeScannerBridge
 import com.kanaf.alrasby.engine.NativeScannerService
+import com.kanaf.alrasby.engine.NativeScanProcessClient
+import com.kanaf.alrasby.engine.NativeScanProtocol
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -43,6 +45,26 @@ class NativeScannerProcessIntegrationTest {
             report.yaraX is AntivirusEngine.Verdict.Detected ||
                 report.yaraX is AntivirusEngine.Verdict.Incomplete
         )
+    }
+
+    @Test fun workerDeathFailsClosedAndNextScanRecovers() {
+        // This action is only accepted by the private :scanner service in a debuggable app.
+        val crashed = NativeScanProcessClient.execute(
+            appContext, NativeScanProtocol.REQUEST_DEBUG_CRASH, null
+        )
+        assertTrue("Worker death must not return a clean ClamAV verdict",
+            crashed.clamav is AntivirusEngine.Verdict.Incomplete)
+        assertTrue("Worker death must not return a clean YARA-X verdict",
+            crashed.yaraX is AntivirusEngine.Verdict.Incomplete)
+        val reason = (crashed.clamav as AntivirusEngine.Verdict.Incomplete).reason
+        assertTrue("Must observe worker death, not silently time out: $reason",
+            reason == "scanner-process-disconnected" || reason == "scanner-binding-died")
+
+        // A new bind must be able to start a fresh :scanner process.
+        val next = NativeScannerBridge.selfTest(appContext)
+        assertEquals(2, next.gates.size)
+        assertFalse(next.clamav is AntivirusEngine.Verdict.NoKnownMatch)
+        assertFalse(next.yaraX is AntivirusEngine.Verdict.NoKnownMatch)
     }
 
     @Test fun missingContentProviderDoesNotProduceCleanVerdict() {

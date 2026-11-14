@@ -2,6 +2,7 @@ package com.kanaf.alrasby.engine
 
 import android.app.Service
 import android.content.Intent
+import android.content.pm.ApplicationInfo
 import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
@@ -22,6 +23,19 @@ class NativeScannerService : Service() {
 
     private val incoming = Messenger(object : Handler(Looper.getMainLooper()) {
         override fun handleMessage(message: Message) {
+            if (message.what == NativeScanProtocol.REQUEST_DEBUG_CRASH) {
+                // Only the non-exported service in a DEBUGGABLE app can be terminated by tests.
+                // No production release can activate this fault injection path.
+                if (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE == 0) {
+                    message.replyTo?.let {
+                        send(it, NativeScanProtocol.unavailable("debug-crash-disabled"))
+                    }
+                    return
+                }
+                if (message.replyTo == null) return
+                Process.killProcess(Process.myPid())
+                return
+            }
             if (message.what != NativeScanProtocol.REQUEST_FILE &&
                 message.what != NativeScanProtocol.REQUEST_SELF_TEST) {
                 return

@@ -3,6 +3,7 @@ package com.kanaf.alrasby.engine
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ApplicationInfo
 import android.content.ServiceConnection
 import android.net.Uri
 import android.os.Bundle
@@ -21,8 +22,13 @@ internal object NativeScanProcessClient {
         if (Looper.myLooper() == Looper.getMainLooper()) {
             return NativeScanProtocol.unavailable("scanner-called-on-main-thread")
         }
+        if (mode == NativeScanProtocol.REQUEST_DEBUG_CRASH &&
+            context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE == 0) {
+            return NativeScanProtocol.unavailable("debug-crash-disabled")
+        }
         if (mode != NativeScanProtocol.REQUEST_FILE &&
-            mode != NativeScanProtocol.REQUEST_SELF_TEST) {
+            mode != NativeScanProtocol.REQUEST_SELF_TEST &&
+            mode != NativeScanProtocol.REQUEST_DEBUG_CRASH) {
             return NativeScanProtocol.unavailable("invalid-scan-request")
         }
         val done = CountDownLatch(1)
@@ -76,7 +82,8 @@ internal object NativeScanProcessClient {
                 NativeScanProtocol.unavailable("scanner-bind-failed")
             } else {
                 try {
-                    if (!done.await(100, TimeUnit.SECONDS)) {
+                    val waitSeconds = if (mode == NativeScanProtocol.REQUEST_DEBUG_CRASH) 20L else 100L
+                    if (!done.await(waitSeconds, TimeUnit.SECONDS)) {
                         NativeScanProtocol.unavailable("scanner-timeout")
                     } else {
                         response.get() ?: NativeScanProtocol.unavailable("scanner-missing-response")

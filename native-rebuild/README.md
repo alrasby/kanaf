@@ -20,7 +20,7 @@ antivirus until native detection, update trust, and on-device tests are complete
 - An offline **Test both engines** action within Engines. It runs native code, not a
   mock, and only reports success after a real EICAR signature match.
 - Signature updates (not yet network-enabled) now stage the previously signature-verified version, digest and database in **one AtomicFile**, rejecting damaged/truncated bundles and version rollback against legacy state. The old split-file format fails closed until an authenticated update replaces it.
-- Android emulator integration tests cover private `:scanner` service declaration, bound worker IPC self-test, and fail-closed handling of unavailable content providers. The emulator uses x86_64, so native ARM64 engine detection is still a separate device test.
+- Android emulator integration tests cover private `:scanner` service declaration, bound worker IPC self-test, unavailable providers, and debuggable-only worker process crash/restart. Crash injection is unreachable in non-debuggable releases; x86_64 does not validate native ARM64 detection. The emulator uses x86_64, so native ARM64 engine detection is still a separate device test.
 - JUnit regression tests and CI build, lint and APK native-library assertions.
 
 ## On-device validation

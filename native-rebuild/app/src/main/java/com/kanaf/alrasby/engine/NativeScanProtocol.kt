@@ -5,6 +5,8 @@ internal object NativeScanProtocol {
     const val REQUEST_FILE = 1
     const val REQUEST_SELF_TEST = 2
     const val RESPONSE = 3
+    /** Debuggable builds only. Forces scanner worker death for instrumentation recovery tests. */
+    const val REQUEST_DEBUG_CRASH = 4
     const val URI_KEY = "scan_uri"
 
     private val shaPattern = Regex("[0-9a-f]{64}")
