@@ -8,6 +8,7 @@ on:
       - 'native-rebuild/app/src/androidTest/java/com/kanaf/alrasby/NativeArm64EngineRuntimeTest.kt'
       - 'native-rebuild/tools/run_arm64_runtime_ci.sh'
       - 'native-rebuild/app/src/main/java/com/kanaf/alrasby/engine/NativeScannerBridge.kt'
+      - 'native-rebuild/app/src/main/cpp/native_scanner.cpp'
   workflow_dispatch:
 concurrency:
   group: kanaf-arm64-runtime-probe

@@ -1,4 +1,5 @@
 #include <jni.h>
+#include <android/log.h>
 #include "clam_scan_policy.h"
 #include "yara_scan_policy.h"
 #include "file_snapshot.h"
@@ -62,6 +63,11 @@ std::string clamScan(const char* file, const char* database) {
     if (init(0) == 0 && (engine = create()) != nullptr) {
         unsigned int count = 0;
         int loading = load(database, engine, &count, 0);
+#ifndef NDEBUG
+        // Diagnostic counters only. Never log any user-selected path or file bytes.
+        __android_log_print(ANDROID_LOG_INFO, "KanafClamNative",
+            "ClamAV database load result=%d signatures=%u", loading, count);
+#endif
         if (loading != 0 || count == 0) {
             answer = incomplete("clamav-rules-load-failed");
         } else if (!kanaf::configureClamLimits(engine, setNum)) {
@@ -78,6 +84,10 @@ std::string clamScan(const char* file, const char* database) {
             options.general = 0x4;   // CL_SCAN_GENERAL_HEURISTICS
             options.heuristic = 0x4; // CL_SCAN_HEURISTIC_EXCEEDS_MAX
             int verdict = scan(file, &name, &scanned, engine, &options);
+#ifndef NDEBUG
+            __android_log_print(ANDROID_LOG_INFO, "KanafClamNative",
+                "ClamAV scan code=%d scannedUnits=%lu", verdict, scanned);
+#endif
             if (verdict == 1 && kanaf::isIncompleteLimitAlert(name)) {
                 answer = incomplete("clamav-resource-limit");
             } else if (verdict == 1) {

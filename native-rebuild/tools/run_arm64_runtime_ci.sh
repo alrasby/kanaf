@@ -14,7 +14,7 @@ adb logcat -c || true
 report_worker_diagnostics() {
   result=$?
   echo "=== ARM64 native engine debug-only self-test diagnostics ==="
-  adb logcat -d -s KanafNativeSelfTest:I | tail -n 60 || true
+  adb logcat -d -s KanafNativeSelfTest:I KanafClamNative:I | tail -n 100 || true
   exit "$result"
 }
 trap report_worker_diagnostics EXIT
