@@ -24,6 +24,9 @@ class StreamScanner(
             if (cancelled()) return Result.Skipped("cancelled", total)
             if (System.nanoTime() - startedAt >= maxDurationNanos) return Result.Skipped("time-limit", total)
             val read = stream.read(buffer)
+            // Reads may block beyond the deadline; do not report a completed scan afterward.
+            if (cancelled()) return Result.Skipped("cancelled", total)
+            if (System.nanoTime() - startedAt >= maxDurationNanos) return Result.Skipped("time-limit", total)
             if (read == -1) break
             if (read == 0) {
                 if (++emptyReads >= 16) return Result.Skipped("stalled-stream", total)
