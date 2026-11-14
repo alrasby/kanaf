@@ -154,7 +154,14 @@ jobs:
           test -s clamav-output.txt
           while IFS= read -r lib; do
             file "$lib"
-            readelf -h "$lib" | grep AArch64
+            if [[ "$lib" == *.a ]]; then
+              member="$(ar t "$lib" | head -n 1)"
+              test -n "$member"
+              ar p "$lib" "$member" > /tmp/kanaf-clamav-member.o
+              readelf -h /tmp/kanaf-clamav-member.o | grep AArch64
+            else
+              readelf -h "$lib" | grep AArch64
+            fi
           done < clamav-output.txt
       - name: Summarize real engine build status
         if: always()
