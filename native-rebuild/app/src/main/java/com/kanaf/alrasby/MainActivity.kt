@@ -149,11 +149,13 @@ private fun KanafScreen(activity: Activity) {
                                 (scanResult as? AntivirusEngine.Verdict.Detected)?.threatName ?: nativeDetection,
                                 apkEvidence, dexEvidence, zipEvidence
                             )
-                            val structuralMissing = (apk && (apkEvidence == null || dexEvidence == null)) ||
-                                ((archive || apk) && zipEvidence == null)
+                            val structuralIncomplete = !ThreatEvidence.isStructuralInspectionComplete(
+                                apkSelected = apk, archiveSelected = archive,
+                                apk = apkEvidence, dex = dexEvidence, zip = zipEvidence
+                            )
                             val assessmentNote = if (eicarOnly) {
                                 "عينة EICAR اختبارية آمنة؛ نجاح الكشف لا يثبت القدرة على كشف فيروسات فعلية"
-                            } else if (scanResult is AntivirusEngine.Verdict.Incomplete || signatures == null || structuralMissing || consensus is EngineConsensus.Decision.Inconclusive) {
+                            } else if (scanResult is AntivirusEngine.Verdict.Incomplete || signatures == null || structuralIncomplete || consensus is EngineConsensus.Decision.Inconclusive) {
                                 "تقييم الأدلة: الفحص غير مكتمل أو قاعدة التوقيعات غير متاحة"
                             } else when (assessment.severity) {
                                 ThreatEvidence.Severity.CONFIRMED -> "تقييم الأدلة: تطابق تهديد معروف"
@@ -163,7 +165,7 @@ private fun KanafScreen(activity: Activity) {
                             }
                             val journey = TrustJourney.build(
                                 assessment,
-                                scanCompleted = scanResult !is AntivirusEngine.Verdict.Incomplete && !structuralMissing && consensus !is EngineConsensus.Decision.Inconclusive,
+                                scanCompleted = scanResult !is AntivirusEngine.Verdict.Incomplete && !structuralIncomplete && consensus !is EngineConsensus.Decision.Inconclusive,
                                 signaturesAvailable = signatures != null
                             )
                             val decisionNote = if (eicarOnly) {

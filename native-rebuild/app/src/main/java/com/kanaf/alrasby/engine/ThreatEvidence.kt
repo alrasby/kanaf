@@ -5,6 +5,18 @@ object ThreatEvidence {
     enum class Severity { CONFIRMED, SUSPICIOUS, INCONCLUSIVE, NO_KNOWN_MATCH }
     data class Assessment(val severity: Severity, val reasons: List<String>)
 
+    /** Incomplete ZIP/APK/DEX results are never equivalent to a completed inspection. */
+    fun isStructuralInspectionComplete(
+        apkSelected: Boolean,
+        archiveSelected: Boolean,
+        apk: ApkStructureInspector.Result?,
+        dex: DexHeaderInspector.Result?,
+        zip: ZipInspector.Result?
+    ): Boolean =
+        (!apkSelected || (apk is ApkStructureInspector.Result.Complete &&
+            dex is DexHeaderInspector.Result.Complete)) &&
+            (!(archiveSelected || apkSelected) || zip is ZipInspector.Result.Complete)
+
     fun assess(
         signature: String?,
         apk: ApkStructureInspector.Result?,
