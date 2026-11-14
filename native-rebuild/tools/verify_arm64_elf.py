@@ -8,7 +8,7 @@ import sys
 
 def verify(path: pathlib.Path) -> None:
     data = path.read_bytes()
-    if len(data) < 64 or data[:4] != b"\\x7fELF":
+    if len(data) < 64 or data[:4] != bytes((0x7f, 0x45, 0x4c, 0x46)):
         raise ValueError("not an ELF file")
     if data[4] != 2:
         raise ValueError("not ELF64")
