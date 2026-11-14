@@ -1,0 +1,60 @@
+name: Kanaf Android worker-process integration
+
+# Run a real emulator only for IPC/service changes, not for every app edit.
+on:
+  push:
+    branches: [rebuild/kanaf-native-v1]
+    paths:
+      - '.github/workflows/kanaf-android-integration.yml'
+      - 'native-rebuild/app/src/androidTest/**'
+      - 'native-rebuild/app/src/main/AndroidManifest.xml'
+      - 'native-rebuild/app/src/main/java/com/kanaf/alrasby/engine/NativeScannerService.kt'
+      - 'native-rebuild/app/src/main/java/com/kanaf/alrasby/engine/NativeScanProcessClient.kt'
+      - 'native-rebuild/app/src/main/java/com/kanaf/alrasby/engine/NativeScanProtocol.kt'
+  workflow_dispatch:
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref_name }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+jobs:
+  emulator-integration:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Enable KVM access
+        shell: bash
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Verify worker process and fail-closed IPC on Android emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          ram-size: 2048M
+          heap-size: 256M
+          disable-animations: true
+          emulator-boot-timeout: 900
+          working-directory: native-rebuild
+          script: gradle --no-daemon :app:connectedDebugAndroidTest --stacktrace
+      - name: Upload emulator test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kanaf-android-worker-ipc-tests
+          path: |
+            native-rebuild/app/build/reports/androidTests/
+            native-rebuild/app/build/outputs/androidTest-results/
+          if-no-files-found: warn
