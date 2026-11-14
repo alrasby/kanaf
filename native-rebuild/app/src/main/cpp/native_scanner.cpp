@@ -45,7 +45,7 @@ std::string clamScan(const char* file, const char* database) {
 
     auto init = symbol<int (*)(unsigned int)>(lib, "cl_init");
     auto create = symbol<ClEngine* (*)()>(lib, "cl_engine_new");
-    auto freeEngine = symbol<void (*)(ClEngine*)>(lib, "cl_engine_free");
+    auto freeEngine = symbol<int (*)(ClEngine*)>(lib, "cl_engine_free");
     auto load = symbol<int (*)(const char*, ClEngine*, unsigned int*, unsigned int)>(lib, "cl_load");
     auto compile = symbol<int (*)(ClEngine*)>(lib, "cl_engine_compile");
     auto scan = symbol<int (*)(const char*, const char**, unsigned long*, const ClEngine*, ClScanOptions*)>(lib, "cl_scanfile");
