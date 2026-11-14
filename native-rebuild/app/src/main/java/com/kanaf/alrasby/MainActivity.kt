@@ -145,7 +145,10 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
                                 is EngineConsensus.Decision.Threat ->
                                     if (eicarOnly) "نتيجة المحركات: نجاح اكتشاف EICAR التجريبي غير الضار"
                                     else "نتيجة المحركات: تم اكتشاف تهديد معروف"
-                                is EngineConsensus.Decision.Inconclusive -> "نتيجة المحركات: غير مكتملة"
+                                is EngineConsensus.Decision.Inconclusive ->
+                                    if (consensus.reason == "file-changed-between-engines") {
+                                        "تحذير: اختلفت بصمات الملف بين المحركات. قد يكون الملف تغيّر أثناء الفحص؛ النتائج غير حاسمة ويجب إعادة الفحص."
+                                    } else "نتيجة المحركات: غير مكتملة"
                                 is EngineConsensus.Decision.NoKnownMatch -> "نتيجة المحركات: لا يوجد تطابق معروف؛ السلامة غير مؤكدة"
                             }
                             val verdict = when (scanResult) {
@@ -161,9 +164,13 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
                             val nativeDetection = nativeReports.firstNotNullOfOrNull {
                                 (it.verdict as? AntivirusEngine.Verdict.Detected)?.threatName
                             }
+                            // A match from a different file snapshot is not a confirmed
+                            // match for the current selected file.
+                            val trustedDetection = if (consensus is EngineConsensus.Decision.Threat) {
+                                (scanResult as? AntivirusEngine.Verdict.Detected)?.threatName ?: nativeDetection
+                            } else null
                             val assessment = ThreatEvidence.assess(
-                                (scanResult as? AntivirusEngine.Verdict.Detected)?.threatName ?: nativeDetection,
-                                apkEvidence, dexEvidence, zipEvidence
+                                trustedDetection, apkEvidence, dexEvidence, zipEvidence
                             )
                             val structuralIncomplete = !ThreatEvidence.isStructuralInspectionComplete(
                                 apkSelected = apk, archiveSelected = archive,

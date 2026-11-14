@@ -8,7 +8,7 @@ antivirus until native detection, update trust, and on-device tests are complete
 
 - SAF user-selected file scanning, bounded streaming SHA-256, local bootstrap hashes.
 - ZIP, APK and DEX structural inspection with explicit incomplete verdicts.
-- Fail-closed multi-engine consensus and evidence-based decision guidance.
+- Fail-closed multi-engine consensus and evidence-based decision guidance. If all completed SHA-256 hashes do not match (e.g. SAF content changes between reads), the aggregate result is explicitly inconclusive rather than a falsely confirmed detection; the individual matches remain available for review. Bad digests, empty labels and missing engines also fail closed.
 - ClamAV 1.4.3 and YARA-X 0.13.0 Android ARM64 libraries built in isolated CI jobs.
 - JNI bridge with a 16 MiB staging ceiling and 30-second cooperative copy deadline. Native calls are delegated to the separate `:scanner` process; the parent process never calls the JNI scan symbols.
 - ClamAV 1.4.3 native engine now sets decompressed scan budget (32 MiB), contained-file limit (16 MiB), recursion depth (8), file-count cap (512), and engine scan time (20 seconds). Limit-exceeded heuristic alerts are deliberately reported as **incomplete**, not malware or clean; missing/failed limit configuration aborts that engine. ABI ordinals are pinned to ClamAV 1.4.3 and host C++ regression-tested.
