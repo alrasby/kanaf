@@ -2,9 +2,9 @@ name: Kanaf native rebuild
 on:
   push:
     branches: [rebuild/kanaf-native-v1]
-    paths: ['native-rebuild/**', '.github/workflows/kanaf-native-rebuild.yml']
+    paths: ['native-rebuild/**', '.github/workflows/kanaf-native-rebuild.yml', '.github/workflows/kanaf-native-engines-probe.yml']
   pull_request:
-    paths: ['native-rebuild/**', '.github/workflows/kanaf-native-rebuild.yml']
+    paths: ['native-rebuild/**', '.github/workflows/kanaf-native-rebuild.yml', '.github/workflows/kanaf-native-engines-probe.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -155,7 +155,7 @@ jobs:
           while IFS= read -r lib; do
             file "$lib"
             if [[ "$lib" == *.a ]]; then
-              member="$(ar t "$lib" | head -n 1)"
+              member="$(ar t "$lib" | sed -n '1p')"
               test -n "$member"
               ar p "$lib" "$member" > /tmp/kanaf-clamav-member.o
               readelf -h /tmp/kanaf-clamav-member.o | grep AArch64
