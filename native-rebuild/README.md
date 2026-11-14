@@ -10,7 +10,7 @@ antivirus until native detection, update trust, and on-device tests are complete
 - ZIP, APK and DEX structural inspection with explicit incomplete verdicts.
 - Fail-closed multi-engine consensus and evidence-based decision guidance.
 - ClamAV 1.4.3 and YARA-X 0.13.0 Android ARM64 libraries built in isolated CI jobs.
-- Experimental JNI bridge with 16 MiB ceiling, temporary private-cache copies and cleanup.
+- Experimental JNI bridge with 16 MiB ceiling, 30-second cooperative deadline for private-cache staging, stalled-stream detection and cleanup; blocking reads/JNI are NOT yet killable without process isolation.
 - **EICAR-only** ClamAV HDB and YARA-X rule, with pinned SHA-256 digests.
 - Both engines must pass a positive EICAR and a negative benign-sample self-test
   before their file-scan results are accepted. No match is NOT proof of safety.

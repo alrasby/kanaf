@@ -55,31 +55,6 @@ object NativeScannerBridge {
             it.outputStream().use { output -> output.write(bytes) }
         }
 
-    private fun copyBounded(source: InputStream, dest: File): String {
-        val hash = MessageDigest.getInstance("SHA-256")
-        var count = 0L
-        dest.outputStream().use { output ->
-            source.use { input ->
-                val chunk = ByteArray(64 * 1024)
-                var emptyReads = 0
-                while (true) {
-                    val n = input.read(chunk)
-                    if (n == -1) break
-                    if (n == 0) {
-                        if (++emptyReads >= 4) error("input-stream-stalled")
-                        continue
-                    }
-                    emptyReads = 0
-                    count += n
-                    if (count > MAX_FILE_BYTES) error("file-exceeds-native-16MiB-limit")
-                    hash.update(chunk, 0, n)
-                    output.write(chunk, 0, n)
-                }
-            }
-        }
-        return hash.digest().joinToString("") { "%02x".format(it.toInt() and 0xff) }
-    }
-
     /**
      * Must be called on Dispatchers.IO, after the user selects one SAF file.
      * No file is deleted or modified at its original location.
@@ -137,10 +112,20 @@ object NativeScannerBridge {
             val selected = File.createTempFile("kanaf-scan-", ".bin", context.cacheDir)
             target = selected
             val sha256 = try {
-                source()?.let { copyBounded(it, selected) }
+                val input = source()
                     ?: return report(incomplete("file-unavailable"), incomplete("file-unavailable"))
+                input.use { sourceStream ->
+                    selected.outputStream().use { output ->
+                        when (val copied = BoundedStreamCopier(maxBytes = MAX_FILE_BYTES)
+                            .copy(sourceStream, output)) {
+                            is BoundedStreamCopier.Result.Complete -> copied.sha256
+                            is BoundedStreamCopier.Result.Incomplete ->
+                                return report(incomplete("copy-" + copied.reason), incomplete("copy-" + copied.reason))
+                        }
+                    }
+                }
             } catch (_: Exception) {
-                return report(incomplete("file-unreadable-or-exceeds-16MiB"), incomplete("file-unreadable-or-exceeds-16MiB"))
+                return report(incomplete("file-unreadable"), incomplete("file-unreadable"))
             }
             val clamVerdict = if (clamGate.ready) verdict(
                 clamScanNative(selected.absolutePath, rulesFile.absolutePath), sha256
