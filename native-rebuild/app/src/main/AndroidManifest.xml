@@ -11,5 +11,8 @@
                 <data android:mimeType="text/plain"/>
             </intent-filter>
         </activity>
+        <!-- Crash containment only: separate process, same app UID. Not an isolated UID. -->
+        <service android:name=".engine.NativeScannerService"
+            android:process=":scanner" android:exported="false" />
     </application>
 </manifest>

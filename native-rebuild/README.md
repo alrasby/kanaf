@@ -10,7 +10,7 @@ antivirus until native detection, update trust, and on-device tests are complete
 - ZIP, APK and DEX structural inspection with explicit incomplete verdicts.
 - Fail-closed multi-engine consensus and evidence-based decision guidance.
 - ClamAV 1.4.3 and YARA-X 0.13.0 Android ARM64 libraries built in isolated CI jobs.
-- Experimental JNI bridge with 16 MiB ceiling, 30-second cooperative deadline for private-cache staging, stalled-stream detection and cleanup; blocking reads/JNI are NOT yet killable without process isolation.
+- JNI bridge with a 16 MiB staging ceiling and 30-second cooperative copy deadline. Native calls are delegated to the separate `:scanner` process; the parent process never calls the JNI scan symbols.
 - **EICAR-only** ClamAV HDB and YARA-X rule, with pinned SHA-256 digests.
 - Both engines must pass a positive EICAR and a negative benign-sample self-test
   before their file-scan results are accepted. No match is NOT proof of safety.
@@ -39,9 +39,8 @@ antivirus until native detection, update trust, and on-device tests are complete
 - Native scanning is limited to explicitly selected files up to 16 MiB.
 - No protection of the entire device, on-install verification, realtime monitoring,
   quarantine, safe remote threat updates or background scanning is provided.
-- Native engines currently parse inside the app process. For an actual production
-  threat scanner, move untrusted native parsing to an isolated process and validate
-  limits, cancellation and crash recovery on real devices.
+- Native ClamAV and YARA-X parsing now runs in a **separate, non-exported app-private Android process** (`:scanner`) via Messenger IPC. The UI process receives an explicit incomplete verdict if the worker disconnects or times out. A worker watchdog terminates only the scanner process after 90 seconds, with a 100-second client deadline. Stale scanner cache copies are purged when the worker restarts.
+- Process separation provides **crash containment only**, NOT a restricted/isolated Android UID, sandbox, or guaranteed interruption of a maliciously blocked input provider. Real-device IPC, native-loader, timeout and memory tests remain release blockers.
 - Only Android ARM64 has the ClamAV/YARA-X libraries; other ABIs are unavailable.
 - The official ClamAV libclamav is GPLv2 licensed. Review source distribution and
   application license compatibility **before redistributing a production build**.

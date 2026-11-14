@@ -60,10 +60,17 @@ object NativeScannerBridge {
      * No file is deleted or modified at its original location.
      */
     fun scan(context: Context, uri: Uri): Report =
+        NativeScanProcessClient.execute(context, NativeScanProtocol.REQUEST_FILE, uri)
+
+    /** Built-in harmless EICAR self-test, executed in a separate worker process. */
+    fun selfTest(context: Context): Report =
+        NativeScanProcessClient.execute(context, NativeScanProtocol.REQUEST_SELF_TEST, null)
+
+    /** Only called by the scanner Service running in :scanner. Never call from the UI process. */
+    internal fun scanInWorker(context: Context, uri: Uri): Report =
         scanSource(context) { context.contentResolver.openInputStream(uri) }
 
-    /** Built-in harmless EICAR end-to-end test, without downloading or selecting a file. */
-    fun selfTest(context: Context): Report =
+    internal fun selfTestInWorker(context: Context): Report =
         scanSource(context) { ByteArrayInputStream(eicar) }
 
     private fun scanSource(context: Context, source: () -> InputStream?): Report {
