@@ -4,6 +4,7 @@ on:
     branches: [rebuild/kanaf-native-v1]
     paths: ['.github/workflows/kanaf-package-native-engines.yml', 'native-rebuild/**']
   workflow_dispatch:
+  workflow_call:
 permissions:
   contents: read
   actions: read
