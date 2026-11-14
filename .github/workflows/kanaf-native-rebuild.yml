@@ -2,7 +2,7 @@ name: Kanaf native rebuild
 on:
   push:
     branches: [rebuild/kanaf-native-v1]
-    paths: ['native-rebuild/**', '.github/workflows/kanaf-native-rebuild.yml', '.github/workflows/kanaf-native-engines-probe.yml']
+    paths: ['native-rebuild/**', '.github/workflows/kanaf-native-rebuild.yml', '.github/workflows/kanaf-native-engines-probe.yml', '.github/workflows/kanaf-yarax-arm64.yml', '.github/workflows/kanaf-clamav-arm64.yml']
   pull_request:
     paths: ['native-rebuild/**', '.github/workflows/kanaf-native-rebuild.yml', '.github/workflows/kanaf-native-engines-probe.yml']
   workflow_dispatch:
@@ -18,7 +18,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Test native ELF validation
-        run: python3 -m unittest discover -s native-rebuild/tools -p 'test_*.py' -v
+        run: python3 -m unittest discover -s tools -p 'test_*.py' -v
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
