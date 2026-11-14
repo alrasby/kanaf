@@ -29,10 +29,13 @@ jobs:
           git -C src rev-parse HEAD | tee revision.txt
           export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang"
           export CC_aarch64_linux_android="$CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER"
+          export AR_aarch64_linux_android="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar"
+          export CARGO_TARGET_AARCH64_LINUX_ANDROID_AR="$AR_aarch64_linux_android"
           cd src
           CARGO_BUILD_JOBS=2 CARGO_INCREMENTAL=0 timeout 1800 cargo build --locked --release --target aarch64-linux-android -p yara-x-capi 2>&1 | tee ../build.log
           test -s target/aarch64-linux-android/release/libyara_x_capi.so
           readelf -h target/aarch64-linux-android/release/libyara_x_capi.so | grep AArch64
+          readelf -d target/aarch64-linux-android/release/libyara_x_capi.so | tee ../dynamic-dependencies.txt
           cp target/aarch64-linux-android/release/libyara_x_capi.so ../libyara_x_capi.so
       - uses: actions/upload-artifact@v4
         if: always()
@@ -42,4 +45,5 @@ jobs:
             build.log
             revision.txt
             libyara_x_capi.so
+            dynamic-dependencies.txt
           if-no-files-found: warn
