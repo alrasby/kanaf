@@ -87,6 +87,21 @@ std::string clamScan(const char* file, const char* database) {
 #ifndef NDEBUG
             __android_log_print(ANDROID_LOG_INFO, "KanafClamNative",
                 "ClamAV scan code=%d scannedUnits=%lu", verdict, scanned);
+            // A diagnostic on the harmless built-in EICAR vector only.
+            // ClamAV 1.4.3's cli_magic_scan has a direct raw-pattern path
+            // when no parse or heuristic options are enabled. Check whether
+            // the options, rather than the database, suppress matching.
+            // This result is NEVER returned as the verdict or a readiness gate.
+            if (verdict == 0 && file &&
+                std::strstr(file, "/kanaf-eicar-") != nullptr) {
+                ClScanOptions rawOptions{};
+                const char* rawName = nullptr;
+                unsigned long rawScanned = 0;
+                const int rawCode = scan(file, &rawName, &rawScanned, engine, &rawOptions);
+                __android_log_print(ANDROID_LOG_INFO, "KanafClamNative",
+                    "Built-in EICAR raw-only scan code=%d scannedUnits=%lu named=%d",
+                    rawCode, rawScanned, rawName != nullptr ? 1 : 0);
+            }
 #endif
             if (verdict == 1 && kanaf::isIncompleteLimitAlert(name)) {
                 answer = incomplete("clamav-resource-limit");
