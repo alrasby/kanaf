@@ -103,10 +103,10 @@ object NativeScannerBridge {
             val yaraOK: Boolean
             try {
                 clamOK = libraries.clamavLoaded && clamRulesOK &&
-                    clamScanNative(testFile.absolutePath, rulesFile.absolutePath).startsWith("DETECTED:") &&
+                    NativeSelfTestPolicy.expected("clamav", clamScanNative(testFile.absolutePath, rulesFile.absolutePath)) &&
                     clamScanNative(benign.absolutePath, rulesFile.absolutePath) == "NO_MATCH"
                 yaraOK = libraries.yaraXLoaded && yaraRulesOK &&
-                    yaraScanNative(testFile.absolutePath, yaraRules).startsWith("DETECTED:") &&
+                    NativeSelfTestPolicy.expected("yara-x", yaraScanNative(testFile.absolutePath, yaraRules)) &&
                     yaraScanNative(benign.absolutePath, yaraRules) == "NO_MATCH"
             } finally {
                 benign.delete()
