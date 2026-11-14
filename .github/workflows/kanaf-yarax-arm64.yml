@@ -1,0 +1,57 @@
+name: Kanaf YARA-X ARM64 isolated
+on:
+  push:
+    branches: [rebuild/kanaf-native-v1]
+    paths: ['.github/workflows/kanaf-yarax-arm64.yml', 'native-rebuild/tools/**']
+  workflow_dispatch:
+  pull_request:
+    paths: ['native-rebuild/tools/**', '.github/workflows/kanaf-yarax-arm64.yml', '.github/workflows/kanaf-clamav-arm64.yml']
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+jobs:
+  yarax:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run native library verification regression tests
+        run: python3 -m unittest discover -s native-rebuild/tools -p 'test_*.py' -v
+      - name: Prepare Android NDK and Rust
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager -print -quit)"
+          test -x "$SDKMANAGER"
+          "$SDKMANAGER" "ndk;27.2.12479018"
+          rustup target add aarch64-linux-android
+          echo "NDK=$ANDROID_HOME/ndk/27.2.12479018" >> "$GITHUB_ENV"
+      - name: Build YARA-X C API for Android ARM64
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch v0.13.0 https://github.com/VirusTotal/yara-x.git yarax-upstream
+          git -C yarax-upstream rev-parse HEAD | tee revision.txt
+          export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang"
+          export CC_aarch64_linux_android="$CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER"
+          export AR_aarch64_linux_android="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar"
+          export CARGO_TARGET_AARCH64_LINUX_ANDROID_AR="$AR_aarch64_linux_android"
+          cd yarax-upstream
+          CARGO_BUILD_JOBS=2 CARGO_INCREMENTAL=0 timeout 1800 cargo build --locked --release --target aarch64-linux-android -p yara-x-capi 2>&1 | tee ../build.log
+          test -s target/aarch64-linux-android/release/libyara_x_capi.so
+          python3 ../native-rebuild/tools/verify_arm64_elf.py target/aarch64-linux-android/release/libyara_x_capi.so
+          readelf -h target/aarch64-linux-android/release/libyara_x_capi.so | grep AArch64
+          readelf -d target/aarch64-linux-android/release/libyara_x_capi.so | tee ../dynamic-dependencies.txt
+          cp target/aarch64-linux-android/release/libyara_x_capi.so ../libyara_x_capi.so
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: kanaf-yarax-arm64-diagnostics
+          path: |
+            build.log
+            revision.txt
+            libyara_x_capi.so
+            dynamic-dependencies.txt
+          if-no-files-found: warn

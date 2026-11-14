@@ -1,0 +1,91 @@
+name: Kanaf Android APK with isolated native engines
+on:
+  push:
+    branches: [rebuild/kanaf-native-v1]
+    paths: ['.github/workflows/kanaf-package-native-engines.yml', 'native-rebuild/**']
+  workflow_dispatch:
+  workflow_call:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  package:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Download verified native ARM64 artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Pinned successful upstream compilation runs, not latest unverified builds.
+          CLAM_RUN=43582067199
+          YARA_RUN=43576728366
+          for run in "$CLAM_RUN" "$YARA_RUN"; do
+            test "$(gh run view "$run" --repo "$GITHUB_REPOSITORY" --json conclusion --jq .conclusion)" = success
+          done
+          mkdir -p /tmp/kanaf-clam /tmp/kanaf-yara
+          gh run download "$CLAM_RUN" --repo "$GITHUB_REPOSITORY" -n kanaf-clamav-arm64-diagnostics -D /tmp/kanaf-clam
+          gh run download "$YARA_RUN" --repo "$GITHUB_REPOSITORY" -n kanaf-yarax-arm64-diagnostics -D /tmp/kanaf-yara
+          mkdir -p native-rebuild/app/src/main/jniLibs/arm64-v8a
+          target=native-rebuild/app/src/main/jniLibs/arm64-v8a
+          cp /tmp/kanaf-clam/arm64-output/libclamav.so "$target/"
+          cp /tmp/kanaf-clam/arm64-output/libclammspack.so "$target/"
+          cp /tmp/kanaf-yara/libyara_x_capi.so "$target/"
+          for lib in "$target"/*.so; do
+            python3 native-rebuild/tools/verify_arm64_elf.py "$lib"
+            file "$lib"
+          done
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          report = Path("/tmp/kanaf-clam/dynamic-dependencies.txt").read_text()
+          required = set(re.findall(r"Shared library: \[([^\]]+)\]", report))
+          packaged = {p.name for p in Path("native-rebuild/app/src/main/jniLibs/arm64-v8a").glob("*.so")}
+          system = {"libc.so", "libm.so", "libdl.so", "libz.so", "liblog.so"}
+          assert required <= (packaged | system), f"Missing ClamAV dependencies: {required - packaged - system}"
+          assert {"libclamav.so", "libclammspack.so", "libyara_x_capi.so"} <= packaged
+          print("Native dependency closure verified")
+          PY
+      - name: Install Android SDK components
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager -print -quit)"
+          test -x "$SDKMANAGER"
+          "$SDKMANAGER" "platforms;android-35" "build-tools;35.0.0" "ndk;27.2.12479018" "cmake;3.22.1"
+      - name: Run app tests and assemble debug APK
+        working-directory: native-rebuild
+        run: |
+          set -euo pipefail
+          gradle --no-daemon :app:testDebugUnitTest :app:assembleDebug --stacktrace
+      - name: Verify APK contains all native libraries
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk=native-rebuild/app/build/outputs/apk/debug/app-debug.apk
+          test -s "$apk"
+          for so in libclamav.so libclammspack.so libyara_x_capi.so libkanaf_scan.so; do
+            unzip -Z1 "$apk" | grep -Fx "lib/arm64-v8a/$so"
+          done
+          unzip -Z1 "$apk" | grep -Fx 'assets/kanaf_test.hdb'
+          unzip -Z1 "$apk" | grep -Fx 'assets/kanaf_test.yar'
+          unzip -p "$apk" lib/arm64-v8a/libkanaf_scan.so > /tmp/kanaf-scan-verified.so
+          python3 native-rebuild/tools/verify_arm64_elf.py /tmp/kanaf-scan-verified.so
+          readelf -Ws /tmp/kanaf-scan-verified.so | grep Java_com_kanaf_alrasby_engine_NativeScannerBridge_clamScanNative
+          readelf -Ws /tmp/kanaf-scan-verified.so | grep Java_com_kanaf_alrasby_engine_NativeScannerBridge_yaraScanNative
+          echo "Packaging verified. Native scanner readiness gate remains CLOSED until JNI, rules and self-tests are implemented."
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kanaf-native-engines-packaging-prototype
+          path: native-rebuild/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error

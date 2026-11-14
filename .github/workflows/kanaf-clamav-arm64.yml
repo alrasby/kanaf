@@ -1,0 +1,310 @@
+name: Kanaf ClamAV ARM64 isolated
+on:
+  push:
+    branches: [rebuild/kanaf-native-v1]
+    paths: ['.github/workflows/kanaf-clamav-arm64.yml', 'native-rebuild/tools/**']
+  workflow_dispatch:
+  pull_request:
+    paths: ['native-rebuild/tools/**', '.github/workflows/kanaf-yarax-arm64.yml', '.github/workflows/kanaf-clamav-arm64.yml']
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+jobs:
+  clamav:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run native library verification regression tests
+        run: python3 -m unittest discover -s native-rebuild/tools -p 'test_*.py' -v
+      - name: Prepare Android NDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager -print -quit)"
+          test -x "$SDKMANAGER"
+          "$SDKMANAGER" "ndk;27.2.12479018"
+          echo "NDK=$ANDROID_HOME/ndk/27.2.12479018" >> "$GITHUB_ENV"
+      - name: Install Rust toolchain required by ClamAV
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup target add aarch64-linux-android
+          rustc --version
+          cargo --version
+      - name: Configure and build ClamAV for Android ARM64
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch clamav-1.4.3 https://github.com/Cisco-Talos/clamav.git clamav-upstream
+          git -C clamav-upstream rev-parse HEAD | tee revision.txt
+          export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang"
+          export CC_aarch64_linux_android="$CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER"
+          # Build OpenSSL for the Android target; host OpenSSL is ABI-incompatible.
+          git clone --depth 1 --branch openssl-3.3.2 https://github.com/openssl/openssl.git openssl-upstream
+          export ANDROID_NDK_ROOT="$NDK"
+          export PATH="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"
+          (
+            cd openssl-upstream
+            perl ./Configure android-arm64 -D__ANDROID_API__=26 no-tests no-shared no-apps --prefix="$GITHUB_WORKSPACE/openssl-android" --openssldir="$GITHUB_WORKSPACE/openssl-android/ssl"
+            make -j2 build_libs
+            make install_dev
+          ) 2>&1 | tee openssl-build.log
+          test -s openssl-android/lib64/libcrypto.a || test -s openssl-android/lib/libcrypto.a
+          OPENSSL_LIBDIR="$GITHUB_WORKSPACE/openssl-android/lib64"
+          if [[ ! -f "$OPENSSL_LIBDIR/libcrypto.a" ]]; then OPENSSL_LIBDIR="$GITHUB_WORKSPACE/openssl-android/lib"; fi
+          export OPENSSL_ROOT_DIR="$GITHUB_WORKSPACE/openssl-android"
+          export OPENSSL_INCLUDE_DIR="$OPENSSL_ROOT_DIR/include"
+          export OPENSSL_CRYPTO_LIBRARY="$OPENSSL_LIBDIR/libcrypto.a"
+          export OPENSSL_SSL_LIBRARY="$OPENSSL_LIBDIR/libssl.a"
+          # BZip2 is not supplied as an Android NDK library; build it for ARM64.
+          curl --fail --location --retry 3 --output bzip2-1.0.8.tar.gz https://sourceware.org/pub/bzip2/bzip2-1.0.8.tar.gz
+          echo 'ab5a03176ee106d3f0fa90e381da478ddae405918153cca248e682cd0c4a2269  bzip2-1.0.8.tar.gz' | sha256sum -c -
+          mkdir -p bzip2-upstream bzip2-android/lib
+          tar -xzf bzip2-1.0.8.tar.gz -C bzip2-upstream --strip-components=1
+          BZIP2_CC="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang"
+          BZIP2_AR="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar"
+          for source in blocksort bzlib compress crctable decompress huffman randtable; do
+            "$BZIP2_CC" -O2 -fPIC -I bzip2-upstream -c "bzip2-upstream/$source.c" -o "bzip2-android/$source.o"
+          done
+          "$BZIP2_AR" rcs bzip2-android/lib/libbz2.a bzip2-android/*.o
+          export BZIP2_INCLUDE_DIR="$GITHUB_WORKSPACE/bzip2-upstream"
+          export BZIP2_LIBRARY="$GITHUB_WORKSPACE/bzip2-android/lib/libbz2.a"
+          test -s "$BZIP2_LIBRARY"
+          export BZIP2_LIBRARY_RELEASE="$BZIP2_LIBRARY"
+          export BZIP2_LIBRARIES="$BZIP2_LIBRARY"
+          # Cross-compile libxml2 for Android; Ubuntu headers/libraries are not Android artifacts.
+          git clone --depth 1 --branch v2.12.9 https://github.com/GNOME/libxml2.git libxml2-upstream
+          cmake -S libxml2-upstream -B libxml2-build -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE="$NDK/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-26 \
+            -DCMAKE_INSTALL_PREFIX="$GITHUB_WORKSPACE/libxml2-android" \
+            -DBUILD_SHARED_LIBS=OFF -DLIBXML2_WITH_PYTHON=OFF \
+            -DLIBXML2_WITH_ICONV=OFF -DLIBXML2_WITH_LZMA=OFF \
+            -DLIBXML2_WITH_ZLIB=OFF -DLIBXML2_WITH_TESTS=OFF
+          cmake --build libxml2-build --parallel 2
+          cmake --install libxml2-build
+          test -s libxml2-android/include/libxml2/libxml/parser.h
+          test -s libxml2-android/lib/libxml2.a
+          # Cross-compile PCRE2 for Android ARM64; never link host binaries.
+          git clone --depth 1 --branch pcre2-10.44 https://github.com/PCRE2Project/pcre2.git pcre2-upstream
+          cmake -S pcre2-upstream -B pcre2-build -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE="$NDK/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-26 \
+            -DCMAKE_INSTALL_PREFIX="$GITHUB_WORKSPACE/pcre2-android" \
+            -DBUILD_SHARED_LIBS=OFF -DPCRE2_BUILD_PCRE2_8=ON \
+            -DPCRE2_BUILD_PCRE2_16=OFF -DPCRE2_BUILD_PCRE2_32=OFF \
+            -DPCRE2_BUILD_TESTS=OFF -DPCRE2_BUILD_PCRE2GREP=OFF
+          cmake --build pcre2-build --parallel 2
+          cmake --install pcre2-build
+          test -s pcre2-android/include/pcre2.h
+          test -s pcre2-android/lib/libpcre2-8.a
+          # GNU libiconv provides iconv symbols absent from Android's libc.
+          curl --fail --location --retry 3 -o libiconv-1.17.tar.gz https://ftp.gnu.org/pub/gnu/libiconv/libiconv-1.17.tar.gz
+          mkdir -p libiconv-upstream
+          tar -xzf libiconv-1.17.tar.gz -C libiconv-upstream --strip-components=1
+          (
+            cd libiconv-upstream
+            CC="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang" \
+            AR="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar" \
+            RANLIB="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ranlib" \
+            ./configure --host=aarch64-linux-android --prefix="$GITHUB_WORKSPACE/libiconv-android" --enable-static --disable-shared
+            make -j2
+            make install
+          ) 2>&1 | tee libiconv-build.log
+          test -s libiconv-android/lib/libiconv.a
+          test -s libiconv-android/include/iconv.h
+          # Build json-c for the target ABI rather than linking Ubuntu's host library.
+          git clone --depth 1 --branch json-c-0.17-20230812 https://github.com/json-c/json-c.git jsonc-upstream
+          cmake -S jsonc-upstream -B jsonc-build -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE="$NDK/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-26 \
+            -DCMAKE_INSTALL_PREFIX="$GITHUB_WORKSPACE/jsonc-android" \
+            -DBUILD_SHARED_LIBS=OFF -DBUILD_TESTING=OFF \
+            -DDISABLE_WERROR=ON
+          cmake --build jsonc-build --parallel 2
+          cmake --install jsonc-build
+          test -s jsonc-android/include/json-c/json.h
+          test -s jsonc-android/lib/libjson-c.a
+          # ClamAV 1.4.3 FindRust probes the HOST for native linker libraries
+          # even when cross-compiling. Probe the Android target instead.
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("clamav-upstream/cmake/FindRust.cmake")
+          source = p.read_text()
+          old = '${rustc_EXECUTABLE} --crate-type staticlib --print=native-static-libs ${EMPTY_FILE}'
+          new = '${rustc_EXECUTABLE} --target ${RUST_COMPILER_TARGET} --crate-type staticlib --print=native-static-libs ${EMPTY_FILE}'
+          assert source.count(old) >= 1, "ClamAV Rust probe changed upstream"
+          # Replace only the executable command, not its comment.
+          source = source.replace('COMMAND ${CMAKE_COMMAND} -E env "CARGO_TARGET_DIR=${CMAKE_BINARY_DIR}" ' + old,
+                                  'COMMAND ${CMAKE_COMMAND} -E env "CARGO_TARGET_DIR=${CMAKE_BINARY_DIR}" ' + new)
+          assert 'COMMAND ${CMAKE_COMMAND} -E env "CARGO_TARGET_DIR=${CMAKE_BINARY_DIR}" ' + new in source
+          p.write_text(source)
+          PY
+          timeout 480 cmake -S clamav-upstream -B out -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE="$NDK/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-26 \
+            -DRUST_COMPILER_TARGET=aarch64-linux-android \
+            -DENABLE_LIBCLAMAV_ONLY=ON -DENABLE_TESTS=OFF \
+            -Dtest_run_result:STRING=0 -Dtest_run_result__TRYRUN_OUTPUT:STRING="" \
+            -DJSONC_INCLUDE_DIRS="$GITHUB_WORKSPACE/jsonc-android/include/json-c" \
+            -DJSONC_LIBRARIES="$GITHUB_WORKSPACE/jsonc-android/lib/libjson-c.a" \
+            -DJSONC_INCLUDE_DIR="$GITHUB_WORKSPACE/jsonc-android/include/json-c" \
+            -DJSONC_LIBRARY="$GITHUB_WORKSPACE/jsonc-android/lib/libjson-c.a" \
+            -DIconv_LIBRARY="$GITHUB_WORKSPACE/libiconv-android/lib/libiconv.a" \
+            -DIconv_INCLUDE_DIR="$GITHUB_WORKSPACE/libiconv-android/include" \
+            -DICONV_LIBRARY="$GITHUB_WORKSPACE/libiconv-android/lib/libiconv.a" \
+            -DICONV_INCLUDE_DIR="$GITHUB_WORKSPACE/libiconv-android/include" \
+            -DPCRE2_INCLUDE_DIR="$GITHUB_WORKSPACE/pcre2-android/include" \
+            -DPCRE2_LIBRARIES="$GITHUB_WORKSPACE/pcre2-android/lib/libpcre2-8.a" \
+            -DPCRE2_LIBRARY="$GITHUB_WORKSPACE/pcre2-android/lib/libpcre2-8.a" \
+            -DLIBXML2_INCLUDE_DIR="$GITHUB_WORKSPACE/libxml2-android/include/libxml2" \
+            -DLIBXML2_LIBRARY="$GITHUB_WORKSPACE/libxml2-android/lib/libxml2.a" \
+            -DBZIP2_INCLUDE_DIR="$BZIP2_INCLUDE_DIR" -DBZIP2_LIBRARY_RELEASE="$BZIP2_LIBRARY_RELEASE" \
+            -DBZIP2_LIBRARIES="$BZIP2_LIBRARIES" -DBZIP2_LIBRARY="$BZIP2_LIBRARY" \
+            -DOPENSSL_ROOT_DIR="$OPENSSL_ROOT_DIR" -DOPENSSL_INCLUDE_DIR="$OPENSSL_INCLUDE_DIR" \
+            -DOPENSSL_CRYPTO_LIBRARY="$OPENSSL_CRYPTO_LIBRARY" -DOPENSSL_SSL_LIBRARY="$OPENSSL_SSL_LIBRARY" \
+            -DENABLE_MAN_PAGES=OFF -DENABLE_DOXYGEN=OFF 2>&1 | tee configure.log
+          timeout 1200 cmake --build out --parallel 2 2>&1 | tee build.log
+          find out -type f \( -name 'libclamav.so*' -o -name 'libclamav.a' \) -print | tee libraries.txt
+          test -s libraries.txt
+          mkdir -p arm64-output
+          while IFS= read -r lib; do
+            if [[ "$lib" == *.a ]]; then
+              member="$(ar t "$lib" | sed -n '1p')"
+              test -n "$member"
+              ar p "$lib" "$member" > /tmp/kanaf-clamav-member.o
+              readelf -h /tmp/kanaf-clamav-member.o | grep AArch64
+              cp "$lib" arm64-output/
+            else
+              python3 native-rebuild/tools/verify_arm64_elf.py "$lib"
+              readelf -h "$lib" | grep AArch64
+              cp -L "$lib" arm64-output/
+            fi
+          done < libraries.txt
+          # libclamav links libclammspack dynamically: ship and validate it too.
+          test -s out/libclammspack/libclammspack.so
+          python3 native-rebuild/tools/verify_arm64_elf.py out/libclammspack/libclammspack.so
+          cp -L out/libclammspack/libclammspack.so arm64-output/
+          # Record the DT_NEEDED closure for Android packaging and loader tests.
+          for so in arm64-output/*.so; do
+            echo "=== $so ===" | tee -a dynamic-dependencies.txt
+            readelf -d "$so" | tee -a dynamic-dependencies.txt
+          done
+          test -s arm64-output/libclamav.so
+          test -s arm64-output/libclammspack.so
+          # Fail closed if an unexpected host or non-system dependency leaks in.
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          text = Path("dynamic-dependencies.txt").read_text()
+          allowed = {"libclammspack.so", "libz.so", "libdl.so", "libm.so", "liblog.so", "libc.so"}
+          needed = set(re.findall(r"Shared library: \[([^\]]+)\]", text))
+          assert "libclammspack.so" in needed, "Missing required ClamAV companion dependency"
+          assert needed <= allowed, f"Unexpected Android runtime dependencies: {needed - allowed}"
+          print("Verified ClamAV Android runtime dependency closure:", sorted(needed))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: kanaf-clamav-arm64-diagnostics
+          path: |
+            configure.log
+            out/TryRunResults.cmake
+            out/CMakeFiles/CMakeConfigureLog.yaml
+            openssl-build.log
+            libiconv-build.log
+            build.log
+            revision.txt
+            libraries.txt
+            dynamic-dependencies.txt
+            arm64-output/
+          if-no-files-found: warn
+
+  package-android:
+    needs: clamav
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Download ClamAV from this verified run
+        uses: actions/download-artifact@v4
+        with:
+          name: kanaf-clamav-arm64-diagnostics
+          path: /tmp/kanaf-clam
+      - name: Retrieve pinned successful YARA-X build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(gh run view 43583400404 --repo "$GITHUB_REPOSITORY" --json conclusion --jq .conclusion)" = success
+          mkdir -p /tmp/kanaf-yara
+          gh run download 43583400404 --repo "$GITHUB_REPOSITORY" -n kanaf-yarax-arm64-diagnostics -D /tmp/kanaf-yara
+      - name: Validate and stage Android native libraries
+        shell: bash
+        run: |
+          set -euo pipefail
+          target=native-rebuild/app/src/main/jniLibs/arm64-v8a
+          mkdir -p "$target"
+          cp /tmp/kanaf-clam/arm64-output/libclamav.so "$target/"
+          cp /tmp/kanaf-clam/arm64-output/libclammspack.so "$target/"
+          cp /tmp/kanaf-yara/libyara_x_capi.so "$target/"
+          for so in "$target"/*.so; do
+            python3 native-rebuild/tools/verify_arm64_elf.py "$so"
+          done
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          text = Path("/tmp/kanaf-clam/dynamic-dependencies.txt").read_text()
+          required = set(re.findall(r"Shared library: \[([^\]]+)\]", text))
+          packaged = {p.name for p in Path("native-rebuild/app/src/main/jniLibs/arm64-v8a").glob("*.so")}
+          allowed = {"libc.so", "libm.so", "libdl.so", "libz.so", "liblog.so"}
+          assert required <= packaged | allowed, required - packaged - allowed
+          PY
+      - name: Install Android SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager -print -quit)"
+          test -x "$SDKMANAGER"
+          "$SDKMANAGER" "platforms;android-35" "build-tools;35.0.0" "ndk;27.2.12479018" "cmake;3.22.1"
+      - name: Test, lint and assemble Android debug APK
+        working-directory: native-rebuild
+        run: gradle --no-daemon :app:testDebugUnitTest :app:lintDebug :app:assembleDebug --stacktrace
+      - name: Assert native libraries are packaged
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk=native-rebuild/app/build/outputs/apk/debug/app-debug.apk
+          test -s "$apk"
+          for so in libclamav.so libclammspack.so libyara_x_capi.so libkanaf_scan.so; do
+            unzip -Z1 "$apk" | grep -Fx "lib/arm64-v8a/$so"
+          done
+          unzip -Z1 "$apk" | grep -Fx 'assets/kanaf_test.hdb'
+          unzip -Z1 "$apk" | grep -Fx 'assets/kanaf_test.yar'
+          unzip -p "$apk" lib/arm64-v8a/libkanaf_scan.so > /tmp/kanaf-scan-verified.so
+          python3 native-rebuild/tools/verify_arm64_elf.py /tmp/kanaf-scan-verified.so
+          readelf -Ws /tmp/kanaf-scan-verified.so | grep Java_com_kanaf_alrasby_engine_NativeScannerBridge_clamScanNative
+          readelf -Ws /tmp/kanaf-scan-verified.so | grep Java_com_kanaf_alrasby_engine_NativeScannerBridge_yaraScanNative
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: kanaf-android-native-engine-apk
+          path: |
+            native-rebuild/app/build/outputs/apk/debug/*.apk
+            native-rebuild/app/build/reports/
+            native-rebuild/app/build/test-results/
+          if-no-files-found: warn
