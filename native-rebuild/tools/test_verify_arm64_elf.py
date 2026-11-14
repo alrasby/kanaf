@@ -8,7 +8,7 @@ from verify_arm64_elf import verify
 
 def elf(kind=3, machine=183, elf_class=2, endian=1):
     data = bytearray(128)
-    data[:4] = b"\\x7fELF"
+    data[:4] = bytes((0x7f, 0x45, 0x4c, 0x46))
     data[4] = elf_class
     data[5] = endian
     data[6] = 1
