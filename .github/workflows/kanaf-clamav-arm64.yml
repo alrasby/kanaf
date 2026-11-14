@@ -39,10 +39,29 @@ jobs:
           git -C clamav-upstream rev-parse HEAD | tee revision.txt
           export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang"
           export CC_aarch64_linux_android="$CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER"
-          timeout 480 cmake -S clamav-upstream -B out -G Ninja \
+          # Build OpenSSL for the Android target; host OpenSSL is ABI-incompatible.
+          git clone --depth 1 --branch openssl-3.3.2 https://github.com/openssl/openssl.git openssl-upstream
+          export ANDROID_NDK_ROOT="$NDK"
+          export PATH="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"
+          (
+            cd openssl-upstream
+            perl ./Configure android-arm64 -D__ANDROID_API__=26 no-tests no-shared no-apps --prefix="$GITHUB_WORKSPACE/openssl-android" --openssldir="$GITHUB_WORKSPACE/openssl-android/ssl"
+            make -j2 build_libs
+            make install_dev
+          ) 2>&1 | tee openssl-build.log
+          test -s openssl-android/lib64/libcrypto.a || test -s openssl-android/lib/libcrypto.a
+          OPENSSL_LIBDIR="$GITHUB_WORKSPACE/openssl-android/lib64"
+          if [[ ! -f "$OPENSSL_LIBDIR/libcrypto.a" ]]; then OPENSSL_LIBDIR="$GITHUB_WORKSPACE/openssl-android/lib"; fi
+          export OPENSSL_ROOT_DIR="$GITHUB_WORKSPACE/openssl-android"
+          export OPENSSL_INCLUDE_DIR="$OPENSSL_ROOT_DIR/include"
+          export OPENSSL_CRYPTO_LIBRARY="$OPENSSL_LIBDIR/libcrypto.a"
+          export OPENSSL_SSL_LIBRARY="$OPENSSL_LIBDIR/libssl.a"
+                    timeout 480 cmake -S clamav-upstream -B out -G Ninja \
             -DCMAKE_TOOLCHAIN_FILE="$NDK/build/cmake/android.toolchain.cmake" \
             -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-26 \
             -DENABLE_LIBCLAMAV_ONLY=ON -DENABLE_TESTS=OFF \
+            -DOPENSSL_ROOT_DIR="$OPENSSL_ROOT_DIR" -DOPENSSL_INCLUDE_DIR="$OPENSSL_INCLUDE_DIR" \
+            -DOPENSSL_CRYPTO_LIBRARY="$OPENSSL_CRYPTO_LIBRARY" -DOPENSSL_SSL_LIBRARY="$OPENSSL_SSL_LIBRARY" \
             -DENABLE_MAN_PAGES=OFF -DENABLE_DOXYGEN=OFF 2>&1 | tee configure.log
           timeout 1200 cmake --build out --parallel 2 2>&1 | tee build.log
           find out -type f \( -name 'libclamav.so*' -o -name 'libclamav.a' \) -print | tee libraries.txt
@@ -67,6 +86,7 @@ jobs:
           name: kanaf-clamav-arm64-diagnostics
           path: |
             configure.log
+            openssl-build.log
             build.log
             revision.txt
             libraries.txt
