@@ -14,10 +14,10 @@ The native Android app under `native-rebuild/` is the replacement. Legacy web co
 8. **Release:** instrumented tests across supported Android versions, security review, measured memory/battery, signed APK/AAB, documented limitations.
 
 ## Known current gaps
-- CI workflow was added but no run has been confirmed.
+- GitHub Actions builds, JUnit tests and Android lint have passed for the ARM64 engineering APK; device installation and native self-test are still unverified.
 - No production signatures, updates, APK analysis, quarantine, scheduled scanning, device tests, or release build.
 - EICAR bootstrap demonstrates signature matching only, not malware detection coverage.
-- The scanner currently has a per-file byte cap but not a wall-clock deadline.
+- File staging and archive inspection have cooperative deadlines, but blocked reads or JNI can outlive them until process isolation is implemented.
 - Compatibility is not yet validated on Android 8–current.
 
 ## Merge policy
@@ -27,6 +27,6 @@ Keep PR as draft until CI and core feature gates pass. No claims of comprehensiv
 - RSA SHA256withRSA manifest verification and negative tampering tests have been added.
 - `SignatureRepository.installVerified` requires an authenticated manifest and checks a locally persisted version floor.
 - No production public key has been pinned and no trusted release pipeline has been implemented. Network updating MUST remain disabled until that exists.
-- Database activation and version-floor persistence are not one crash-atomic transaction. Recovery/rollback hardening is required before shipping updates.
+- Signature payload/version/digest now share one AtomicFile transaction; interrupted writes and tampering are covered by new unit tests, and legacy split-file state is fail-closed. External backup/data rollback, a pinned production verification key, a trusted update delivery mechanism and real-device recovery testing remain release blockers.
 - Archive inspection enforces actual expanded byte limits, but still needs time budgets, nested inspection, and complete APK/DEX analysis.
-- CI execution, Android build, device install, and all tests remain unverified.
+- CI execution and Android debug builds have been verified; device installation, Android instrumentation and production signing remain unverified.

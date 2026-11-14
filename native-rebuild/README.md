@@ -19,6 +19,7 @@ antivirus until native detection, update trust, and on-device tests are complete
 - ZIP structure inspection has a cooperative 20-second deadline and a stalled-read guard; blocked I/O and native parsing still require process isolation.
 - An offline **Test both engines** action within Engines. It runs native code, not a
   mock, and only reports success after a real EICAR signature match.
+- Signature updates (not yet network-enabled) now stage the previously signature-verified version, digest and database in **one AtomicFile**, rejecting damaged/truncated bundles and version rollback against legacy state. The old split-file format fails closed until an authenticated update replaces it.
 - JUnit regression tests and CI build, lint and APK native-library assertions.
 
 ## On-device validation
