@@ -6,6 +6,13 @@ plugins {
 android {
     namespace = "com.kanaf.alrasby"
     compileSdk = 35
+    ndkVersion = "27.2.12479018"
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+            version = "3.22.1"
+        }
+    }
     defaultConfig {
         applicationId = "com.kanaf.alrasby"
         minSdk = 26
