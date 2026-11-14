@@ -30,6 +30,29 @@ class StreamScannerTest {
         val result = StreamScanner(maxDurationNanos = 1).scan(slow)
         assertEquals("time-limit", (result as StreamScanner.Result.Skipped).reason)
     }
+    @Test fun timeoutDuringFinalReadDoesNotReturnCleanResult() {
+        val slowEof = object : java.io.InputStream() {
+            override fun read(): Int = -1
+            override fun read(b: ByteArray, off: Int, len: Int): Int {
+                Thread.sleep(15)
+                return -1
+            }
+        }
+        val result = StreamScanner(maxDurationNanos = 1_000_000).scan(slowEof)
+        assertEquals("time-limit", (result as StreamScanner.Result.Skipped).reason)
+    }
+    @Test fun cancellationDuringReadDoesNotReturnCleanResult() {
+        var cancelled = false
+        val stream = object : java.io.InputStream() {
+            override fun read(): Int = -1
+            override fun read(b: ByteArray, off: Int, len: Int): Int {
+                cancelled = true
+                return -1
+            }
+        }
+        val result = StreamScanner().scan(stream) { cancelled }
+        assertEquals("cancelled", (result as StreamScanner.Result.Skipped).reason)
+    }
     @Test fun hashesKnownContent() {
         val result = StreamScanner().scan(ByteArrayInputStream("abc".toByteArray()))
         assertTrue(result is StreamScanner.Result.Completed)
