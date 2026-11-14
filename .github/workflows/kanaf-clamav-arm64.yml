@@ -113,10 +113,26 @@ jobs:
           ) 2>&1 | tee libiconv-build.log
           test -s libiconv-android/lib/libiconv.a
           test -s libiconv-android/include/iconv.h
+          # Build json-c for the target ABI rather than linking Ubuntu's host library.
+          git clone --depth 1 --branch json-c-0.17-20230812 https://github.com/json-c/json-c.git jsonc-upstream
+          cmake -S jsonc-upstream -B jsonc-build -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE="$NDK/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-26 \
+            -DCMAKE_INSTALL_PREFIX="$GITHUB_WORKSPACE/jsonc-android" \
+            -DBUILD_SHARED_LIBS=OFF -DBUILD_TESTING=OFF \
+            -DDISABLE_WERROR=ON
+          cmake --build jsonc-build --parallel 2
+          cmake --install jsonc-build
+          test -s jsonc-android/include/json-c/json.h
+          test -s jsonc-android/lib/libjson-c.a
           timeout 480 cmake -S clamav-upstream -B out -G Ninja \
             -DCMAKE_TOOLCHAIN_FILE="$NDK/build/cmake/android.toolchain.cmake" \
             -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-26 \
             -DENABLE_LIBCLAMAV_ONLY=ON -DENABLE_TESTS=OFF \
+            -DJSONC_INCLUDE_DIRS="$GITHUB_WORKSPACE/jsonc-android/include" \
+            -DJSONC_LIBRARIES="$GITHUB_WORKSPACE/jsonc-android/lib/libjson-c.a" \
+            -DJSONC_INCLUDE_DIR="$GITHUB_WORKSPACE/jsonc-android/include" \
+            -DJSONC_LIBRARY="$GITHUB_WORKSPACE/jsonc-android/lib/libjson-c.a" \
             -DIconv_LIBRARY="$GITHUB_WORKSPACE/libiconv-android/lib/libiconv.a" \
             -DIconv_INCLUDE_DIR="$GITHUB_WORKSPACE/libiconv-android/include" \
             -DICONV_LIBRARY="$GITHUB_WORKSPACE/libiconv-android/lib/libiconv.a" \
