@@ -31,12 +31,16 @@ object NativeScannerBridge {
             "EICAR-STANDARD-ANTIVIRUS-TEST-FILE!" + 36.toChar() + "H+H*"
     ).toByteArray(Charsets.US_ASCII)
 
+    internal fun eicarReferenceForTests(): ByteArray = eicar.copyOf()
+
     private fun digest(bytes: ByteArray): String =
         MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") {
             "%02x".format(it.toInt() and 0xff)
         }
 
     private fun incomplete(reason: String) = AntivirusEngine.Verdict.Incomplete(reason)
+
+    internal fun decodeForTests(raw: String, sha256: String): AntivirusEngine.Verdict = verdict(raw, sha256)
 
     private fun verdict(raw: String, sha256: String): AntivirusEngine.Verdict = when {
         raw.startsWith("DETECTED:") && raw.length > 9 ->
