@@ -48,7 +48,8 @@ jobs:
           disable-animations: true
           emulator-boot-timeout: 900
           working-directory: native-rebuild
-          script: gradle --no-daemon :app:connectedDebugAndroidTest --stacktrace
+          # Only x86-compatible IPC tests. Strict ARM64 JNI tests run in kanaf-arm64-runtime.yml.
+          script: gradle --no-daemon :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.kanaf.alrasby.NativeScannerProcessIntegrationTest --stacktrace
       - name: Upload emulator test reports
         if: always()
         uses: actions/upload-artifact@v4
