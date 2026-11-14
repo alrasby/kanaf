@@ -42,6 +42,7 @@ private fun KanafScreen(activity: Activity) {
     val scope = rememberCoroutineScope()
     var status by remember { mutableStateOf("اختر ملفًا لفحص بصمته محليًا") }
     var busy by remember { mutableStateOf(false) }
+    var selfTestStatus by remember { mutableStateOf("") }
     val signatures = remember {
         runCatching { SignatureRepository(activity).load() }.getOrNull()
     }
@@ -173,6 +174,29 @@ private fun KanafScreen(activity: Activity) {
     }
     KanafGlassHome(
         busy = busy,
+        selfTestStatus = selfTestStatus,
+        onTestEngines = {
+            if (!busy) {
+                busy = true
+                scope.launch {
+                    selfTestStatus = withContext(Dispatchers.IO) {
+                        val testResult = NativeScannerBridge.selfTest(activity)
+                        fun label(name: String, verdict: AntivirusEngine.Verdict): String =
+                            when (verdict) {
+                                is AntivirusEngine.Verdict.Detected -> "$name: نجح اكتشاف عينة EICAR الآمنة"
+                                is AntivirusEngine.Verdict.NoKnownMatch -> "$name: فشل اكتشاف عينة EICAR"
+                                is AntivirusEngine.Verdict.Incomplete -> "$name: اختبار غير مكتمل (" + verdict.reason + ")"
+                            }
+                        listOf(
+                            "اختبار كشف حقيقي عبر المحركات الأصلية — عينة EICAR غير ضارة:",
+                            label("ClamAV", testResult.clamav),
+                            label("YARA-X", testResult.yaraX)
+                        ).joinToString("\n")
+                    }
+                    busy = false
+                }
+            }
+        },
         status = status,
         onPickFile = { picker.launch(arrayOf("*/*")) },
         onOpenWebsite = {
