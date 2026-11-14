@@ -1,0 +1,56 @@
+name: Kanaf ClamAV ARM64 isolated
+on:
+  push:
+    branches: [rebuild/kanaf-native-v1]
+    paths: ['.github/workflows/kanaf-clamav-arm64.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  clamav:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare Android NDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager -print -quit)"
+          test -x "$SDKMANAGER"
+          "$SDKMANAGER" "ndk;27.2.12479018"
+          echo "NDK=$ANDROID_HOME/ndk/27.2.12479018" >> "$GITHUB_ENV"
+      - name: Configure and build ClamAV for Android ARM64
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch clamav-1.4.3 https://github.com/Cisco-Talos/clamav.git src
+          git -C src rev-parse HEAD | tee revision.txt
+          timeout 480 cmake -S src -B out -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE="$NDK/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-26 \
+            -DENABLE_LIBCLAMAV_ONLY=ON -DENABLE_TESTS=OFF \
+            -DENABLE_MAN_PAGES=OFF -DENABLE_DOXYGEN=OFF 2>&1 | tee configure.log
+          timeout 1200 cmake --build out --parallel 2 2>&1 | tee build.log
+          find out -type f \( -name 'libclamav.so*' -o -name 'libclamav.a' \) -print | tee libraries.txt
+          test -s libraries.txt
+          while IFS= read -r lib; do
+            if [[ "$lib" == *.a ]]; then
+              member="$(ar t "$lib" | sed -n '1p')"
+              test -n "$member"
+              ar p "$lib" "$member" > /tmp/kanaf-clamav-member.o
+              readelf -h /tmp/kanaf-clamav-member.o | grep AArch64
+            else
+              readelf -h "$lib" | grep AArch64
+            fi
+          done < libraries.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: kanaf-clamav-arm64-diagnostics
+          path: |
+            configure.log
+            build.log
+            revision.txt
+            libraries.txt
+          if-no-files-found: warn
