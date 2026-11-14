@@ -85,10 +85,26 @@ jobs:
           cmake --install libxml2-build
           test -s libxml2-android/include/libxml2/libxml/parser.h
           test -s libxml2-android/lib/libxml2.a
+          # Cross-compile PCRE2 for Android ARM64; never link host binaries.
+          git clone --depth 1 --branch pcre2-10.44 https://github.com/PCRE2Project/pcre2.git pcre2-upstream
+          cmake -S pcre2-upstream -B pcre2-build -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE="$NDK/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-26 \
+            -DCMAKE_INSTALL_PREFIX="$GITHUB_WORKSPACE/pcre2-android" \
+            -DBUILD_SHARED_LIBS=OFF -DPCRE2_BUILD_PCRE2_8=ON \
+            -DPCRE2_BUILD_PCRE2_16=OFF -DPCRE2_BUILD_PCRE2_32=OFF \
+            -DPCRE2_BUILD_TESTS=OFF -DPCRE2_BUILD_PCRE2GREP=OFF
+          cmake --build pcre2-build --parallel 2
+          cmake --install pcre2-build
+          test -s pcre2-android/include/pcre2.h
+          test -s pcre2-android/lib/libpcre2-8.a
           timeout 480 cmake -S clamav-upstream -B out -G Ninja \
             -DCMAKE_TOOLCHAIN_FILE="$NDK/build/cmake/android.toolchain.cmake" \
             -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-26 \
             -DENABLE_LIBCLAMAV_ONLY=ON -DENABLE_TESTS=OFF \
+            -DPCRE2_INCLUDE_DIR="$GITHUB_WORKSPACE/pcre2-android/include" \
+            -DPCRE2_LIBRARIES="$GITHUB_WORKSPACE/pcre2-android/lib/libpcre2-8.a" \
+            -DPCRE2_LIBRARY="$GITHUB_WORKSPACE/pcre2-android/lib/libpcre2-8.a" \
             -DLIBXML2_INCLUDE_DIR="$GITHUB_WORKSPACE/libxml2-android/include/libxml2" \
             -DLIBXML2_LIBRARY="$GITHUB_WORKSPACE/libxml2-android/lib/libxml2.a" \
             -DBZIP2_INCLUDE_DIR="$BZIP2_INCLUDE_DIR" -DBZIP2_LIBRARY_RELEASE="$BZIP2_LIBRARY_RELEASE" \
