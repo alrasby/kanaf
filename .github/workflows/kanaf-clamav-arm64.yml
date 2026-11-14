@@ -69,11 +69,15 @@ jobs:
           "$BZIP2_AR" rcs bzip2-android/lib/libbz2.a bzip2-android/*.o
           export BZIP2_INCLUDE_DIR="$GITHUB_WORKSPACE/bzip2-upstream"
           export BZIP2_LIBRARY="$GITHUB_WORKSPACE/bzip2-android/lib/libbz2.a"
+          test -s "$BZIP2_LIBRARY"
+          export BZIP2_LIBRARY_RELEASE="$BZIP2_LIBRARY"
+          export BZIP2_LIBRARIES="$BZIP2_LIBRARY"
           timeout 480 cmake -S clamav-upstream -B out -G Ninja \
             -DCMAKE_TOOLCHAIN_FILE="$NDK/build/cmake/android.toolchain.cmake" \
             -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-26 \
             -DENABLE_LIBCLAMAV_ONLY=ON -DENABLE_TESTS=OFF \
-            -DBZIP2_INCLUDE_DIR="$BZIP2_INCLUDE_DIR" -DBZIP2_LIBRARY="$BZIP2_LIBRARY" \
+            -DBZIP2_INCLUDE_DIR="$BZIP2_INCLUDE_DIR" -DBZIP2_LIBRARY_RELEASE="$BZIP2_LIBRARY_RELEASE" \
+            -DBZIP2_LIBRARIES="$BZIP2_LIBRARIES" -DBZIP2_LIBRARY="$BZIP2_LIBRARY" \
             -DOPENSSL_ROOT_DIR="$OPENSSL_ROOT_DIR" -DOPENSSL_INCLUDE_DIR="$OPENSSL_INCLUDE_DIR" \
             -DOPENSSL_CRYPTO_LIBRARY="$OPENSSL_CRYPTO_LIBRARY" -DOPENSSL_SSL_LIBRARY="$OPENSSL_SSL_LIBRARY" \
             -DENABLE_MAN_PAGES=OFF -DENABLE_DOXYGEN=OFF 2>&1 | tee configure.log
