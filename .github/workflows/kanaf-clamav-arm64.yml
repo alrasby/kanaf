@@ -98,10 +98,29 @@ jobs:
           cmake --install pcre2-build
           test -s pcre2-android/include/pcre2.h
           test -s pcre2-android/lib/libpcre2-8.a
+          # GNU libiconv provides iconv symbols absent from Android's libc.
+          curl --fail --location --retry 3 -o libiconv-1.17.tar.gz https://ftp.gnu.org/pub/gnu/libiconv/libiconv-1.17.tar.gz
+          mkdir -p libiconv-upstream
+          tar -xzf libiconv-1.17.tar.gz -C libiconv-upstream --strip-components=1
+          (
+            cd libiconv-upstream
+            CC="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang" \
+            AR="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar" \
+            RANLIB="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ranlib" \
+            ./configure --host=aarch64-linux-android --prefix="$GITHUB_WORKSPACE/libiconv-android" --enable-static --disable-shared
+            make -j2
+            make install
+          ) 2>&1 | tee libiconv-build.log
+          test -s libiconv-android/lib/libiconv.a
+          test -s libiconv-android/include/iconv.h
           timeout 480 cmake -S clamav-upstream -B out -G Ninja \
             -DCMAKE_TOOLCHAIN_FILE="$NDK/build/cmake/android.toolchain.cmake" \
             -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-26 \
             -DENABLE_LIBCLAMAV_ONLY=ON -DENABLE_TESTS=OFF \
+            -DIconv_LIBRARY="$GITHUB_WORKSPACE/libiconv-android/lib/libiconv.a" \
+            -DIconv_INCLUDE_DIR="$GITHUB_WORKSPACE/libiconv-android/include" \
+            -DICONV_LIBRARY="$GITHUB_WORKSPACE/libiconv-android/lib/libiconv.a" \
+            -DICONV_INCLUDE_DIR="$GITHUB_WORKSPACE/libiconv-android/include" \
             -DPCRE2_INCLUDE_DIR="$GITHUB_WORKSPACE/pcre2-android/include" \
             -DPCRE2_LIBRARIES="$GITHUB_WORKSPACE/pcre2-android/lib/libpcre2-8.a" \
             -DPCRE2_LIBRARY="$GITHUB_WORKSPACE/pcre2-android/lib/libpcre2-8.a" \
@@ -136,6 +155,7 @@ jobs:
           path: |
             configure.log
             openssl-build.log
+            libiconv-build.log
             build.log
             revision.txt
             libraries.txt
