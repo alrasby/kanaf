@@ -4,6 +4,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -17,6 +18,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.kanaf.alrasby.engine.LinkInspector
 
 private val Teal = Color(0xFF146C70)
 private val Aqua = Color(0xFF3DDFB0)
@@ -25,6 +27,7 @@ private val Night = Color(0xFF0A1729)
 @Composable
 fun KanafGlassHome(
     busy: Boolean,
+    sharedText: String?,
     scanHistory: List<String>,
     onClearHistory: () -> Unit,
     status: String,
@@ -33,11 +36,29 @@ fun KanafGlassHome(
     onPickFile: () -> Unit,
     onOpenWebsite: () -> Unit
 ) {
-    var page by remember { mutableIntStateOf(0) }
+    var page by remember { mutableIntStateOf(if (sharedText.isNullOrBlank()) 0 else 1) }
+    var linkInput by remember { mutableStateOf(sharedText.orEmpty()) }
+    var linkReport by remember { mutableStateOf<LinkInspector.Report?>(null) }
+    LaunchedEffect(sharedText) {
+        if (!sharedText.isNullOrBlank()) {
+            linkInput = sharedText
+            linkReport = null
+            page = 1
+        }
+    }
     val scrollState = rememberScrollState()
     LaunchedEffect(page) { scrollState.scrollTo(0) }
     val arabic = java.util.Locale.getDefault().language == "ar"
     fun tr(ar: String, en: String) = if (arabic) ar else en
+    fun signalText(signal: LinkInspector.Signal): String = when (signal) {
+        LinkInspector.Signal.UNENCRYPTED_HTTP -> tr("اتصال HTTP غير مشفر", "Unencrypted HTTP connection")
+        LinkInspector.Signal.USER_INFO -> tr("عنوان قد يخفي المضيف الحقيقي باستخدام @", "User-info (@) may disguise the real host")
+        LinkInspector.Signal.IP_ADDRESS -> tr("رابط يستخدم عنوان IP مباشرة", "Direct IP address instead of a domain")
+        LinkInspector.Signal.PUNYCODE -> tr("اسم نطاق دولي مشفر يحتاج للتحقق", "Encoded international domain needs verification")
+        LinkInspector.Signal.NONSTANDARD_PORT -> tr("منفذ اتصال غير معتاد", "Nonstandard connection port")
+        LinkInspector.Signal.LONG_URL -> tr("عنوان طويل بصورة غير اعتيادية", "Unusually long link")
+        LinkInspector.Signal.INVALID_HOST -> tr("تعذر تحليل عنوان المضيف بثقة", "Unable to parse the host reliably")
+    }
     val dark = isSystemInDarkTheme()
     val background = if (dark) Night else Color(0xFFF2F7F7)
     val ink = if (dark) Color(0xFFF0FBFA) else Night
@@ -69,11 +90,12 @@ fun KanafGlassHome(
                     }
                 }
                 Row(
-                    Modifier.fillMaxWidth(),
+                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(7.dp)
                 ) {
                     listOf(
                         tr("الفحص", "Scan"),
+                        tr("الروابط", "Links"),
                         tr("السجل", "History"),
                         tr("المحركات", "Engines"),
                         tr("حول كنف", "About")
@@ -81,14 +103,14 @@ fun KanafGlassHome(
                         if (page == index) {
                             Button(
                                 onClick = { page = index },
-                                modifier = Modifier.weight(1f),
+                                modifier = Modifier.widthIn(min = 86.dp),
                                 shape = RoundedCornerShape(14.dp),
                                 contentPadding = PaddingValues(horizontal = 4.dp, vertical = 9.dp)
                             ) { Text(title, style = MaterialTheme.typography.labelMedium) }
                         } else {
                             OutlinedButton(
                                 onClick = { page = index },
-                                modifier = Modifier.weight(1f),
+                                modifier = Modifier.widthIn(min = 86.dp),
                                 shape = RoundedCornerShape(14.dp),
                                 contentPadding = PaddingValues(horizontal = 4.dp, vertical = 9.dp)
                             ) { Text(title, style = MaterialTheme.typography.labelMedium) }
@@ -149,6 +171,85 @@ fun KanafGlassHome(
 
                 if (page == 1) {
                     GlassPanel(card, stroke) {
+                        Text(tr("تحليل الروابط والنصوص", "Link and text inspection"),
+                            color = ink, style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold)
+                        Text(tr(
+                            "ألصق رابطًا أو نصًا يحتوي على روابط، أو شاركه إلى كنف من تطبيق آخر.",
+                            "Paste a link or message containing links, or share text to Kanaf from another app."
+                        ), color = secondary, style = MaterialTheme.typography.bodyMedium)
+                        Spacer(Modifier.height(12.dp))
+                        OutlinedTextField(
+                            value = linkInput,
+                            onValueChange = {
+                                linkInput = it.take(LinkInspector.MAX_TEXT_CHARS + 1)
+                                linkReport = null
+                            },
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 120.dp),
+                            label = { Text(tr("الرابط أو النص", "Link or message text")) },
+                            maxLines = 7
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        Button(
+                            onClick = { linkReport = LinkInspector.inspectText(linkInput) },
+                            enabled = linkInput.isNotBlank(),
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp),
+                            shape = RoundedCornerShape(16.dp)
+                        ) {
+                            Text(tr("تحليل محلي", "Inspect locally"))
+                        }
+                        Text(tr(
+                            "تحليل بنيوي فقط لروابط HTTP/HTTPS، دون اتصال بالشبكة أو فتح الروابط. لا يتحقق من سمعة الموقع أو وجود برمجيات خبيثة.",
+                            "Structure-only HTTP/HTTPS inspection. No network access or link opening. This does not check site reputation or malware."
+                        ), color = secondary, style = MaterialTheme.typography.bodySmall)
+                    }
+                    linkReport?.let { report ->
+                        GlassPanel(card, stroke) {
+                            Text(tr("نتائج تحليل الروابط", "Link inspection results"),
+                                color = ink, style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold)
+                            if (report.truncated) {
+                                Text(tr(
+                                    "تم الوصول إلى حد النص أو عدد الروابط. النتائج جزئية ولا تشمل كل المحتوى.",
+                                    "Text or link count limit reached. Results are partial."
+                                ), color = secondary)
+                            }
+                            if (report.items.isEmpty()) {
+                                Text(tr("لم يتم العثور على روابط HTTP/HTTPS قابلة للتحليل. لم يُفحص النص بحثًا عن تهديدات.",
+                                    "No HTTP/HTTPS links were found. The text was not scanned for threats."),
+                                    color = secondary)
+                            }
+                        }
+                        report.items.forEach { item ->
+                            GlassPanel(card, stroke) {
+                                Text(item.host ?: tr("مضيف غير قابل للتحليل", "Unparseable host"),
+                                    color = ink, style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.SemiBold)
+                                Text(item.url.take(240) + if (item.url.length > 240) "…" else "",
+                                    color = secondary, style = MaterialTheme.typography.bodySmall)
+                                Spacer(Modifier.height(8.dp))
+                                Text(when (item.verdict) {
+                                    LinkInspector.Verdict.REVIEW ->
+                                        tr("مؤشرات تستدعي التحقق؛ ليست إثباتًا على وجود خطر.",
+                                            "Review these indicators; they do not prove maliciousness.")
+                                    LinkInspector.Verdict.INVALID ->
+                                        tr("تعذر تحليل الرابط بدقة؛ لا تعتبره موثوقًا.",
+                                            "Could not parse this URL reliably; do not assume it is trustworthy.")
+                                    LinkInspector.Verdict.NOT_VERIFIED ->
+                                        tr("لم تظهر مؤشرات بنيوية معروفة؛ سلامة الرابط غير مؤكدة.",
+                                            "No structural flags found; the link's safety is not verified.")
+                                }, color = if (dark) Aqua else Teal)
+                                item.signals.forEach { signal ->
+                                    Text("• " + signalText(signal), color = secondary,
+                                        style = MaterialTheme.typography.bodySmall)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (page == 2) {
+                    GlassPanel(card, stroke) {
                         Row(
                             Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically,
@@ -183,7 +284,7 @@ fun KanafGlassHome(
                         }
                     }
                 }
-                if (page == 2) {
+                if (page == 3) {
                     GlassPanel(card, stroke) {
                         Text(tr("محركات الكشف", "Detection engines"), color = ink,
                             style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
@@ -234,7 +335,7 @@ fun KanafGlassHome(
                         ), color = secondary)
                     }
                 }
-                if (page == 3) {
+                if (page == 4) {
                     GlassPanel(card, stroke) {
                         Text(tr("الخصوصية", "Privacy"), color = ink,
                             style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)

@@ -26,19 +26,35 @@ import com.kanaf.alrasby.engine.SignatureRepository
 import com.kanaf.alrasby.engine.DexHeaderInspector
 import com.kanaf.alrasby.engine.ApkStructureInspector
 import com.kanaf.alrasby.engine.ZipInspector
+import com.kanaf.alrasby.engine.LinkInspector
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
+    private var incomingSharedText by mutableStateOf<String?>(null)
+
+    private fun extractSharedText(from: Intent?): String? {
+        if (from?.action != Intent.ACTION_SEND || from.type != "text/plain") return null
+        return from.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString()
+            ?.take(LinkInspector.MAX_TEXT_CHARS + 1)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent { MaterialTheme { KanafScreen(this) } }
+        incomingSharedText = extractSharedText(intent)
+        setContent { MaterialTheme { KanafScreen(this, incomingSharedText) } }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        incomingSharedText = extractSharedText(intent)
     }
 }
 
 @Composable
-private fun KanafScreen(activity: Activity) {
+private fun KanafScreen(activity: Activity, sharedText: String?) {
     val scope = rememberCoroutineScope()
     var status by remember { mutableStateOf("اختر ملفًا لفحص بصمته محليًا") }
     var busy by remember { mutableStateOf(false) }
@@ -192,6 +208,7 @@ private fun KanafScreen(activity: Activity) {
     }
     KanafGlassHome(
         busy = busy,
+        sharedText = sharedText,
         scanHistory = scanHistory,
         onClearHistory = { scanHistory.clear() },
         selfTestStatus = selfTestStatus,
