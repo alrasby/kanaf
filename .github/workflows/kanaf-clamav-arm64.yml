@@ -125,9 +125,25 @@ jobs:
           cmake --install jsonc-build
           test -s jsonc-android/include/json-c/json.h
           test -s jsonc-android/lib/libjson-c.a
+          # ClamAV 1.4.3 FindRust probes the HOST for native linker libraries
+          # even when cross-compiling. Probe the Android target instead.
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("clamav-upstream/cmake/FindRust.cmake")
+          source = p.read_text()
+          old = '${rustc_EXECUTABLE} --crate-type staticlib --print=native-static-libs ${EMPTY_FILE}'
+          new = '${rustc_EXECUTABLE} --target ${RUST_COMPILER_TARGET} --crate-type staticlib --print=native-static-libs ${EMPTY_FILE}'
+          assert source.count(old) >= 1, "ClamAV Rust probe changed upstream"
+          # Replace only the executable command, not its comment.
+          source = source.replace('COMMAND ${CMAKE_COMMAND} -E env "CARGO_TARGET_DIR=${CMAKE_BINARY_DIR}" ' + old,
+                                  'COMMAND ${CMAKE_COMMAND} -E env "CARGO_TARGET_DIR=${CMAKE_BINARY_DIR}" ' + new)
+          assert 'COMMAND ${CMAKE_COMMAND} -E env "CARGO_TARGET_DIR=${CMAKE_BINARY_DIR}" ' + new in source
+          p.write_text(source)
+          PY
           timeout 480 cmake -S clamav-upstream -B out -G Ninja \
             -DCMAKE_TOOLCHAIN_FILE="$NDK/build/cmake/android.toolchain.cmake" \
             -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-26 \
+            -DRUST_COMPILER_TARGET=aarch64-linux-android \
             -DENABLE_LIBCLAMAV_ONLY=ON -DENABLE_TESTS=OFF \
             -Dtest_run_result:STRING=0 -Dtest_run_result__TRYRUN_OUTPUT:STRING="" \
             -DJSONC_INCLUDE_DIRS="$GITHUB_WORKSPACE/jsonc-android/include/json-c" \
