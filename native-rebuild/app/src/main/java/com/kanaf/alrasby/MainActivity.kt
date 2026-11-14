@@ -21,6 +21,7 @@ import com.kanaf.alrasby.engine.ThreatEvidence
 import com.kanaf.alrasby.engine.AntivirusEngine
 import com.kanaf.alrasby.engine.HashSignatureEngine
 import com.kanaf.alrasby.engine.EngineConsensus
+import com.kanaf.alrasby.engine.NativeScannerBridge
 import com.kanaf.alrasby.engine.SignatureRepository
 import com.kanaf.alrasby.engine.DexHeaderInspector
 import com.kanaf.alrasby.engine.ApkStructureInspector
@@ -94,12 +95,29 @@ private fun KanafScreen(activity: Activity) {
                             val scanResult = HashSignatureEngine(signatures).scan({
                                 activity.contentResolver.openInputStream(uri)
                             })
-                            // Only engines actually configured for this release are expected.
-                            // Do not mark ClamAV/YARA-X as active before native integration.
-                            val consensus = EngineConsensus.evaluate(
-                                listOf(EngineConsensus.Report("kanaf-sha256", scanResult)),
-                                setOf("kanaf-sha256")
+                            val native = NativeScannerBridge.scan(activity, uri)
+                            val nativeReports = listOf(
+                                EngineConsensus.Report("clamav", native.clamav),
+                                EngineConsensus.Report("yara-x", native.yaraX)
                             )
+                            val consensus = EngineConsensus.evaluate(
+                                listOf(EngineConsensus.Report("kanaf-sha256", scanResult)) + nativeReports,
+                                setOf("kanaf-sha256", "clamav", "yara-x")
+                            )
+                            fun nativeLabel(name: String, result: AntivirusEngine.Verdict): String =
+                                when (result) {
+                                    is AntivirusEngine.Verdict.Detected ->
+                                        "$" + "{name}: كشف تجريبي EICAR — $" + "{result.threatName}"
+                                    is AntivirusEngine.Verdict.NoKnownMatch ->
+                                        "$" + "{name}: لا تطابق مع قاعدة EICAR الاختبارية"
+                                    is AntivirusEngine.Verdict.Incomplete ->
+                                        "$" + "{name}: لم يكتمل الفحص ($" + "{result.reason})"
+                                }
+                            val nativeNote = listOf(
+                                "فحص أصلي محلي (قاعدة اختبار EICAR فقط؛ ليست حماية شاملة):",
+                                nativeLabel("ClamAV", native.clamav),
+                                nativeLabel("YARA-X", native.yaraX)
+                            ).joinToString("\n")
                             val consensusNote = when (consensus) {
                                 is EngineConsensus.Decision.Threat -> "نتيجة المحركات: تم اكتشاف تهديد معروف"
                                 is EngineConsensus.Decision.Inconclusive -> "نتيجة المحركات: غير مكتملة"
@@ -115,13 +133,16 @@ private fun KanafScreen(activity: Activity) {
                             }
                             val features = ThreatFeatureVector.from(apkEvidence, dexEvidence, zipEvidence)
                             val modelResult = UnavailableThreatModel.classify(features)
+                            val nativeDetection = nativeReports.firstNotNullOfOrNull {
+                                (it.verdict as? AntivirusEngine.Verdict.Detected)?.threatName
+                            }
                             val assessment = ThreatEvidence.assess(
-                                (scanResult as? AntivirusEngine.Verdict.Detected)?.threatName,
+                                (scanResult as? AntivirusEngine.Verdict.Detected)?.threatName ?: nativeDetection,
                                 apkEvidence, dexEvidence, zipEvidence
                             )
                             val structuralMissing = (apk && (apkEvidence == null || dexEvidence == null)) ||
                                 ((archive || apk) && zipEvidence == null)
-                            val assessmentNote = if (scanResult is AntivirusEngine.Verdict.Incomplete || signatures == null || structuralMissing) {
+                            val assessmentNote = if (scanResult is AntivirusEngine.Verdict.Incomplete || signatures == null || structuralMissing || consensus is EngineConsensus.Decision.Inconclusive) {
                                 "تقييم الأدلة: الفحص غير مكتمل أو قاعدة التوقيعات غير متاحة"
                             } else when (assessment.severity) {
                                 ThreatEvidence.Severity.CONFIRMED -> "تقييم الأدلة: تطابق تهديد معروف"
@@ -131,7 +152,7 @@ private fun KanafScreen(activity: Activity) {
                             }
                             val journey = TrustJourney.build(
                                 assessment,
-                                scanCompleted = scanResult !is AntivirusEngine.Verdict.Incomplete && !structuralMissing,
+                                scanCompleted = scanResult !is AntivirusEngine.Verdict.Incomplete && !structuralMissing && consensus !is EngineConsensus.Decision.Inconclusive,
                                 signaturesAvailable = signatures != null
                             )
                             val decisionNote = "خطوتك التالية: ${journey.title} — ${journey.nextStep}"
@@ -139,7 +160,7 @@ private fun KanafScreen(activity: Activity) {
                                 is ThreatModel.Prediction.Unavailable -> "التحليل بالذكاء الاصطناعي غير متاح بعد؛ لم يتم تشغيل نموذج مدرّب."
                                 is ThreatModel.Prediction.Scored -> "نتيجة النموذج: ${modelResult.riskProbability}"
                             }
-                            listOf(decisionNote, assessmentNote, consensusNote, aiNote, verdict, apkNote, dexNote, zipNote)
+                            listOf(decisionNote, assessmentNote, consensusNote, nativeNote, aiNote, verdict, apkNote, dexNote, zipNote)
                                 .filter { it.isNotEmpty() }.joinToString("\n")
                         }
                     } catch (e: Exception) {
