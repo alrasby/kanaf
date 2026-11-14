@@ -32,6 +32,8 @@ fun KanafGlassHome(
     onOpenWebsite: () -> Unit
 ) {
     var page by remember { mutableIntStateOf(0) }
+    val scrollState = rememberScrollState()
+    LaunchedEffect(page) { scrollState.scrollTo(0) }
     val arabic = java.util.Locale.getDefault().language == "ar"
     fun tr(ar: String, en: String) = if (arabic) ar else en
     val dark = isSystemInDarkTheme()
@@ -52,7 +54,7 @@ fun KanafGlassHome(
             )
         ) {
             Column(
-                Modifier.fillMaxSize().verticalScroll(rememberScrollState())
+                Modifier.fillMaxSize().verticalScroll(scrollState)
                     .padding(horizontal = 20.dp, vertical = 28.dp),
                 verticalArrangement = Arrangement.spacedBy(18.dp)
             ) {
