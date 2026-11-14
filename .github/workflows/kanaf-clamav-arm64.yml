@@ -130,9 +130,9 @@ jobs:
             -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-26 \
             -DENABLE_LIBCLAMAV_ONLY=ON -DENABLE_TESTS=OFF \
             -Dtest_run_result:STRING=0 -Dtest_run_result__TRYRUN_OUTPUT:STRING="" \
-            -DJSONC_INCLUDE_DIRS="$GITHUB_WORKSPACE/jsonc-android/include" \
+            -DJSONC_INCLUDE_DIRS="$GITHUB_WORKSPACE/jsonc-android/include/json-c" \
             -DJSONC_LIBRARIES="$GITHUB_WORKSPACE/jsonc-android/lib/libjson-c.a" \
-            -DJSONC_INCLUDE_DIR="$GITHUB_WORKSPACE/jsonc-android/include" \
+            -DJSONC_INCLUDE_DIR="$GITHUB_WORKSPACE/jsonc-android/include/json-c" \
             -DJSONC_LIBRARY="$GITHUB_WORKSPACE/jsonc-android/lib/libjson-c.a" \
             -DIconv_LIBRARY="$GITHUB_WORKSPACE/libiconv-android/lib/libiconv.a" \
             -DIconv_INCLUDE_DIR="$GITHUB_WORKSPACE/libiconv-android/include" \
