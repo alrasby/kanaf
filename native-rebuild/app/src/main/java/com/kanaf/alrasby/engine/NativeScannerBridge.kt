@@ -3,6 +3,7 @@ package com.kanaf.alrasby.engine
 import android.content.Context
 import android.net.Uri
 import java.io.File
+import java.io.ByteArrayInputStream
 import java.io.InputStream
 import java.security.MessageDigest
 
@@ -83,7 +84,14 @@ object NativeScannerBridge {
      * Must be called on Dispatchers.IO, after the user selects one SAF file.
      * No file is deleted or modified at its original location.
      */
-    fun scan(context: Context, uri: Uri): Report {
+    fun scan(context: Context, uri: Uri): Report =
+        scanSource(context) { context.contentResolver.openInputStream(uri) }
+
+    /** Built-in harmless EICAR end-to-end test, without downloading or selecting a file. */
+    fun selfTest(context: Context): Report =
+        scanSource(context) { ByteArrayInputStream(eicar) }
+
+    private fun scanSource(context: Context, source: () -> InputStream?): Report {
         var clamGate = NativeEngineGate("clamav", false, false, false)
         var yaraGate = NativeEngineGate("yara-x", false, false, false)
         fun report(clam: AntivirusEngine.Verdict, yara: AntivirusEngine.Verdict) =
@@ -129,7 +137,7 @@ object NativeScannerBridge {
             val selected = File.createTempFile("kanaf-scan-", ".bin", context.cacheDir)
             target = selected
             val sha256 = try {
-                context.contentResolver.openInputStream(uri)?.let { copyBounded(it, selected) }
+                source()?.let { copyBounded(it, selected) }
                     ?: return report(incomplete("file-unavailable"), incomplete("file-unavailable"))
             } catch (_: Exception) {
                 return report(incomplete("file-unreadable-or-exceeds-16MiB"), incomplete("file-unreadable-or-exceeds-16MiB"))
