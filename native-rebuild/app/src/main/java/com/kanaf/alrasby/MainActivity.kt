@@ -21,6 +21,7 @@ import com.kanaf.alrasby.engine.ThreatEvidence
 import com.kanaf.alrasby.engine.AntivirusEngine
 import com.kanaf.alrasby.engine.HashSignatureEngine
 import com.kanaf.alrasby.engine.EngineConsensus
+import com.kanaf.alrasby.engine.ScanEvidenceText
 import com.kanaf.alrasby.engine.NativeScannerBridge
 import com.kanaf.alrasby.engine.SignatureRepository
 import com.kanaf.alrasby.engine.DexHeaderInspector
@@ -122,19 +123,11 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
                                 listOf(EngineConsensus.Report("kanaf-sha256", scanResult)) + nativeReports,
                                 setOf("kanaf-sha256", "clamav", "yara-x")
                             )
-                            fun nativeLabel(name: String, result: AntivirusEngine.Verdict): String =
-                                when (result) {
-                                    is AntivirusEngine.Verdict.Detected ->
-                                        "$name: كشف تجريبي EICAR — ${result.threatName}"
-                                    is AntivirusEngine.Verdict.NoKnownMatch ->
-                                        "$name: لا تطابق مع قاعدة EICAR الاختبارية"
-                                    is AntivirusEngine.Verdict.Incomplete ->
-                                        "$name: لم يكتمل الفحص (${result.reason})"
-                                }
+                            val snapshotConflict = ScanEvidenceText.hasConflict(consensus)
                             val nativeNote = listOf(
                                 "فحص أصلي محلي (قاعدة اختبار EICAR فقط؛ ليست حماية شاملة):",
-                                nativeLabel("ClamAV", native.clamav),
-                                nativeLabel("YARA-X", native.yaraX)
+                                ScanEvidenceText.nativeLabel("ClamAV", native.clamav, snapshotConflict),
+                                ScanEvidenceText.nativeLabel("YARA-X", native.yaraX, snapshotConflict)
                             ).joinToString("\n")
                             val eicarOnly = consensus is EngineConsensus.Decision.Threat &&
                                 consensus.detections.all {
@@ -151,14 +144,9 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
                                     } else "نتيجة المحركات: غير مكتملة"
                                 is EngineConsensus.Decision.NoKnownMatch -> "نتيجة المحركات: لا يوجد تطابق معروف؛ السلامة غير مؤكدة"
                             }
-                            val verdict = when (scanResult) {
-                                is AntivirusEngine.Verdict.Detected ->
-                                    (if (scanResult.threatName.contains("eicar", true)) "تطابق عينة اختبار EICAR الآمنة" else "تطابق توقيع تهديد: ${scanResult.threatName}") + "\nSHA-256: ${scanResult.sha256}"
-                                is AntivirusEngine.Verdict.NoKnownMatch ->
-                                    "لم يُعثر على تطابق في ${signatures?.size ?: 0} توقيع محلي. هذا لا يعني أن الملف آمن.\nSHA-256: ${scanResult.sha256}"
-                                is AntivirusEngine.Verdict.Incomplete ->
-                                    "الفحص غير مكتمل: ${scanResult.reason}"
-                            }
+                            val verdict = ScanEvidenceText.hashLabel(
+                                scanResult, signatures?.size ?: 0, snapshotConflict
+                            )
                             val features = ThreatFeatureVector.from(apkEvidence, dexEvidence, zipEvidence)
                             val modelResult = UnavailableThreatModel.classify(features)
                             val nativeDetection = nativeReports.firstNotNullOfOrNull {
@@ -193,6 +181,8 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
                             )
                             val decisionNote = if (eicarOnly) {
                                 "اختبار EICAR ناجح. اختبر ملفًا آخر أو راجع حدود قواعد الكشف التجريبية."
+                            } else if (snapshotConflict) {
+                                "خطوتك التالية: أعد فحص الملف بعد التأكد من ثباته؛ لا تعتمد أي حكم كشف أو سلامة من النتائج المتعارضة."
                             } else "خطوتك التالية: ${journey.title} — ${journey.nextStep}"
                             val aiNote = when (modelResult) {
                                 is ThreatModel.Prediction.Unavailable -> "التحليل بالذكاء الاصطناعي غير متاح بعد؛ لم يتم تشغيل نموذج مدرّب."
