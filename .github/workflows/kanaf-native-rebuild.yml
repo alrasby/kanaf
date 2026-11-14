@@ -32,6 +32,10 @@ jobs:
         run: |
           g++ -std=c++17 -Wall -Wextra -Werror -pedantic tests/yara_policy_smoke.cpp -o /tmp/kanaf-yara-policy-test
           /tmp/kanaf-yara-policy-test
+      - name: Test stable native file snapshots (YARA-X I/O)
+        run: |
+          g++ -std=c++17 -Wall -Wextra -Werror -pedantic tests/file_snapshot_smoke.cpp -o /tmp/kanaf-file-snapshot-test
+          /tmp/kanaf-file-snapshot-test
       - uses: actions/setup-java@v4
         with:
           distribution: temurin

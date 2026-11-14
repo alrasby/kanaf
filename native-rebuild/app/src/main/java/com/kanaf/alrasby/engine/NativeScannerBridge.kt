@@ -118,6 +118,7 @@ object NativeScannerBridge {
 
             val selected = File.createTempFile("kanaf-scan-", ".bin", context.cacheDir)
             target = selected
+            var copiedBytes = -1L
             val sha256 = try {
                 val input = source()
                     ?: return report(incomplete("file-unavailable"), incomplete("file-unavailable"))
@@ -125,7 +126,10 @@ object NativeScannerBridge {
                     selected.outputStream().use { output ->
                         when (val copied = BoundedStreamCopier(maxBytes = MAX_FILE_BYTES)
                             .copy(sourceStream, output)) {
-                            is BoundedStreamCopier.Result.Complete -> copied.sha256
+                            is BoundedStreamCopier.Result.Complete -> {
+                                copiedBytes = copied.bytesCopied
+                                copied.sha256
+                            }
                             is BoundedStreamCopier.Result.Incomplete ->
                                 return report(incomplete("copy-" + copied.reason), incomplete("copy-" + copied.reason))
                         }
@@ -134,12 +138,23 @@ object NativeScannerBridge {
             } catch (_: Exception) {
                 return report(incomplete("file-unreadable"), incomplete("file-unreadable"))
             }
+            // The source can change between reads. Seal the private snapshot and
+            // verify that both engines receive the same bytes we hashed.
+            if (!StagedFileIntegrity.seal(selected) ||
+                !StagedFileIntegrity.verify(selected, sha256, copiedBytes)) {
+                return report(incomplete("staged-file-integrity-failed"),
+                    incomplete("staged-file-integrity-failed"))
+            }
             val clamVerdict = if (clamGate.ready) verdict(
                 clamScanNative(selected.absolutePath, rulesFile.absolutePath), sha256
             ) else incomplete(clamGate.unavailableReason() ?: "clamav-not-ready")
             val yaraVerdict = if (yaraGate.ready) verdict(
                 yaraScanNative(selected.absolutePath, yaraRules), sha256
             ) else incomplete(yaraGate.unavailableReason() ?: "yara-not-ready")
+            if (!StagedFileIntegrity.verify(selected, sha256, copiedBytes)) {
+                return report(incomplete("staged-file-changed-during-scan"),
+                    incomplete("staged-file-changed-during-scan"))
+            }
             return report(clamVerdict, yaraVerdict)
         } catch (_: Exception) {
             return report(incomplete("native-initialization-failed"), incomplete("native-initialization-failed"))

@@ -1,6 +1,7 @@
 #include <jni.h>
 #include "clam_scan_policy.h"
 #include "yara_scan_policy.h"
+#include "file_snapshot.h"
 #include <dlfcn.h>
 #include <cstdint>
 #include <cstdio>
@@ -107,26 +108,13 @@ void onYaraMatch(const void* rule, void* userData) {
 
 std::string yaraScan(const char* file, const char* rulesSource) {
     if (!file || !rulesSource || !*rulesSource) return incomplete("missing-rules");
-    // Entire-file scanning is deliberate: do not give a partial-scan CLEAN verdict.
-    constexpr off_t MAX_BYTES = 16 * 1024 * 1024;
-    int fd = open(file, O_RDONLY | O_CLOEXEC | O_NOFOLLOW);
-    if (fd < 0) return incomplete("file-open-failed");
-    struct stat st{};
-    if (fstat(fd, &st) != 0 || !S_ISREG(st.st_mode) || st.st_size < 0 || st.st_size > MAX_BYTES) {
-        close(fd);
-        return incomplete("yara-file-too-large-or-invalid");
+    // Always scan a complete, stable file snapshot. A growing, truncated,
+    // substituted or non-regular file must never yield NO_MATCH.
+    auto snapshot = kanaf::readStableFile(file, 16U * 1024U * 1024U);
+    if (snapshot.status != kanaf::SnapshotStatus::Complete) {
+        return incomplete(kanaf::snapshotFailureReason(snapshot.status));
     }
-    std::vector<uint8_t> bytes(static_cast<size_t>(st.st_size));
-    size_t offset = 0;
-    while (offset < bytes.size()) {
-        ssize_t n = read(fd, bytes.data() + offset, bytes.size() - offset);
-        if (n <= 0) {
-            close(fd);
-            return incomplete("file-read-failed");
-        }
-        offset += static_cast<size_t>(n);
-    }
-    close(fd);
+    const auto& bytes = snapshot.bytes;
     void* lib = dlopen("libyara_x_capi.so", RTLD_NOW | RTLD_LOCAL);
     if (!lib) return incomplete("yara-load-failed");
     auto compile = symbol<int (*)(const char*, void**)>(lib, "yrx_compile");
