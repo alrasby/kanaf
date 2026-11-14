@@ -1,4 +1,5 @@
 #include <jni.h>
+#include "clam_scan_policy.h"
 #include <dlfcn.h>
 #include <cstdint>
 #include <cstdio>
@@ -48,8 +49,9 @@ std::string clamScan(const char* file, const char* database) {
     auto freeEngine = symbol<int (*)(ClEngine*)>(lib, "cl_engine_free");
     auto load = symbol<int (*)(const char*, ClEngine*, unsigned int*, unsigned int)>(lib, "cl_load");
     auto compile = symbol<int (*)(ClEngine*)>(lib, "cl_engine_compile");
+    auto setNum = symbol<int (*)(ClEngine*, int, long long)>(lib, "cl_engine_set_num");
     auto scan = symbol<int (*)(const char*, const char**, unsigned long*, const ClEngine*, ClScanOptions*)>(lib, "cl_scanfile");
-    if (!init || !create || !freeEngine || !load || !compile || !scan) {
+    if (!init || !create || !freeEngine || !load || !compile || !setNum || !scan) {
         dlclose(lib);
         return incomplete("clamav-api-unavailable");
     }
@@ -60,17 +62,27 @@ std::string clamScan(const char* file, const char* database) {
         int loading = load(database, engine, &count, 0);
         if (loading != 0 || count == 0) {
             answer = incomplete("clamav-rules-load-failed");
+        } else if (!kanaf::configureClamLimits(engine, setNum)) {
+            answer = incomplete("clamav-limits-unavailable");
         } else if (compile(engine) != 0) {
             answer = incomplete("clamav-compile-failed");
         } else {
             const char* name = nullptr;
             unsigned long scanned = 0;
             ClScanOptions options{};
-            // Archive and basic executable parsers; bounds are set by the Android file-copy layer.
+            // ClamAV 1.4.3 parsers: archive, ELF, PDF, HTML, PE.
+            // Alert on engine resource limit exhaustion; never label it malware or clean.
             options.parse = 0x1 | 0x2 | 0x4 | 0x100 | 0x200;
+            options.general = 0x4;   // CL_SCAN_GENERAL_HEURISTICS
+            options.heuristic = 0x4; // CL_SCAN_HEURISTIC_EXCEEDS_MAX
             int verdict = scan(file, &name, &scanned, engine, &options);
-            if (verdict == 1) answer = std::string("DETECTED:") + (name ? name : "ClamAV.Rule");
-            else if (verdict == 0) answer = "NO_MATCH";
+            if (verdict == 1 && kanaf::isIncompleteLimitAlert(name)) {
+                answer = incomplete("clamav-resource-limit");
+            } else if (verdict == 1) {
+                answer = std::string("DETECTED:") + (name ? name : "ClamAV.Rule");
+            } else if (verdict == 0) {
+                answer = "NO_MATCH";
+            }
             else answer = incomplete("clamav-scan-failed");
         }
         freeEngine(engine);

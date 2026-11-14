@@ -24,6 +24,10 @@ jobs:
       - uses: actions/checkout@v4
       - name: Test native ELF validation
         run: python3 -m unittest discover -s tools -p 'test_*.py' -v
+      - name: Test ClamAV 1.4 scan resource policy
+        run: |
+          g++ -std=c++17 -Wall -Wextra -Werror -pedantic tools/clam_policy_smoke.cpp -o /tmp/kanaf-clam-policy-test
+          /tmp/kanaf-clam-policy-test
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
