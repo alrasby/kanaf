@@ -12,6 +12,8 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
+      - name: Run native library verification regression tests
+        run: python3 -m unittest discover -s native-rebuild/tools -p 'test_*.py' -v
       - name: Prepare Android NDK
         shell: bash
         run: |
@@ -52,6 +54,7 @@ jobs:
               readelf -h /tmp/kanaf-clamav-member.o | grep AArch64
               cp "$lib" arm64-output/
             else
+              python3 native-rebuild/tools/verify_arm64_elf.py "$lib"
               readelf -h "$lib" | grep AArch64
               cp -L "$lib" arm64-output/
             fi
