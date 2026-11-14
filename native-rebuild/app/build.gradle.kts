@@ -20,6 +20,10 @@ android {
         versionCode = 1
         versionName = "1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        // ARM64-only packaging for the experimental runtime CI. Normal APKs unchanged.
+        if (providers.gradleProperty("kanafArm64Runtime").orNull == "true") {
+            ndk { abiFilters += "arm64-v8a" }
+        }
     }
     buildFeatures { compose = true }
     compileOptions {
