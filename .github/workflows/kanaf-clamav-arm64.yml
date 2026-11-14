@@ -198,7 +198,7 @@ jobs:
           import re
           text = Path("dynamic-dependencies.txt").read_text()
           allowed = {"libclammspack.so", "libz.so", "libdl.so", "libm.so", "liblog.so", "libc.so"}
-          needed = set(re.findall(r"Shared library: \\[([^\\]]+)\\]", text))
+          needed = set(re.findall(r"Shared library: \[([^\]]+)\]", text))
           assert "libclammspack.so" in needed, "Missing required ClamAV companion dependency"
           assert needed <= allowed, f"Unexpected Android runtime dependencies: {needed - allowed}"
           print("Verified ClamAV Android runtime dependency closure:", sorted(needed))
