@@ -25,6 +25,8 @@ private val Night = Color(0xFF0A1729)
 @Composable
 fun KanafGlassHome(
     busy: Boolean,
+    scanHistory: List<String>,
+    onClearHistory: () -> Unit,
     status: String,
     selfTestStatus: String,
     onTestEngines: () -> Unit,
@@ -72,6 +74,7 @@ fun KanafGlassHome(
                 ) {
                     listOf(
                         tr("الفحص", "Scan"),
+                        tr("السجل", "History"),
                         tr("المحركات", "Engines"),
                         tr("حول كنف", "About")
                     ).forEachIndexed { index, title ->
@@ -143,7 +146,44 @@ fun KanafGlassHome(
                     )
                 }
                 } // end scan page
+
                 if (page == 1) {
+                    GlassPanel(card, stroke) {
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(tr("سجل فحوصات الجلسة", "Session scan history"), color = ink,
+                                style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                            TextButton(onClick = onClearHistory, enabled = scanHistory.isNotEmpty()) {
+                                Text(tr("مسح", "Clear"))
+                            }
+                        }
+                        Text(tr(
+                            "آخر عشر نتائج مختصرة فقط، دون حفظ أسماء الملفات. يُمسح السجل عند إغلاق التطبيق.",
+                            "Up to ten short results, without file names. History is cleared when the app closes."
+                        ), color = secondary, style = MaterialTheme.typography.bodySmall)
+                    }
+                    if (scanHistory.isEmpty()) {
+                        GlassPanel(card, stroke) {
+                            Text(tr("لا توجد فحوصات في هذه الجلسة.", "No scans in this session."),
+                                color = secondary)
+                        }
+                    } else {
+                        scanHistory.forEachIndexed { index, summary ->
+                            GlassPanel(card, stroke) {
+                                Text(tr("الفحص", "Scan") + " " + (scanHistory.size - index),
+                                    color = if (dark) Aqua else Teal,
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = FontWeight.SemiBold)
+                                Spacer(Modifier.height(8.dp))
+                                Text(summary, color = secondary, style = MaterialTheme.typography.bodyMedium)
+                            }
+                        }
+                    }
+                }
+                if (page == 2) {
                     GlassPanel(card, stroke) {
                         Text(tr("محركات الكشف", "Detection engines"), color = ink,
                             style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
@@ -194,7 +234,7 @@ fun KanafGlassHome(
                         ), color = secondary)
                     }
                 }
-                if (page == 2) {
+                if (page == 3) {
                     GlassPanel(card, stroke) {
                         Text(tr("الخصوصية", "Privacy"), color = ink,
                             style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)

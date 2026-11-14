@@ -43,6 +43,7 @@ private fun KanafScreen(activity: Activity) {
     var status by remember { mutableStateOf("اختر ملفًا لفحص بصمته محليًا") }
     var busy by remember { mutableStateOf(false) }
     var selfTestStatus by remember { mutableStateOf("") }
+    val scanHistory = remember { mutableStateListOf<String>() }
     val signatures = remember {
         runCatching { SignatureRepository(activity).load() }.getOrNull()
     }
@@ -51,7 +52,7 @@ private fun KanafScreen(activity: Activity) {
             busy = true
             status = "جارٍ الفحص..."
             scope.launch {
-                status = withContext(Dispatchers.IO) {
+                val completed = withContext(Dispatchers.IO) {
                     try {
                         val mime = activity.contentResolver.getType(uri).orEmpty()
                         val archive = mime == "application/zip" ||
@@ -179,12 +180,18 @@ private fun KanafScreen(activity: Activity) {
                         "تعذر إكمال الفحص: ${e.javaClass.simpleName}"
                     }
                 }
+                status = completed
+                // Only a bounded, non-persistent summary; never retain file names or contents.
+                scanHistory.add(0, completed.lineSequence().take(3).joinToString("\n").take(600))
+                if (scanHistory.size > 10) scanHistory.removeAt(scanHistory.lastIndex)
                 busy = false
             }
         }
     }
     KanafGlassHome(
         busy = busy,
+        scanHistory = scanHistory,
+        onClearHistory = { scanHistory.clear() },
         selfTestStatus = selfTestStatus,
         onTestEngines = {
             if (!busy) {

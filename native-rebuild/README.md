@@ -14,7 +14,8 @@ antivirus until native detection, update trust, and on-device tests are complete
 - **EICAR-only** ClamAV HDB and YARA-X rule, with pinned SHA-256 digests.
 - Both engines must pass a positive EICAR and a negative benign-sample self-test
   before their file-scan results are accepted. No match is NOT proof of safety.
-- Home, Engines and About sections, using the existing Kanaf color and glass style.
+- Home, session-only scan history (10 bounded non-persistent summaries), Engines and About sections, using the existing Kanaf color and glass style.
+- ZIP structure inspection has a cooperative 20-second deadline and a stalled-read guard; blocked I/O and native parsing still require process isolation.
 - An offline **Test both engines** action within Engines. It runs native code, not a
   mock, and only reports success after a real EICAR signature match.
 - JUnit regression tests and CI build, lint and APK native-library assertions.
