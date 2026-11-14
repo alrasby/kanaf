@@ -26,6 +26,8 @@ private val Night = Color(0xFF0A1729)
 fun KanafGlassHome(
     busy: Boolean,
     status: String,
+    selfTestStatus: String,
+    onTestEngines: () -> Unit,
     onPickFile: () -> Unit,
     onOpenWebsite: () -> Unit
 ) {
@@ -157,6 +159,29 @@ fun KanafGlassHome(
                             "محرك قواعد أصلي. الكشف الحالي محصور في توقيع EICAR التجريبي.",
                             "Native rule scanner. The current rule recognizes only the EICAR test pattern."
                         ), color = secondary)
+                    }
+                    GlassPanel(card, stroke) {
+                        Text(tr("اختبار الكشف الفعلي", "Live detection self-test"), color = ink,
+                            style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                        Spacer(Modifier.height(8.dp))
+                        Text(tr(
+                            "اختبر ClamAV وYARA-X باستخدام عينة EICAR الآمنة المدمجة، دون اختيار ملف أو الاتصال بالإنترنت.",
+                            "Run the native ClamAV and YARA-X engines on the built-in harmless EICAR test sample, entirely offline."
+                        ), color = secondary)
+                        Spacer(Modifier.height(12.dp))
+                        Button(
+                            onClick = onTestEngines, enabled = !busy,
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp),
+                            shape = RoundedCornerShape(16.dp)
+                        ) {
+                            Text(if (busy) tr("جارٍ الاختبار…", "Testing…")
+                                else tr("اختبار المحركين الآن", "Test both engines"))
+                        }
+                        if (selfTestStatus.isNotBlank()) {
+                            Spacer(Modifier.height(12.dp))
+                            Text(selfTestStatus, color = secondary,
+                                style = MaterialTheme.typography.bodyMedium)
+                        }
                     }
                     GlassPanel(card, stroke) {
                         Text(tr("حدود الإصدار التجريبي", "Preview limitations"), color = ink,
