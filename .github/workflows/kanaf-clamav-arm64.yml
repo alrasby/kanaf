@@ -170,6 +170,8 @@ jobs:
           name: kanaf-clamav-arm64-diagnostics
           path: |
             configure.log
+            out/TryRunResults.cmake
+            out/CMakeFiles/CMakeConfigureLog.yaml
             openssl-build.log
             libiconv-build.log
             build.log
