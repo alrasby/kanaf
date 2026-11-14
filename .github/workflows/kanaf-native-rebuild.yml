@@ -82,6 +82,8 @@ jobs:
 
 
   arm64-probe:
+    # Legacy full-feasibility probe is expensive and is superseded by isolated engine CI.
+    if: github.event_name == 'workflow_dispatch'
     continue-on-error: true
     runs-on: ubuntu-24.04
     timeout-minutes: 40
@@ -99,7 +101,10 @@ jobs:
           echo "SDKMANAGER=$SDKMANAGER" >> "$GITHUB_ENV"
           "$SDKMANAGER" --version
       - name: Install Android NDK
-        run: "$SDKMANAGER" "ndk;27.2.12479018"
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$SDKMANAGER" "ndk;27.2.12479018"
       - name: Verify NDK toolchain and ABI
         shell: bash
         run: |

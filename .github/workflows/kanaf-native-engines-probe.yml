@@ -2,9 +2,7 @@ name: Kanaf ARM64 native engine feasibility
 on:
   workflow_call:
   workflow_dispatch:
-  push:
-    branches: [rebuild/kanaf-native-v1]
-    paths: ['.github/workflows/kanaf-native-engines-probe.yml']
+  # Run only on manual dispatch or when explicitly called by another workflow.
 permissions:
   contents: read
 jobs:
@@ -25,7 +23,10 @@ jobs:
           echo "SDKMANAGER=$SDKMANAGER" >> "$GITHUB_ENV"
           "$SDKMANAGER" --version
       - name: Install Android NDK
-        run: "$SDKMANAGER" "ndk;27.2.12479018"
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$SDKMANAGER" "ndk;27.2.12479018"
       - name: Verify NDK toolchain and ABI
         shell: bash
         run: |
