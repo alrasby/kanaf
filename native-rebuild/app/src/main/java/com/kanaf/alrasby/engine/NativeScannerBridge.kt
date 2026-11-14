@@ -1,6 +1,8 @@
 package com.kanaf.alrasby.engine
 
 import android.content.Context
+import android.content.pm.ApplicationInfo
+import android.util.Log
 import android.net.Uri
 import java.io.File
 import java.io.ByteArrayInputStream
@@ -102,12 +104,25 @@ object NativeScannerBridge {
             val clamOK: Boolean
             val yaraOK: Boolean
             try {
-                clamOK = libraries.clamavLoaded && clamRulesOK &&
-                    NativeSelfTestPolicy.expected("clamav", clamScanNative(testFile.absolutePath, rulesFile.absolutePath)) &&
-                    clamScanNative(benign.absolutePath, rulesFile.absolutePath) == "NO_MATCH"
-                yaraOK = libraries.yaraXLoaded && yaraRulesOK &&
-                    NativeSelfTestPolicy.expected("yara-x", yaraScanNative(testFile.absolutePath, yaraRules)) &&
-                    yaraScanNative(benign.absolutePath, yaraRules) == "NO_MATCH"
+                val clamPositive = if (libraries.clamavLoaded && clamRulesOK)
+                    clamScanNative(testFile.absolutePath, rulesFile.absolutePath) else "NOT_RUN"
+                val clamPositiveExpected = NativeSelfTestPolicy.expected("clamav", clamPositive)
+                val clamNegative = if (clamPositiveExpected)
+                    clamScanNative(benign.absolutePath, rulesFile.absolutePath) else "NOT_RUN"
+                clamOK = clamPositiveExpected && clamNegative == "NO_MATCH"
+                val yaraPositive = if (libraries.yaraXLoaded && yaraRulesOK)
+                    yaraScanNative(testFile.absolutePath, yaraRules) else "NOT_RUN"
+                val yaraPositiveExpected = NativeSelfTestPolicy.expected("yara-x", yaraPositive)
+                val yaraNegative = if (yaraPositiveExpected)
+                    yaraScanNative(benign.absolutePath, yaraRules) else "NOT_RUN"
+                yaraOK = yaraPositiveExpected && yaraNegative == "NO_MATCH"
+                // Only harmless built-in fixtures; never log data from selected files.
+                if (context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0) {
+                    Log.i("KanafNativeSelfTest", "ClamAV EICAR=" + clamPositive.take(100) +
+                        ", benign=" + clamNegative.take(100) +
+                        "; YARA-X EICAR=" + yaraPositive.take(100) +
+                        ", benign=" + yaraNegative.take(100))
+                }
             } finally {
                 benign.delete()
             }

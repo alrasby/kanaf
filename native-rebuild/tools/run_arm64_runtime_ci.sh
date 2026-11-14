@@ -10,6 +10,15 @@ if ! [[ ",$abi," == *",arm64-v8a,"* ]]; then
   exit 1
 fi
 
+adb logcat -c || true
+report_worker_diagnostics() {
+  result=$?
+  echo "=== ARM64 native engine debug-only self-test diagnostics ==="
+  adb logcat -d -s KanafNativeSelfTest:I | tail -n 60 || true
+  exit "$result"
+}
+trap report_worker_diagnostics EXIT
+
 gradle --no-daemon :app:connectedDebugAndroidTest \
   -PkanafArm64Runtime=true \
   -Pandroid.testInstrumentationRunnerArguments.class=com.kanaf.alrasby.NativeArm64EngineRuntimeTest \
