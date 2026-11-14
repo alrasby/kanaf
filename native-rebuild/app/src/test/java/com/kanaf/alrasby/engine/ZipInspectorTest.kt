@@ -38,4 +38,26 @@ class ZipInspectorTest {
         val result = ZipInspector().inspect(ByteArrayInputStream(zip("a" to byteArrayOf(1)))) { true }
         assertEquals("cancelled", (result as ZipInspector.Result.Incomplete).reason)
     }
+    @Test fun stopsOnDeterministicTimeBudget() {
+        var ticks = 0L
+        val inspector = ZipInspector(maxDurationNanos = 3L, nanoTime = { ticks++ })
+        val result = inspector.inspect(ByteArrayInputStream(zip("file" to ByteArray(256))))
+        assertEquals("time-limit", (result as ZipInspector.Result.Incomplete).reason)
+    }
+    @Test fun rejectsInvalidTimeBudget() {
+        try {
+            ZipInspector(maxDurationNanos = 0L)
+            fail("Should reject an invalid deadline")
+        } catch (_: IllegalArgumentException) { }
+    }
+    @Test fun flagsWindowsAbsolutePaths() {
+        val result = ZipInspector().inspect(ByteArrayInputStream(zip("C:\\temp\\file.txt" to byteArrayOf(1))))
+        assertEquals(1, (result as ZipInspector.Result.Complete).summary.unsafeNames)
+    }
+    @Test fun elapsedAfterLastEntryIsNotReportedComplete() {
+        var ticks = 0L
+        val result = ZipInspector(maxDurationNanos = 6L, nanoTime = { ticks++ })
+            .inspect(ByteArrayInputStream(zip("file" to byteArrayOf(1))))
+        assertEquals("time-limit", (result as ZipInspector.Result.Incomplete).reason)
+    }
 }
