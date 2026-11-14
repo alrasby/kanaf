@@ -17,6 +17,8 @@ jobs:
         working-directory: native-rebuild
     steps:
       - uses: actions/checkout@v4
+      - name: Test native ELF validation
+        run: python3 -m unittest discover -s native-rebuild/tools -p 'test_*.py' -v
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
