@@ -181,6 +181,17 @@ jobs:
               cp -L "$lib" arm64-output/
             fi
           done < libraries.txt
+          # libclamav links libclammspack dynamically: ship and validate it too.
+          test -s out/libclammspack/libclammspack.so
+          python3 native-rebuild/tools/verify_arm64_elf.py out/libclammspack/libclammspack.so
+          cp -L out/libclammspack/libclammspack.so arm64-output/
+          # Record the DT_NEEDED closure for Android packaging and loader tests.
+          for so in arm64-output/*.so; do
+            echo "=== $so ===" | tee -a dynamic-dependencies.txt
+            readelf -d "$so" | tee -a dynamic-dependencies.txt
+          done
+          test -s arm64-output/libclamav.so
+          test -s arm64-output/libclammspack.so
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -194,5 +205,6 @@ jobs:
             build.log
             revision.txt
             libraries.txt
+            dynamic-dependencies.txt
             arm64-output/
           if-no-files-found: warn
