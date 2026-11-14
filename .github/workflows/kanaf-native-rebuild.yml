@@ -9,6 +9,11 @@ on:
 permissions:
   contents: read
 jobs:
+  native-engines-apk:
+    uses: ./.github/workflows/kanaf-package-native-engines.yml
+    permissions:
+      contents: read
+      actions: read
   native:
     runs-on: ubuntu-latest
     timeout-minutes: 30
