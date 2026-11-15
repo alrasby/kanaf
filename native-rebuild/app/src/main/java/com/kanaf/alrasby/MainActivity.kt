@@ -338,6 +338,15 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
         },
         status = status,
         onPickFile = { picker.launch(arrayOf("*/*")) },
+        onOpenSystemApps = {
+            runCatching {
+                activity.startActivity(Intent(android.provider.Settings.ACTION_APPLICATION_SETTINGS))
+            }.onFailure {
+                android.widget.Toast.makeText(activity,
+                    localized("تعذر فتح إعدادات التطبيقات", "Could not open Android app settings"),
+                    android.widget.Toast.LENGTH_SHORT).show()
+            }
+        },
         onOpenWebsite = {
             runCatching {
                 activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://nabdhserv.net")))
