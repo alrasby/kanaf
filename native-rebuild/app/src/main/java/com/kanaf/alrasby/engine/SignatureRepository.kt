@@ -1,6 +1,7 @@
 package com.kanaf.alrasby.engine
 
 import android.content.Context
+import com.kanaf.alrasby.BuildConfig
 import android.util.AtomicFile
 import java.io.File
 import java.io.InputStreamReader
@@ -30,6 +31,9 @@ class SignatureRepository(private val context: Context) {
         if (hasCommittedState(verifiedBundle)) {
             // Read + hash-verify the WHOLE bundle before exposing any signature rows.
             val record = atomic.openRead().use { VerifiedSignatureBundle.read(it) }
+            require(record.version >= BuildConfig.KANAF_SIGNATURE_MIN_VERSION) {
+                "Installed signature database below binary minimum version"
+            }
             val parsed = InputStreamReader(record.bytes.inputStream(), Charsets.UTF_8).use {
                 SignatureIndex.parse(it)
             }
@@ -40,6 +44,9 @@ class SignatureRepository(private val context: Context) {
         // manifest tying them together, their state cannot be trusted after a crash.
         if (legacyActive.isFile || hasCommittedState(legacyVersion)) {
             error("legacy-signature-db-requires-verified-reinstall")
+        }
+        require(BuildConfig.KANAF_SIGNATURE_MIN_VERSION == 0L) {
+            "Production database unavailable: never fall back to test-only signatures"
         }
         return context.assets.open("signatures.tsv").use { input ->
             InputStreamReader(input, Charsets.UTF_8).use { SignatureIndex.parse(it) }
@@ -57,6 +64,9 @@ class SignatureRepository(private val context: Context) {
         manifest: SignedSignatureUpdate.Manifest,
         pinnedPublicKeyDer: ByteArray
     ) {
+        require(manifest.version >= BuildConfig.KANAF_SIGNATURE_MIN_VERSION) {
+            "Signature database below binary minimum version"
+        }
         require(SignedSignatureUpdate.verify(manifest, pinnedPublicKeyDer)) {
             "Untrusted signature database manifest"
         }
