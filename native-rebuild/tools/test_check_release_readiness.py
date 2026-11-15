@@ -51,6 +51,15 @@ class ReleaseReadinessTest(unittest.TestCase):
                     "threat-feed-rsa-proof"):
             self.assertIn(key, problems)
 
+    def test_inconsistent_or_boolean_ai_sample_counts_block_release(self):
+        report = {"model": {"test_samples": 6000,
+                             "benign_samples": 3500, "malicious_samples": 3000}}
+        self.assertIn("ml-test-counts-consistent",
+                      validate(report, today=dt.date(2026, 11, 15)))
+        report["model"]["test_samples"] = True
+        self.assertIn("ml-test-counts-consistent",
+                      validate(report, today=dt.date(2026, 11, 15)))
+
     def test_rejects_tested_artifact_different_from_release(self):
         report = {
             "native": {"tested_apk_sha256": "a"*64},

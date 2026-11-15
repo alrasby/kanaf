@@ -69,7 +69,7 @@ jobs:
           # Only x86-compatible IPC tests. Strict ARM64 JNI tests run in kanaf-arm64-runtime.yml.
           script: |
             # Consumer build requires no privileged grant or ADB setup.
-            gradle --no-daemon :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.kanaf.alrasby.NativeScannerProcessIntegrationTest,com.kanaf.alrasby.VaultAndroidKeyStoreTest,com.kanaf.alrasby.InstalledAppInventoryTest,com.kanaf.alrasby.ProtectionOptInAndroidTest,com.kanaf.alrasby.TrustedSignatureRepositoryAndroidTest,com.kanaf.alrasby.KanafUiPreferencesAndroidTest,com.kanaf.alrasby.KanafUiNavigationTest,com.kanaf.alrasby.DnsFilterAndroidTest,com.kanaf.alrasby.PrivateDnsToggleAndroidTest,com.kanaf.alrasby.AutomaticDeviceScanAndroidTest,com.kanaf.alrasby.SignedFeedPackageAndroidTest,com.kanaf.alrasby.DnsProviderAndroidTest --stacktrace
+            gradle --no-daemon :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.kanaf.alrasby.NativeScannerProcessIntegrationTest,com.kanaf.alrasby.VaultAndroidKeyStoreTest,com.kanaf.alrasby.InstalledAppInventoryTest,com.kanaf.alrasby.ProtectionOptInAndroidTest,com.kanaf.alrasby.TrustedSignatureRepositoryAndroidTest,com.kanaf.alrasby.KanafUiPreferencesAndroidTest,com.kanaf.alrasby.KanafUiNavigationTest,com.kanaf.alrasby.DnsFilterAndroidTest,com.kanaf.alrasby.PrivateDnsToggleAndroidTest,com.kanaf.alrasby.AutomaticDeviceScanAndroidTest,com.kanaf.alrasby.SignedFeedPackageAndroidTest,com.kanaf.alrasby.DnsProviderAndroidTest,com.kanaf.alrasby.KanafAiIntegrationAndroidTest --stacktrace
       - name: Upload emulator test reports
         if: always()
         uses: actions/upload-artifact@v4

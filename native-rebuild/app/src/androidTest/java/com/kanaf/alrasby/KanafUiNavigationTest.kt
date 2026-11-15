@@ -27,6 +27,8 @@ class KanafUiNavigationTest {
         rule.onNodeWithTag("settings_button").performClick()
         rule.onNodeWithTag("lang_en").performScrollTo().performClick()
         rule.onNodeWithText("Language & display").assertExists()
+        rule.onNodeWithText("Kanaf AI — on-device analysis").assertExists()
+        rule.onNodeWithTag("kanaf_ai_status").assertExists()
         rule.onNodeWithText("About Kanaf").assertExists()
         rule.onNodeWithText("Made with ❤️ By NabdhServ.Net").assertExists()
         rule.onNodeWithTag("lang_ar").performScrollTo().performClick()

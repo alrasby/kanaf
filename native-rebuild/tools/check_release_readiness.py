@@ -40,6 +40,13 @@ def validate(report, *, today=None):
     required(is_digest(model.get("independent_test_corpus_sha256")), "ml-test-corpus-hash")
     required(model.get("validated_label_provenance") is True, "ml-ground-truth-provenance")
     required(model.get("independent_test") is True, "ml-independent-holdout")
+    sample_count = model.get("test_samples")
+    benign_count = model.get("benign_samples")
+    malicious_count = model.get("malicious_samples")
+    required(all(type(x) is int and x >= 0 for x in
+                 (sample_count, benign_count, malicious_count)) and
+             sample_count == benign_count + malicious_count,
+             "ml-test-counts-consistent")
     required(model.get("train_test_disjoint_by_hash_and_source") is True, "ml-split-leakage")
     for key, low, high in (("auc", 0.90, 1), ("fpr", 0, 0.005),
                            ("recall", 0.85, 1)):

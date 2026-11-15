@@ -31,3 +31,14 @@ Kanaf has a usable production AI. Synthetic fixtures are only unit tests.
 **Current state:** no real signed weights, independent corpus, metrics
 or hardware benchmark exists. \`UnavailableThreatModel\` is the correct
 production-facing result until those conditions are satisfied.
+
+## Android Kanaf AI integration
+
+The native UI displays the actual Kanaf AI state. Its signed offline model
+loader is wired into selected APK structural inspection; with no model
+publisher key and no validated signed assets, the result is UNAVAILABLE.
+The build fails if model assets and publisher public key are incomplete.
+No scan contents, messages, calls or personal data are uploaded to AI servers.
+
+A publisher signature is NOT a substitute for independent ground-truth
+labeling and model performance evidence, and cannot approve a model by itself.
