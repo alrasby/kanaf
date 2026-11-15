@@ -13,6 +13,7 @@ merge until the following independently grounded evidence is attached.
 | DNS VPN | Samsung/Pixel hardware: strict/auto Private DNS, one VPN coexistence, Android 8+, Wi-Fi ↔ mobile, IPv6, DNS over TLS/HTTPS, 24-hour battery/idle and app termination | Packet policy and API35 emulator tests only |
 | Permissions and user disclosures | Play Console approval for QUERY_ALL_PACKAGES + MANAGE_EXTERNAL_STORAGE; VpnService declaration; accurately described scanning, uninstall and accessibility | Permission declaration implementation only; no Play approvals |
 | Security/privacy/licensing | Current license obligations for ClamAV, YARA-X and each signature feed; secure native dependencies; data minimization, threat feed key rotation, secure updates and rollback | Pending legal/security reviews |
+| Google Play API targeting | New/updated Android phone apps must target API 36; verify edge-to-edge, permissions and window sizing | API 36 configured, CI and physical-device acceptance pending |
 | Release signing | Owner-controlled production keystore (never committed), reproducible vetted signed AAB/APK, manifest assertions and artifact digest/attestation | Debug APK CI only; no production approval |
 | Visual/device acceptance | RTL and LTR, fonts, TalkBack, dynamic scaling, 48dp targets, dark/light, weak/medium devices, one-tap scan/DNS onboarding | Emulator UI tests pass; physical visual sign-off pending |
 

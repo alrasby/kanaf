@@ -42,7 +42,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        api-level: [26, 35]
+        api-level: [26, 35, 36]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -51,7 +51,7 @@ jobs:
           java-version: '17'
       - uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '8.9'
+          gradle-version: '8.11.1'
       - name: Enable KVM access
         shell: bash
         run: |
@@ -73,6 +73,9 @@ jobs:
           # Only x86-compatible IPC tests. Strict ARM64 JNI tests run in kanaf-arm64-runtime.yml.
           script: |
             # Consumer build requires no privileged grant or ADB setup.
+            SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager -print -quit)"
+            test -x "$SDKMANAGER"
+            "$SDKMANAGER" "platforms;android-36" "build-tools;35.0.0"
             gradle --no-daemon :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.kanaf.alrasby.NativeScannerProcessIntegrationTest,com.kanaf.alrasby.VaultAndroidKeyStoreTest,com.kanaf.alrasby.InstalledAppInventoryTest,com.kanaf.alrasby.ProtectionOptInAndroidTest,com.kanaf.alrasby.TrustedSignatureRepositoryAndroidTest,com.kanaf.alrasby.KanafUiPreferencesAndroidTest,com.kanaf.alrasby.KanafUiNavigationTest,com.kanaf.alrasby.DnsFilterAndroidTest,com.kanaf.alrasby.PrivateDnsToggleAndroidTest,com.kanaf.alrasby.AutomaticDeviceScanAndroidTest,com.kanaf.alrasby.SignedFeedPackageAndroidTest,com.kanaf.alrasby.DnsProviderAndroidTest,com.kanaf.alrasby.KanafAiIntegrationAndroidTest --stacktrace
       - name: Upload emulator test reports
         if: always()
