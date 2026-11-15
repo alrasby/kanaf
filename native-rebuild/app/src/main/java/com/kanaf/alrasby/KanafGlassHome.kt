@@ -1,5 +1,6 @@
 package com.kanaf.alrasby
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -75,6 +76,8 @@ fun KanafGlassHome(
     onOpenWebsite: () -> Unit
 ) {
     var page by remember { mutableIntStateOf(if (sharedText.isNullOrBlank()) 0 else 1) }
+    // Android Back returns to the main screen instead of exiting from a subpage.
+    BackHandler(enabled = page != 0) { page = 0 }
     var linkInput by remember { mutableStateOf(sharedText.orEmpty()) }
     var linkReport by remember { mutableStateOf<LinkInspector.Report?>(null) }
     var confirmVaultSave by remember { mutableStateOf(false) }
@@ -235,7 +238,7 @@ fun KanafGlassHome(
                                     selected = page == section.page,
                                     onClick = { page = section.page },
                                     modifier = Modifier.testTag("nav_" + section.id)
-                                        .heightIn(min = 42.dp),
+                                        .heightIn(min = 48.dp),
                                     label = {
                                         Text(label, style = MaterialTheme.typography.labelMedium,
                                             fontWeight = if (page == section.page)
