@@ -11,6 +11,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.kanaf.alrasby.engine.ThreatFeatureVector
@@ -61,6 +62,7 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
     var busy by remember { mutableStateOf(false) }
     var selfTestStatus by remember { mutableStateOf("") }
     val scanHistory = remember { mutableStateListOf<String>() }
+    var keepSessionHistory by rememberSaveable { mutableStateOf(true) }
     val signatures = remember {
         runCatching { SignatureRepository(activity).load() }.getOrNull()
     }
@@ -197,8 +199,7 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
                 }
                 status = completed
                 // Only a bounded, non-persistent summary; never retain file names or contents.
-                scanHistory.add(0, completed.lineSequence().take(3).joinToString("\n").take(600))
-                if (scanHistory.size > 10) scanHistory.removeAt(scanHistory.lastIndex)
+                com.kanaf.alrasby.engine.SessionHistoryPolicy.record(scanHistory, completed, keepSessionHistory)
                 busy = false
             }
         }
@@ -207,6 +208,11 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
         busy = busy,
         sharedText = sharedText,
         scanHistory = scanHistory,
+        keepSessionHistory = keepSessionHistory,
+        onSessionHistoryChanged = { enabled ->
+            keepSessionHistory = enabled
+            if (!enabled) scanHistory.clear()
+        },
         onClearHistory = { scanHistory.clear() },
         selfTestStatus = selfTestStatus,
         onTestEngines = {
