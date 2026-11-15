@@ -21,7 +21,7 @@ class DnsTileControlActivity : Activity() {
             return
         }
         val state = PrivateDnsCompatibility.read(this)
-        if (PrivateDnsToggle.decision(state, PrivateDnsToggle.granted(this)) ==
+        if (PrivateDnsToggle.decision(state) ==
             PrivateDnsToggle.Decision.MANUAL_REQUIRED) {
             AlertDialog.Builder(this).setTitle("Kanaf DNS")
                 .setMessage("Android Private DNS uses a strict provider. " +
