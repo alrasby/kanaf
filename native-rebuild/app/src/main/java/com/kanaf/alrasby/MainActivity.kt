@@ -490,9 +490,9 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
             ProtectionControl.setInstallWatch(activity, enabled)
             watchNewApps = enabled
             protectionStatus = if (enabled)
-                localized("مراقبة تثبيت التطبيقات مفعلة؛ تنبيه للمراجعة فقط.",
-                    "Install-event review enabled; alert-only, not antivirus scanning.")
-            else localized("تم إيقاف مراقبة التثبيت.", "Install-event review disabled.")
+                KanafMessage("فُعّلت تنبيهات تثبيت التطبيقات للمراجعة اليدوية فقط.",
+                    "App-install review alerts enabled; this does not scan for malware.")
+            else KanafMessage("تم إيقاف تنبيهات التثبيت.", "Install review alerts disabled.")
             if (enabled && Build.VERSION.SDK_INT >= 33 &&
                 activity.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) !=
                 PackageManager.PERMISSION_GRANTED) {
@@ -505,8 +505,10 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
             } else {
                 ProtectionControl.disableTreeChecks(activity)
                 periodicChecks = false
-                protectionStatus = localized("أُلغي الفحص الدوري وسُحب اختيار المجلد.",
-                    "Scheduled checks cancelled; selected folder removed.")
+                protectionStatus = KanafMessage(
+                    "أُلغي الفحص الدوري وأُزيل إذن المجلد المختار.",
+                    "Scheduled checks cancelled and selected folder access removed."
+                )
             }
         },
         onRunScopedCheck = {
@@ -514,11 +516,17 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
                 WorkManager.getInstance(activity).enqueue(
                     OneTimeWorkRequestBuilder<ScopedFileCheckWorker>().build()
                 )
-                protectionStatus = localized("طُلب فحص للمجلد المحدد، وسيُنفذ عندما يسمح أندرويد.",
-                    "Folder check requested. Android will run it when scheduled.")
+                protectionStatus = KanafMessage(
+                    "طُلب فحص المجلد، وسيُنفّذ عندما يسمح نظام أندرويد.",
+                    "Folder check requested; Android will execute it when allowed."
+                )
             }
         },
-        onRefreshProtection = { protectionStatus = ProtectionControl.lastResult(activity) },
+        onRefreshProtection = {
+            protectionStatus = KanafMessage.fromScheduledStatus(
+                ProtectionControl.lastResult(activity)
+            )
+        },
         hasScanReport = hasScanReport,
         canImportSignedFeed = trustedFeed.configured(),
         signedFeedStatus = feedStatus.displayed(uiLanguage),
@@ -534,7 +542,7 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
                     share, localized("مشاركة تقرير الفحص", "Share scan report")
                 ))
             }.onFailure {
-                vaultStatus = localized("تعذر فتح واجهة المشاركة", "Sharing is unavailable")
+                vaultStatus = KanafMessage("تعذر فتح واجهة المشاركة", "Sharing is unavailable")
             }
         },
         vaultItems = vaultEntries,
@@ -552,12 +560,12 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
                     if (found.isSuccess) {
                         appEntries = found.getOrThrow()
                         appsLoaded = true
-                        appsStatus = localized(
-                            "هذه التطبيقات القابلة للتشغيل الظاهرة لكنف فقط؛ لم يتم فحصها بحثًا عن البرمجيات الخبيثة.",
-                            "Only launchable apps visible to Kanaf are listed; no malware scanning was performed."
+                        appsStatus = KanafMessage(
+                            "المعروض هو التطبيقات القابلة للتشغيل الظاهرة لكنف فقط؛ لم تُفحص بحثًا عن البرمجيات الخبيثة.",
+                            "Only launchable apps visible to Kanaf are listed; no malware detection was performed."
                         )
                     } else {
-                        appsStatus = localized("تعذر قراءة قائمة التطبيقات", "Could not list visible applications")
+                        appsStatus = KanafMessage("تعذر قراءة التطبيقات الظاهرة", "Could not list visible apps")
                     }
                     busy = false
                 }
@@ -567,7 +575,7 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
         onAuditApps = {
             if (!busy) {
                 busy = true
-                apkAuditStatus = localized("جارٍ فحص ملفات التطبيقات الظاهرة...",
+                apkAuditStatus = KanafMessage("جارٍ فحص ملفات APK الظاهرة...",
                     "Auditing visible APK files...")
                 scope.launch {
                     val attempt = withContext(Dispatchers.IO) {
@@ -575,15 +583,19 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
                     }
                     apkAuditStatus = if (attempt.isSuccess) {
                         val report = attempt.getOrThrow()
-                        localized("مراجعة APK محدودة (ليست فحصًا شاملًا): ",
-                            "Limited APK review (not whole-device scanning): ") +
-                            "available=${report.candidates}, no-hash-match=${report.hashed}, " +
-                            "matches=${report.matched}, structural-flags=${report.suspiciousStructure}, " +
-                            "incomplete=${report.incomplete}, truncated=${report.truncated}. " +
-                            localized("النتائج غير كافية لإثبات سلامة التطبيقات.",
-                                "These results cannot certify app safety.")
-                    } else localized("تعذر تنفيذ مراجعة APK: ", "APK review failed: ") +
-                        attempt.exceptionOrNull()?.javaClass?.simpleName
+                        KanafMessage(
+                            "مراجعة APK محدودة (ليست فحصًا شاملًا): المتاحة=${report.candidates}، " +
+                                "لا تطابق=${report.hashed}، تطابقات=${report.matched}، " +
+                                "مؤشرات بنيوية=${report.suspiciousStructure}، غير مكتمل=${report.incomplete}، " +
+                                "تجاوز الحد=${report.truncated}. لا يمكن إثبات السلامة بهذه النتيجة.",
+                            "Limited APK audit (not whole-device scanning): available=${report.candidates}, " +
+                                "no matches=${report.hashed}, matches=${report.matched}, " +
+                                "structural flags=${report.suspiciousStructure}, incomplete=${report.incomplete}, " +
+                                "truncated=${report.truncated}. These results cannot certify safety."
+                        )
+                    } else KanafMessage(
+                        "تعذرت مراجعة APK: ", "APK audit failed: "
+                    ).append(attempt.exceptionOrNull()?.javaClass?.simpleName.orEmpty())
                     busy = false
                 }
             }
@@ -592,7 +604,7 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
             runCatching {
                 activity.startActivity(inventory.settingsIntent(packageName))
             }.onFailure {
-                appsStatus = localized("تعذر فتح صفحة التطبيق", "Could not open Android app details")
+                appsStatus = KanafMessage("تعذر فتح صفحة التطبيق", "Could not open Android app details")
             }
         },
         onAddToVault = { if (!busy) vaultPicker.launch(arrayOf("*/*")) },
@@ -611,11 +623,13 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
                         runCatching { vault.delete(activity, id) }.getOrDefault(false)
                     }
                     reloadVault()
-                    vaultStatus = if (removed) localized(
-                        "حُذفت النسخة المشفرة من خزنة كنف فقط.",
-                        "The encrypted copy was deleted from Kanaf's vault only."
-                    ) else localized("لم تُحذف النسخة؛ تحقق من التخزين",
-                        "Vault copy could not be removed")
+                    vaultStatus = if (removed) KanafMessage(
+                        "حُذفت النسخة المشفرة داخل كنف فقط.",
+                        "Only the encrypted copy in Kanaf was deleted."
+                    ) else KanafMessage(
+                        "تعذر حذف النسخة؛ تحقق من التخزين.",
+                        "Could not delete the vault copy; check storage."
+                    )
                     busy = false
                 }
             }
@@ -637,17 +651,35 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
                 scope.launch {
                     selfTestStatus = withContext(Dispatchers.IO) {
                         val testResult = NativeScannerBridge.selfTest(activity)
-                        fun label(name: String, verdict: AntivirusEngine.Verdict): String =
-                            when (verdict) {
-                                is AntivirusEngine.Verdict.Detected -> "$name: نجح اكتشاف عينة EICAR الآمنة"
-                                is AntivirusEngine.Verdict.NoKnownMatch -> "$name: فشل اكتشاف عينة EICAR"
-                                is AntivirusEngine.Verdict.Incomplete -> "$name: اختبار غير مكتمل (" + verdict.reason + ")"
+                        fun label(name: String, verdict: AntivirusEngine.Verdict,
+                                  arabic: Boolean): String =
+                            if (arabic) when (verdict) {
+                                is AntivirusEngine.Verdict.Detected ->
+                                    "$name: نجح اكتشاف عينة EICAR الاختبارية"
+                                is AntivirusEngine.Verdict.NoKnownMatch ->
+                                    "$name: فشل اكتشاف عينة EICAR"
+                                is AntivirusEngine.Verdict.Incomplete ->
+                                    "$name: اختبار غير مكتمل (${verdict.reason})"
+                            } else when (verdict) {
+                                is AntivirusEngine.Verdict.Detected ->
+                                    "$name: Detected the EICAR test sample"
+                                is AntivirusEngine.Verdict.NoKnownMatch ->
+                                    "$name: Failed to detect EICAR"
+                                is AntivirusEngine.Verdict.Incomplete ->
+                                    "$name: Test incomplete (${verdict.reason})"
                             }
-                        listOf(
-                            "اختبار كشف حقيقي عبر المحركات الأصلية — عينة EICAR غير ضارة:",
-                            label("ClamAV", testResult.clamav),
-                            label("YARA-X", testResult.yaraX)
-                        ).joinToString("\n")
+                        KanafMessage(
+                            listOf(
+                                "اختبار الكشف عبر المحركات الأصلية — عينة EICAR غير الضارة:",
+                                label("ClamAV", testResult.clamav, true),
+                                label("YARA-X", testResult.yaraX, true)
+                            ).joinToString("\n"),
+                            listOf(
+                                "Native engine detection test — harmless EICAR sample:",
+                                label("ClamAV", testResult.clamav, false),
+                                label("YARA-X", testResult.yaraX, false)
+                            ).joinToString("\n")
+                        )
                     }
                     busy = false
                 }
@@ -668,7 +700,9 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
             runCatching {
                 activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://nabdhserv.net")))
             }.onFailure {
-                android.widget.Toast.makeText(activity, "تعذر فتح المتصفح", android.widget.Toast.LENGTH_SHORT).show()
+                android.widget.Toast.makeText(activity,
+                    localized("تعذر فتح المتصفح", "Could not open the browser"),
+                    android.widget.Toast.LENGTH_SHORT).show()
             }
         }
     )
