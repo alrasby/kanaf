@@ -9,6 +9,8 @@ on:
       - 'native-rebuild/tools/run_arm64_runtime_ci.sh'
       - 'native-rebuild/app/src/main/java/com/kanaf/alrasby/engine/NativeScannerBridge.kt'
       - 'native-rebuild/app/src/main/cpp/native_scanner.cpp'
+      - 'native-rebuild/app/src/main/cpp/clam_scan_policy.h'
+      - 'native-rebuild/app/src/main/assets/kanaf_test.ndb'
   workflow_dispatch:
 concurrency:
   group: kanaf-arm64-runtime-probe
