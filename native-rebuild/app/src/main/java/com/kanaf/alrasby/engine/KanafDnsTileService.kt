@@ -43,9 +43,12 @@ class KanafDnsTileService : TileService() {
     @SuppressLint("StartActivityAndCollapseDeprecated")
     override fun onClick() {
         super.onClick()
-        if (KanafDnsVpnService.isRunning()) {
-            stopService(Intent(this, KanafDnsVpnService::class.java))
-            qsTile?.apply { state = Tile.STATE_INACTIVE; updateTile() }
+        if (KanafDnsVpnService.isRunning() || KanafDnsVpnService.isStarting()) {
+            val stop = Intent(this, KanafDnsVpnService::class.java)
+                .setAction(KanafDnsVpnService.ACTION_STOP)
+            runCatching { startService(stop) }
+                .onFailure { stopService(Intent(this, KanafDnsVpnService::class.java)) }
+            // Leave the actual state to onStartListening after the tunnel closes.
             return
         }
         val intent = Intent(this, DnsTileControlActivity::class.java)
