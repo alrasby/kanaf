@@ -53,7 +53,7 @@ internal object SignedFeedPackage {
                 archive.closeEntry()
             }
         }
-        if (payloads.size != 2 || payloads["signatures.tsv"].isNullOrEmpty()) {
+        if (payloads.size != 2 || payloads["signatures.tsv"]?.isEmpty() != false) {
             throw IOException("signed-feed-missing-content")
         }
         val meta = payloads["manifest.txt"]?.toString(Charsets.US_ASCII)
