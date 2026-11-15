@@ -105,6 +105,25 @@ class DnsAdFilterTest {
         assertFalse(used)
     }
 
+    @Test fun serviceDiscoveryAndRootQueriesRemainForwardable() {
+        val client = byteArrayOf(10, 111, 222.toByte(), 1)
+        val server = byteArrayOf(10, 111, 222.toByte(), 2)
+        for (domain in listOf("_sip._tcp.example.com", "")) {
+            val dns = query(domain)
+            assertEquals(domain, DnsPacketCodec.questionName(dns))
+            assertFalse(AdDomainRules.isAdOrTracker(domain))
+            val packet = DnsPacketCodec.buildUdp(client, server, 53555, 53, dns)!!
+            val remote = DnsPacketCodec.nxdomain(dns)!!
+            var forwarded = 0
+            val answer = DnsFilterCore.reply(packet, server) {
+                forwarded++
+                remote
+            }!!
+            assertEquals(1, forwarded)
+            assertArrayEquals(remote, DnsPacketCodec.parseUdp(answer)!!.dns)
+        }
+    }
+
     @Test fun malformedOrCompressedQuestionIsNotClassified() {
         val q = query("example.com")
         q[12] = 0xc0.toByte()

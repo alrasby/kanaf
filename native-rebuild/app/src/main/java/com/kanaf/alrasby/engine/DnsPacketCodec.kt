@@ -59,13 +59,16 @@ object DnsPacketCodec {
             if (size == 0) break
             val label = dns.copyOfRange(at, at + size).toString(Charsets.US_ASCII)
                 .lowercase(Locale.ROOT)
+            // DNS labels are not restricted to website hostnames. Underscores
+            // occur in legitimate SRV/TXT service discovery names.
             if (label.isBlank() || label.any {
-                    it !in "abcdefghijklmnopqrstuvwxyz0123456789-"
+                    it !in "abcdefghijklmnopqrstuvwxyz0123456789-_"
                 }) return null
             labels.add(label)
             at += size
         }
-        return labels.joinToString(".").takeIf { it.isNotEmpty() }
+        // The root zone has an empty QNAME, but is still a valid DNS question.
+        return labels.joinToString(".")
     }
 
     private fun errorResponse(query: ByteArray, code: Int): ByteArray? {
