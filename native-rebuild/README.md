@@ -20,6 +20,10 @@ antivirus until native detection, update trust, and on-device tests are complete
   before their file-scan results are accepted. No match is NOT proof of safety.
 - User-initiated offline URL/text structure inspection (paste or Android Share > Kanaf). Explicitly NOT a malware, reputation, phishing database, or URL safety verdict.
 - Home, session-only scan history (10 bounded non-persistent summaries), Engines and About sections, using the existing Kanaf color and glass style.
+- **Encrypted-copy vault (manual; not full quarantine):** users explicitly confirm and pick a SAF file, then Kanaf stores an authenticated AES-256-GCM encrypted copy under `noBackupFilesDir` with an Android Keystore key, a random per-item IV and item-ID-bound AAD. The original is never moved, removed or restricted. Maximum 16 MiB per copy, 32 stored items and 128 MiB of ciphertext. No original filenames or URIs are persisted. Copies can be restored only into a user-chosen SAF document; GCM authentication completes in bounded memory before any plaintext is written to that provider. Corrupt/missing keys or content fail closed. Restoring to a failing document provider may leave a partial document; the UI warns the user to delete it.
+- A separate bilingual glass-style **Vault / الخزنة** screen provides explicit confirmation before saving and deletion, displays anonymous copy identifiers, and supports manual restore. Clearing application data or losing the device Keystore key makes saved copies unrecoverable; there is intentionally no unencrypted automatic backup. This is a copy vault, not security isolation of the source file.
+- Explicit user-initiated sharing of the current text scan report through Android Sharesheet (may disclose SHA-256 to the chosen recipient), and a shortcut to official Android application/permission settings. Kanaf does not silently monitor applications or grant itself special privileges.
+- VaultCrypto JVM tests check round-trip, corruption, missing authentication tag, wrong item-ID AAD, oversized sources, and malformed headers; a scoped Android API35 integration test validates real Android Keystore AES-GCM.
 - ZIP structure inspection has a cooperative 20-second deadline and a stalled-read guard; blocked I/O and native parsing still require process isolation.
 - An offline **Test both engines** action within Engines. It runs native code, not a
   mock, and only reports success after a real EICAR signature match.
@@ -43,7 +47,7 @@ antivirus until native detection, update trust, and on-device tests are complete
 - The bundled database only recognizes the harmless EICAR test string, not general malware.
 - Native scanning is limited to explicitly selected files up to 16 MiB.
 - No protection of the entire device, on-install verification, realtime monitoring,
-  quarantine, safe remote threat updates or background scanning is provided.
+  **automatic containment/quarantine of original files**, safe remote threat updates or background scanning is provided. The encrypted-copy vault does not delete or isolate the original.
 - Native ClamAV and YARA-X parsing now runs in a **separate, non-exported app-private Android process** (`:scanner`) via Messenger IPC. The UI process receives an explicit incomplete verdict if the worker disconnects or times out. A worker watchdog terminates only the scanner process after 90 seconds, with a 100-second client deadline. Stale scanner cache copies are purged when the worker restarts.
 - Process separation provides **crash containment only**, NOT a restricted/isolated Android UID, sandbox, or guaranteed interruption of a maliciously blocked input provider. Real-device IPC, native-loader, timeout and memory tests remain release blockers.
 - Only Android ARM64 has the ClamAV/YARA-X libraries; other ABIs are unavailable.
