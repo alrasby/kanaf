@@ -90,9 +90,7 @@ fun KanafGlassHome(
     privateDnsStatus: String,
     privateDnsAvailable: Boolean,
     privateDnsCompatible: Boolean,
-    privateDnsCanAutoSwitch: Boolean,
     privateDnsActionStatus: String,
-    onCopyDnsGrant: () -> Unit,
     onOpenPrivateDnsSettings: () -> Unit,
     onChoosePrivateDns: (String?) -> Unit,
     selectedDnsProvider: String,
@@ -433,8 +431,7 @@ fun KanafGlassHome(
                             }
                             Switch(
                                 checked = vpnRequested,
-                                enabled = vpnRequested || privateDnsCompatible ||
-                                    privateDnsCanAutoSwitch,
+                                enabled = vpnRequested || privateDnsCompatible,
                                 onCheckedChange = { enabled ->
                                     if (enabled) confirmVpn = true else onVpnToggle(false)
                                 },
@@ -573,18 +570,6 @@ fun KanafGlassHome(
                             OutlinedButton(onClick = onVpnRefresh,
                                 modifier = Modifier.fillMaxWidth()) {
                                 Text(tr("تحديث حالة Kanaf DNS", "Refresh Kanaf DNS status"))
-                            }
-                            if (privateDnsAvailable && !privateDnsCanAutoSwitch) {
-                                Text(tr(
-                                    "تبديل إعدادات النظام تلقائيًا عبر ADB خيار للمطورين فقط وليس مطلوبًا للمستخدم العادي.",
-                                    "ADB-based system DNS switching is an advanced developer option, not required for everyday use."
-                                ), color = secondary, style = MaterialTheme.typography.bodySmall)
-                                TextButton(onClick = onCopyDnsGrant,
-                                    modifier = Modifier.fillMaxWidth()
-                                        .testTag("copy_dns_adb_grant")) {
-                                    Text(tr("نسخ أمر ADB (متقدم)",
-                                        "Copy ADB command (advanced)"))
-                                }
                             }
                             if (privateDnsActionStatus.isNotBlank()) {
                                 Text(privateDnsActionStatus, color = secondary,

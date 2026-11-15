@@ -15,9 +15,6 @@
         android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
-    <!-- Advanced opt-in: may be granted once via external ADB only. No runtime dialog. -->
-    <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS"
-        tools:ignore="ProtectedPermissions" />
     <!-- Scoped to launchable apps; no broad package visibility permission. -->
     <queries>
         <intent>
@@ -57,7 +54,7 @@
             <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="User-initiated limited DNS ad and tracking domain filtering"/>
         </service>
-        <!-- Quick Settings user-controlled VPN toggle with optional external ADB grant. -->
+        <!-- Quick Settings DNS-only VPN toggle, no elevated Android permissions. -->
         <service android:name=".engine.KanafDnsTileService"
             android:exported="true"
             android:permission="android.permission.BIND_QUICK_SETTINGS_TILE"

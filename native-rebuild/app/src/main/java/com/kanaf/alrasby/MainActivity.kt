@@ -150,6 +150,7 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
             PackageManager.PERMISSION_GRANTED)
     }
     val automaticScanCancellation = remember { AtomicBoolean(false) }
+    var automaticScanActive by remember { mutableStateOf(false) }
     val autoScanSession = remember { AtomicLong(0) }
     var askFilesBeforeScan by rememberSaveable { mutableStateOf(false) }
     var scanOnFilesPermissionReturn by remember { mutableStateOf(false) }
@@ -157,6 +158,7 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
         if (busy) return
         automaticScanCancellation.set(false)
         val session = autoScanSession.incrementAndGet()
+        automaticScanActive = true
         busy = true
         autoScanProgress = "…"
         deviceScanStatus = KanafMessage(
@@ -186,6 +188,7 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
             // Results from an Activity that was sent to the background must
             // never re-appear after the user returns to a fresh Home screen.
             if (autoScanSession.get() != session) return@launch
+            automaticScanActive = false
             autoScanProgress = ""
             deviceScanStatus = result.fold(
                 onSuccess = { scan ->
@@ -346,7 +349,6 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
         "DNS filter is opt-in and requires VPN permission; it cannot run with another VPN."
     )) }
     var systemDns by remember { mutableStateOf(PrivateDnsCompatibility.read(activity)) }
-    var dnsGrant by remember { mutableStateOf(PrivateDnsToggle.granted(activity)) }
     var privateDnsActionStatus by remember { mutableStateOf(KanafMessage.EMPTY) }
     var selectedDnsProvider by remember {
         mutableStateOf(DnsProviderStore.selected(activity))
@@ -359,15 +361,17 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
         val listener = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_STOP) {
                 // Private scan reports are in-memory and cleared when leaving.
-                automaticScanCancellation.set(true)
-                autoScanSession.incrementAndGet()
+                if (automaticScanActive) {
+                    automaticScanCancellation.set(true)
+                    autoScanSession.incrementAndGet()
+                    automaticScanActive = false
+                    autoScanProgress = ""
+                    busy = false
+                }
                 deviceScanStatus = KanafMessage.EMPTY
-                autoScanProgress = ""
-                busy = false
             }
             if (event == Lifecycle.Event.ON_RESUME) {
                 systemDns = PrivateDnsCompatibility.read(activity)
-                dnsGrant = PrivateDnsToggle.granted(activity)
                 vpnRequested = KanafDnsVpnService.isRunning()
             }
         }
@@ -377,8 +381,7 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
 
     fun startDnsFilter() {
         systemDns = PrivateDnsCompatibility.read(activity)
-        dnsGrant = PrivateDnsToggle.granted(activity)
-        if (PrivateDnsToggle.decision(systemDns, dnsGrant) ==
+        if (PrivateDnsToggle.decision(systemDns) ==
             PrivateDnsToggle.Decision.MANUAL_REQUIRED) {
             vpnRequested = false
             vpnStatus = KanafMessage(
@@ -398,15 +401,15 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
                 "Checking encrypted DNS provider connectivity before activating filtering…"
             )
             scope.launch {
-                repeat(12) {
-                    delay(400)
+                repeat(36) {
+                    delay(500)
                     if (KanafDnsVpnService.isRunning()) {
                         vpnRequested = true
                         systemDns = PrivateDnsCompatibility.read(activity)
                         return@launch
                     }
                 }
-                vpnRequested = false
+                vpnRequested = KanafDnsVpnService.isRunning()
                 systemDns = PrivateDnsCompatibility.read(activity)
                 vpnStatus = KanafMessage(
                     "لم يبدأ مرشح DNS: المزوّد المحدد غير متاح أو يتعارض وضع DNS في النظام. لم يُفعّل VPN.",
@@ -1115,7 +1118,6 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
                 localized("تعذر معرفة وضع DNS الخاص من النظام", "Android Private DNS status unavailable")
         },
         privateDnsCompatible = systemDns.allowsLocalVpn,
-        privateDnsCanAutoSwitch = dnsGrant,
         privateDnsActionStatus = privateDnsActionStatus.displayed(uiLanguage),
         selectedDnsProvider = selectedDnsProvider,
         onSelectDnsProvider = { provider ->
@@ -1173,20 +1175,6 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
                 )
             }
         },
-        onCopyDnsGrant = {
-            val success = runCatching {
-                val clipboard = activity.getSystemService(Context.CLIPBOARD_SERVICE)
-                    as ClipboardManager
-                clipboard.setPrimaryClip(ClipData.newPlainText(
-                    "Kanaf DNS ADB grant", PrivateDnsToggle.GRANT_COMMAND))
-            }.isSuccess
-            privateDnsActionStatus = if (success)
-                KanafMessage(
-                    "نُسخ أمر منح الصلاحية الاختيارية. يتطلب تنفيذه بواسطة ADB من جهاز تثق به مرة واحدة. لا يستطيع كنف تنفيذه ذاتيًا.",
-                    "Optional permission command copied. Run it once from trusted ADB. Kanaf cannot execute it on your behalf."
-                )
-            else KanafMessage("تعذر نسخ الأمر", "Could not copy command")
-        },
         onOpenPrivateDnsSettings = {
             if (!PrivateDnsSettingsNavigator.open(activity)) {
                 privateDnsActionStatus = KanafMessage(
@@ -1238,8 +1226,7 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
                 vpnStatus = KanafMessage("أُرسل طلب إيقاف مرشح DNS.", "DNS filter stop requested.")
             } else {
                 systemDns = PrivateDnsCompatibility.read(activity)
-                dnsGrant = PrivateDnsToggle.granted(activity)
-                if (PrivateDnsToggle.decision(systemDns, dnsGrant) ==
+                if (PrivateDnsToggle.decision(systemDns) ==
                     PrivateDnsToggle.Decision.MANUAL_REQUIRED) {
                     vpnRequested = false
                     vpnStatus = KanafMessage(
@@ -1255,7 +1242,6 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
         onVpnRefresh = {
             PrivateDnsToggle.recoverIfStopped(activity)
             systemDns = PrivateDnsCompatibility.read(activity)
-            dnsGrant = PrivateDnsToggle.granted(activity)
             vpnRequested = KanafDnsVpnService.isRunning()
             vpnStatus = if (vpnRequested) KanafMessage(
                 "مرشح DNS المحلي يعمل (تغطية محدودة).",
