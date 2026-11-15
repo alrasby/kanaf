@@ -22,6 +22,12 @@ on:
       - 'native-rebuild/app/src/main/java/com/kanaf/alrasby/engine/DnsFilterCore.kt'
       - 'native-rebuild/app/src/main/java/com/kanaf/alrasby/engine/KanafDnsVpnService.kt'
       - 'native-rebuild/app/src/main/java/com/kanaf/alrasby/engine/DnsPacketCodec.kt'
+      - 'native-rebuild/app/src/main/java/com/kanaf/alrasby/engine/DnsSecureResolver.kt'
+      - 'native-rebuild/app/src/main/java/com/kanaf/alrasby/engine/DnsProviderStore.kt'
+      - 'native-rebuild/app/src/main/java/com/kanaf/alrasby/engine/PrivateDnsCompatibility.kt'
+      - 'native-rebuild/app/src/main/java/com/kanaf/alrasby/engine/PrivateDnsToggle.kt'
+      - 'native-rebuild/app/src/main/java/com/kanaf/alrasby/engine/KanafDnsTileService.kt'
+      - 'native-rebuild/app/src/main/java/com/kanaf/alrasby/engine/DnsTileControlActivity.kt'
       - 'native-rebuild/app/src/main/java/com/kanaf/alrasby/engine/ScopedDeviceScan.kt'
   workflow_dispatch:
 concurrency:
