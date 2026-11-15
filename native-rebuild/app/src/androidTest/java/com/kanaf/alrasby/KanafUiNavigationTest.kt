@@ -39,8 +39,12 @@ class KanafUiNavigationTest {
         rule.onNodeWithText("Made with ❤️ By NabdhServ.Net").assertDoesNotExist()
     }
 
-    @Test fun homeExposesScopedScanAndVpnConsentControlsWithoutActivatingThem() {
+    @Test fun homeExposesNativeScanAndAndroidDnsControlsWithoutActivatingThem() {
         rule.onNodeWithTag("device_scan_button").assertExists()
+        rule.onNodeWithTag("home_native_engines_test").assertExists()
+        rule.onNodeWithTag("dns_system_off").assertExists()
+        rule.onNodeWithTag("dns_system_auto").assertExists()
+        rule.onNodeWithTag("dns_add_provider").assertExists()
         rule.onNodeWithTag("dns_filter_switch").assertExists()
     }
 

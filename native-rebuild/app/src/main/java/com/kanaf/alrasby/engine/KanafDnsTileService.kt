@@ -18,11 +18,13 @@ class KanafDnsTileService : TileService() {
         val snapshot = PrivateDnsCompatibility.read(this)
         qsTile?.apply {
             label = "Kanaf DNS"
-            subtitle = when (snapshot.mode) {
-                PrivateDnsCompatibility.Mode.OFF -> "DNS off"
-                PrivateDnsCompatibility.Mode.AUTOMATIC -> "DNS auto"
-                PrivateDnsCompatibility.Mode.PROVIDER -> "Private DNS"
-                PrivateDnsCompatibility.Mode.UNKNOWN -> "Open settings"
+            if (Build.VERSION.SDK_INT >= 29) {
+                subtitle = when (snapshot.mode) {
+                    PrivateDnsCompatibility.Mode.OFF -> "DNS off"
+                    PrivateDnsCompatibility.Mode.AUTOMATIC -> "DNS auto"
+                    PrivateDnsCompatibility.Mode.PROVIDER -> "Private DNS"
+                    PrivateDnsCompatibility.Mode.UNKNOWN -> "Open settings"
+                }
             }
             state = if (snapshot.mode == PrivateDnsCompatibility.Mode.PROVIDER)
                 Tile.STATE_ACTIVE else Tile.STATE_INACTIVE

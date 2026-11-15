@@ -64,7 +64,9 @@ object PrivateDnsCompatibility {
     fun validHostname(input: String): Boolean {
         val name = input.trim()
         if (name.length !in 4..253 || !name.contains('.')) return false
-        return name.split('.').all { part ->
+        val parts = name.split('.')
+        if (parts.all { label -> label.all(Char::isDigit) }) return false
+        return parts.all { part ->
             part.length in 1..63 &&
                 part.first() != '-' && part.last() != '-' &&
                 part.all { it in 'a'..'z' || it in 'A'..'Z' ||

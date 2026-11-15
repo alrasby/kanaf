@@ -12,6 +12,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -78,6 +79,11 @@ fun KanafGlassHome(
     vpnStatus: String,
     onVpnToggle: (Boolean) -> Unit,
     onVpnRefresh: () -> Unit,
+    privateDnsStatus: String,
+    privateDnsCompatible: Boolean,
+    privateDnsActionStatus: String,
+    onOpenPrivateDnsSettings: () -> Unit,
+    onChoosePrivateDns: (String?) -> Unit,
     onOpenSystemApps: () -> Unit,
     onOpenWebsite: () -> Unit
 ) {
@@ -89,6 +95,7 @@ fun KanafGlassHome(
     var confirmVaultSave by remember { mutableStateOf(false) }
     var confirmQuarantine by remember { mutableStateOf(false) }
     var confirmVpn by remember { mutableStateOf(false) }
+    var customPrivateDns by rememberSaveable { mutableStateOf("") }
     var deleteVaultId by remember { mutableStateOf<String?>(null) }
     var appSearch by remember { mutableStateOf("") }
     LaunchedEffect(sharedText) {
@@ -167,8 +174,8 @@ fun KanafGlassHome(
             onDismissRequest = { confirmVpn = false },
             title = { Text(tr("تفعيل مرشح إعلانات DNS", "Enable DNS ad filter")) },
             text = { Text(tr(
-                "يتطلب أندرويد موافقة VPN. لا يعمل كنف مع VPN آخر في الوقت نفسه، وقد يؤثر في الاتصال. الحجب محدود لنطاقات DNS المعروفة، ولا يزيل إعلانات HTTPS أو الإعلانات المدمجة أو DNS الخاص. هل تريد المتابعة؟",
-                "Android requires VPN approval. Only one VPN can run at a time; starting Kanaf may disconnect another VPN and affect connectivity. This only filters known DNS hosts, not HTTPS, embedded ads, private DNS or DoH. Continue?"
+                "يتطلب أندرويد موافقة VPN وضبط Private DNS على «إيقاف» من النظام أولًا. لن يغيّر كنف إعدادات النظام ولا يمكنه العمل مع VPN آخر. الحجب محدود لنطاقات DNS المعروفة فقط. هل تتابع؟",
+                "Android VPN approval and system Private DNS set to Off are required. Kanaf will never change system DNS and cannot share another VPN. Only known DNS ad hosts are filtered. Continue?"
             )) },
             confirmButton = {
                 TextButton(onClick = { confirmVpn = false; onVpnToggle(true) }) {
@@ -312,7 +319,9 @@ fun KanafGlassHome(
                             contentColor = if (dark) Night else Color.White
                         )
                     ) {
-                        Text(if (busy) tr("جارٍ الفحص…", "Scanning…") else tr("اختيار ملف للفحص", "Choose file to scan"), fontWeight = FontWeight.Bold)
+                        Text(if (busy) tr("جارٍ الفحص…", "Scanning…")
+                            else tr("فحص ملف بـ ClamAV وYARA-X", "Scan file with ClamAV + YARA-X"),
+                            fontWeight = FontWeight.Bold)
                     }
                     Spacer(Modifier.height(10.dp))
                     OutlinedButton(
@@ -321,13 +330,29 @@ fun KanafGlassHome(
                             .testTag("device_scan_button"),
                         shape = RoundedCornerShape(18.dp)
                     ) {
-                        Text(tr("فحص الجهاز (بإذنك)", "Scan device (with your permission)"),
+                        Text(tr("فحص ملفات الجهاز والتطبيقات المتاحة", "Scan permitted device files and apps"),
                             fontWeight = FontWeight.Bold)
                     }
                     Text(tr(
-                        "اختر مجلدًا يسمح أندرويد بقراءته. يفحص كنف ملفاته الفرعية ضمن حدود الوقت والحجم، ويراجع APK للتطبيقات الظاهرة فقط. لا يقرأ ملفات التطبيقات الخاصة، ولا يحذف شيئًا.",
-                        "Choose an Android-accessible folder. Kanaf checks its files and subfolders within resource limits and audits visible APKs only. Private app files remain inaccessible; nothing is deleted."
+                        "يستخدم فحص المجلد محركي ClamAV وYARA-X وبصمة SHA-256، ضمن إذنك وحدود الحجم والوقت. يفحص بعض APK الظاهرة فقط، دون ملفات التطبيقات الخاصة أو حذف شيء. قواعد الكشف الحالية اختبارية، وليست قاعدة فيروسات شاملة.",
+                        "Scoped folder scan uses ClamAV, YARA-X and SHA-256 within your permission and resource limits; only some visible APKs can be audited. Nothing is deleted. Detection rules remain test-only."
                     ), color = secondary, style = MaterialTheme.typography.bodySmall)
+                    Spacer(Modifier.height(8.dp))
+                    Text("ClamAV 1.4.6  •  YARA-X 0.13.0",
+                        color = if (dark) Aqua else Teal,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold)
+                    OutlinedButton(
+                        onClick = onTestEngines, enabled = !busy,
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                            .testTag("home_native_engines_test")
+                    ) {
+                        Text(tr("اختبار المحركين بعينة EICAR الآمنة", "Self-test engines with harmless EICAR"))
+                    }
+                    if (selfTestStatus.isNotBlank()) {
+                        Text(selfTestStatus, color = secondary,
+                            style = MaterialTheme.typography.bodySmall)
+                    }
                     if (busy) {
                         Spacer(Modifier.height(12.dp))
                         LinearProgressIndicator(Modifier.fillMaxWidth(), color = Aqua)
@@ -369,22 +394,85 @@ fun KanafGlassHome(
                     )
                 }
                 GlassPanel(card, stroke) {
+                    Text(tr("Private DNS للنظام", "Android Private DNS"),
+                        color = ink, style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold)
+                    Text(privateDnsStatus, color = if (dark) Aqua else Teal,
+                        style = MaterialTheme.typography.bodyMedium)
+                    Text(tr(
+                        "الأوضاع التالية اختصارات لإعدادات Android فقط؛ لا يمكن لتطبيق عادي تغيير Private DNS تلقائيًا. مزوّدو DNS يحجبون الإعلانات بحسب سياسة كل مزوّد، وليس بمحرك كنف المحلي.",
+                        "These controls open Android Settings only; ordinary apps cannot change Private DNS automatically. Provider-side filtering depends on each provider's policy, not Kanaf's local engine."
+                    ), color = secondary, style = MaterialTheme.typography.bodySmall)
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        OutlinedButton(onClick = { onChoosePrivateDns(null) },
+                            modifier = Modifier.testTag("dns_system_off")) {
+                            Text(tr("DNS متوقف", "DNS Off"))
+                        }
+                        OutlinedButton(onClick = { onChoosePrivateDns(null) },
+                            modifier = Modifier.testTag("dns_system_auto")) {
+                            Text(tr("DNS تلقائي", "DNS Auto"))
+                        }
+                    }
+                    for (host in listOf(
+                        "dns.adguard.com", "dns.adguard-dns.com", "family.adguard-dns.com"
+                    )) {
+                        OutlinedButton(onClick = { onChoosePrivateDns(host) },
+                            modifier = Modifier.fillMaxWidth()) {
+                            Text(host, maxLines = 2)
+                        }
+                    }
+                    OutlinedTextField(
+                        value = customPrivateDns,
+                        onValueChange = { customPrivateDns = it.take(253) },
+                        modifier = Modifier.fillMaxWidth().testTag("dns_custom_provider"),
+                        label = { Text(tr("مزود DNS خاص", "Custom DNS provider")) },
+                        singleLine = true
+                    )
+                    OutlinedButton(onClick = { onChoosePrivateDns(customPrivateDns.trim()) },
+                        enabled = customPrivateDns.isNotBlank(),
+                        modifier = Modifier.fillMaxWidth().testTag("dns_add_provider")) {
+                        Text(tr("نسخ المزود وفتح إعدادات Android", "Copy provider and open Android Settings"))
+                    }
+                    TextButton(onClick = onOpenPrivateDnsSettings,
+                        modifier = Modifier.fillMaxWidth().testTag("open_android_private_dns")) {
+                        Text(tr("فتح إعدادات DNS في الهاتف", "Open phone DNS settings"))
+                    }
+                    Text(tr(
+                        "للوصول السريع: أضف مربع Kanaf DNS من تحرير لوحة الإعدادات السريعة. إذا كان Private DNS تلقائيًا أو بمزوّد، فلن يشغل كنف VPN المحلي.",
+                        "Add the Kanaf DNS tile from Android Quick Settings edit. With Private DNS Automatic or a provider configured, Kanaf's local VPN stays disabled."
+                    ), color = secondary, style = MaterialTheme.typography.bodySmall)
+                    if (privateDnsActionStatus.isNotBlank()) {
+                        Text(privateDnsActionStatus, color = secondary,
+                            style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+                GlassPanel(card, stroke) {
                     Text(tr("كاشف الإعلانات ومرشح DNS", "Ad and tracker DNS filter"),
                         color = ink, style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold)
                     Text(tr(
-                        "يحجب مجموعة محدودة من نطاقات الإعلانات والتتبع المعروفة عند تفعيل VPN المحلي. لا يقرأ محتوى الرسائل أو يحذف ملفات، ولا يعمل بالتزامن مع VPN آخر. بعض الإعلانات وDNS المشفر لا يشملها الحجب.",
-                        "Opt-in local VPN blocks a small curated set of DNS ad/tracker hosts. It does not read messages or delete files. It cannot run alongside another VPN, and encrypted DNS or embedded ads may bypass it."
+                        "مرشح VPN اختياري وتجريبي. لا يعمل إلا إذا كان Private DNS في النظام «متوقفًا»؛ ويظل النظام صاحب الأولوية حتى لا ينقطع الاتصال. لا يتداخل مع الرسائل أو يحذف ملفات.",
+                        "Experimental opt-in DNS VPN works only while Android Private DNS is Off, avoiding conflicts that could break internet access. It never reads messages or deletes files."
                     ), color = secondary, style = MaterialTheme.typography.bodySmall)
                     Spacer(Modifier.height(8.dp))
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         Text(tr("طلب تفعيل حجب DNS", "Request DNS filtering"),
                             modifier = Modifier.weight(1f), color = ink)
                         Switch(checked = vpnRequested,
+                            enabled = vpnRequested || privateDnsCompatible,
                             onCheckedChange = { enabled ->
                                 if (enabled) confirmVpn = true else onVpnToggle(false)
                             },
                             modifier = Modifier.testTag("dns_filter_switch"))
+                    }
+                    if (!privateDnsCompatible && !vpnRequested) {
+                        Text(tr(
+                            "VPN المحلي متوقف لحماية الاتصال: اختر DNS متوقف من إعدادات الهاتف إن أردت استخدامه.",
+                            "Local VPN is disabled to protect connectivity. To use it, first turn Private DNS Off in Android Settings."
+                        ), color = secondary, style = MaterialTheme.typography.bodySmall)
                     }
                     OutlinedButton(onClick = onVpnRefresh, modifier = Modifier.fillMaxWidth()) {
                         Text(tr("التحقق من حالة المرشح", "Refresh filter status"))
