@@ -29,6 +29,7 @@ import com.kanaf.alrasby.engine.DexHeaderInspector
 import com.kanaf.alrasby.engine.ApkStructureInspector
 import com.kanaf.alrasby.engine.ZipInspector
 import com.kanaf.alrasby.engine.LinkInspector
+import com.kanaf.alrasby.engine.EncryptedVault
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -61,6 +62,62 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
     var status by remember { mutableStateOf("اختر ملفًا لفحص بصمته محليًا") }
     var busy by remember { mutableStateOf(false) }
     var selfTestStatus by remember { mutableStateOf("") }
+    var hasScanReport by remember { mutableStateOf(false) }
+    var vaultStatus by remember { mutableStateOf("") }
+    var pendingRestoreId by rememberSaveable { mutableStateOf<String?>(null) }
+    val vault = remember { EncryptedVault() }
+    val vaultEntries = remember { mutableStateListOf<EncryptedVault.Entry>().also {
+        it.addAll(runCatching { vault.list(activity) }.getOrDefault(emptyList()))
+    } }
+    fun reloadVault() {
+        vaultEntries.clear()
+        vaultEntries.addAll(vault.list(activity))
+    }
+    val arabic = java.util.Locale.getDefault().language == "ar"
+    fun localized(ar: String, en: String) = if (arabic) ar else en
+    val vaultPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null && !busy) {
+            busy = true
+            scope.launch {
+                val result = withContext(Dispatchers.IO) {
+                    runCatching { vault.store(activity, uri) }
+                }
+                vaultStatus = if (result.isSuccess) {
+                    reloadVault()
+                    localized("حُفظت نسخة مشفرة داخل كنف. لم يُحذف الملف الأصلي.",
+                        "Encrypted copy saved in Kanaf. The source file was not deleted.")
+                } else {
+                    localized("تعذر حفظ النسخة المشفرة: ", "Encrypted copy failed: ") +
+                        result.exceptionOrNull()?.javaClass?.simpleName
+                }
+                busy = false
+            }
+        }
+    }
+    val restorePicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/octet-stream")
+    ) { uri ->
+        val id = pendingRestoreId
+        pendingRestoreId = null
+        if (uri != null && id != null && !busy) {
+            busy = true
+            scope.launch {
+                val result = withContext(Dispatchers.IO) {
+                    runCatching { vault.restore(activity, id, uri) }
+                }
+                vaultStatus = if (result.isSuccess) {
+                    localized("اكتملت الاستعادة إلى المستند الذي اخترته. النسخة المشفرة ما زالت محفوظة.",
+                        "Restored to your chosen document. The encrypted copy remains in the vault.")
+                } else {
+                    localized(
+                        "فشلت الاستعادة. قد يكون المستند الجديد غير مكتمل؛ احذفه قبل المحاولة مجددًا: ",
+                        "Restore failed. The destination may contain partial data; delete it before retrying: "
+                    ) + result.exceptionOrNull()?.javaClass?.simpleName
+                }
+                busy = false
+            }
+        }
+    }
     val scanHistory = remember { mutableStateListOf<String>() }
     var keepSessionHistory by rememberSaveable { mutableStateOf(true) }
     val signatures = remember {
@@ -69,6 +126,7 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
             busy = true
+            hasScanReport = false
             status = "جارٍ الفحص..."
             scope.launch {
                 val completed = withContext(Dispatchers.IO) {
@@ -198,6 +256,7 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
                     }
                 }
                 status = completed
+                hasScanReport = true
                 // Only a bounded, non-persistent summary; never retain file names or contents.
                 com.kanaf.alrasby.engine.SessionHistoryPolicy.record(scanHistory, completed, keepSessionHistory)
                 busy = false
@@ -208,6 +267,46 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
         busy = busy,
         sharedText = sharedText,
         scanHistory = scanHistory,
+        hasScanReport = hasScanReport,
+        onShareReport = {
+            if (hasScanReport && !busy) runCatching {
+                val share = Intent(Intent.ACTION_SEND).apply {
+                    type = "text/plain"
+                    putExtra(Intent.EXTRA_TEXT, status.take(15_000))
+                }
+                activity.startActivity(Intent.createChooser(
+                    share, localized("مشاركة تقرير الفحص", "Share scan report")
+                ))
+            }.onFailure {
+                vaultStatus = localized("تعذر فتح واجهة المشاركة", "Sharing is unavailable")
+            }
+        },
+        vaultItems = vaultEntries,
+        vaultStatus = vaultStatus,
+        onAddToVault = { if (!busy) vaultPicker.launch(arrayOf("*/*")) },
+        onRestoreVault = { id ->
+            if (!busy) {
+                pendingRestoreId = id
+                restorePicker.launch("Kanaf-Restored-${id.take(8)}.bin")
+            }
+        },
+        onDeleteVault = { id ->
+            if (!busy) {
+                busy = true
+                scope.launch {
+                    val removed = withContext(Dispatchers.IO) {
+                        runCatching { vault.delete(activity, id) }.getOrDefault(false)
+                    }
+                    reloadVault()
+                    vaultStatus = if (removed) localized(
+                        "حُذفت النسخة المشفرة من خزنة كنف فقط.",
+                        "The encrypted copy was deleted from Kanaf's vault only."
+                    ) else localized("لم تُحذف النسخة؛ تحقق من التخزين",
+                        "Vault copy could not be removed")
+                    busy = false
+                }
+            }
+        },
         keepSessionHistory = keepSessionHistory,
         onSessionHistoryChanged = { enabled ->
             keepSessionHistory = enabled
