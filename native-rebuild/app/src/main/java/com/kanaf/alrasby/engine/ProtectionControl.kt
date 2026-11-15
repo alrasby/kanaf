@@ -42,8 +42,16 @@ object ProtectionControl {
             it.uri == tree && it.isReadPermission
         }) { "Tree read permission was not persisted" }
         val previous = permittedTree(context)
-        prefs(context).edit().putString(TREE, tree.toString()).putBoolean(PERIODIC, true).apply()
-        schedule(context)
+        val previouslyEnabled = periodicEnabled(context)
+        prefs(context).edit().putString(TREE, tree.toString()).putBoolean(PERIODIC, true).commit()
+        try {
+            schedule(context)
+        } catch (failure: Exception) {
+            prefs(context).edit().putBoolean(PERIODIC, previouslyEnabled)
+                .apply { if (previous == null) remove(TREE) else putString(TREE, previous.toString()) }
+                .commit()
+            throw failure
+        }
         if (previous != null && previous != tree) {
             runCatching { context.contentResolver.releasePersistableUriPermission(
                 previous, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION) }
@@ -59,9 +67,11 @@ object ProtectionControl {
     }
 
     fun disableTreeChecks(context: Context) {
-        WorkManager.getInstance(context).cancelUniqueWork(SCHEDULE)
         val previous = permittedTree(context)
-        prefs(context).edit().putBoolean(PERIODIC, false).remove(TREE).apply()
+        // Opt-out must be durable BEFORE cancellation; a queued worker checks
+        // this flag even if WorkManager cancellation is delayed.
+        prefs(context).edit().putBoolean(PERIODIC, false).remove(TREE).commit()
+        runCatching { WorkManager.getInstance(context).cancelUniqueWork(SCHEDULE) }
         if (previous != null) runCatching {
             context.contentResolver.releasePersistableUriPermission(
                 previous, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
