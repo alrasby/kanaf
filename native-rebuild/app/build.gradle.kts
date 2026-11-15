@@ -28,6 +28,12 @@ android {
             "Invalid Base64 public-key configuration"
         }
         buildConfigField("String", "KANAF_SIGNATURE_PUBLIC_KEY_BASE64", "\"$publicKey\"")
+        val modelKey = providers.gradleProperty("kanafModelPublicKeyBase64")
+            .orNull.orEmpty()
+        require(modelKey.matches(Regex("[A-Za-z0-9+/=]*"))) {
+            "Invalid machine-learning signing public key"
+        }
+        buildConfigField("String", "KANAF_MODEL_PUBLIC_KEY_BASE64", "\"$modelKey\"")
         // ARM64-only packaging for the experimental runtime CI. Normal APKs unchanged.
         if (providers.gradleProperty("kanafArm64Runtime").orNull == "true") {
             ndk { abiFilters += "arm64-v8a" }
