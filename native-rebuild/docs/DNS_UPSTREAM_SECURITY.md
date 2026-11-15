@@ -1,6 +1,7 @@
 # Kanaf DNS — current network/security boundary
 
-The Kanaf local DNS-only VPN routes only intercepted IPv4 UDP DNS packets.
+The Kanaf local DNS-only VPN routes intercepted IPv4 and IPv6 UDP DNS packets
+sent to the VPN's explicitly advertised local resolver IP addresses.
 It filters known ad/tracker hostnames locally and forwards allowed DNS wire
 queries over authenticated HTTPS POST (RFC 8484) to the *single* selected
 AdGuard DNS provider. Android `Network.openConnection(https://...)` binds the
@@ -33,7 +34,8 @@ Private DNS normally. Internet access still depends on the chosen server and
 underlying network; test on physical Samsung phones before release.
 
 Limitations: other VPNs cannot coexist, HTTPS/DoH from individual apps
-is not intercepted, IPv6 DNS can bypass the IPv4-only route, and same-domain
+is not intercepted, DNS requests that do not use the VPN's advertised IPv4/IPv6
+DNS servers may still bypass it, and same-domain
 or first-party advertising is outside the blocklist. This is not global
 system-wide ad blocking and does not decrypt HTTPS.
 
@@ -50,8 +52,9 @@ system-wide ad blocking and does not decrypt HTTPS.
   timestamps, or browsing history. The counters disappear when the VPN stops.
 - The on-demand diagnostic checks whether the selected encrypted upstream
   answers a DNS-over-HTTPS probe and whether any underlying network advertises
-  an IPv6 DNS server. IPv6 DNS may bypass this IPv4-only VPN, and app-owned
-  encrypted DNS may also bypass it. A negative IPv6 observation **does not**
+  an IPv6 DNS server. Kanaf now handles IPv6/UDP DNS traffic explicitly sent
+  to its local IPv6 resolver; app-owned encrypted DNS and independently routed
+  queries may still bypass it. A negative IPv6 observation **does not**
   certify leak prevention. This is a coverage assessment, not a device-wide
   DNS leak detector.
 - Disabling Kanaf DNS uses an explicit STOP action, immediately closes the
@@ -65,3 +68,22 @@ system-wide ad blocking and does not decrypt HTTPS.
   consent, disconnect while preflight is pending, device screen-off, and
   Android Always-on VPN settings. Emulator/packet unit tests do not replace
   these checks.
+
+## IPv6 DNS and state-transition regression gates
+
+- The interface advertises a pair of unique ULA IPv6 resolver addresses
+  (`fd11:beef:cafe::1/128` interface, `fd11:beef:cafe::2/128` DNS).
+  Only the /128 DNS destination is routed through Kanaf; no IPv6 default
+  route is installed. No app data or general IPv6 traffic is intercepted.
+- DNS IPv6 UDP packets require a valid pseudo-header checksum. Extension
+  headers, fragments, invalid lengths and malformed responses are rejected.
+  Unit tests cover IPv6 filtering, unmodified upstream responses, malformed
+  packets, and counters, while the old IPv4 tests remain unchanged.
+- Provider-change result updates and disconnect-completion callbacks use
+  operation tokens so that a late callback cannot resurrect UI state after
+  the user stops Kanaf. Switches are temporarily disabled only while a
+  change or disconnect is pending. Session counters refresh every two seconds
+  only while the DNS page is visible.
+- Android can retain a saved VPN configuration after a successful
+  disconnection. This is not equivalent to a connected VPN. The application
+  never attempts to remove Android's saved VPN profile silently.

@@ -13,6 +13,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -96,6 +97,7 @@ fun KanafGlassHome(
     selectedDnsProvider: String,
     onSelectDnsProvider: (String) -> Unit,
     dnsSessionStats: String,
+    dnsBusy: Boolean,
     dnsCoverageStatus: String,
     onRefreshDnsStats: () -> Unit,
     onCheckDnsCoverage: () -> Unit,
@@ -127,6 +129,15 @@ fun KanafGlassHome(
     }
     val scrollState = rememberScrollState()
     LaunchedEffect(page) { scrollState.scrollTo(0) }
+    // Refresh only while the DNS screen is visible, with no domain-history storage.
+    LaunchedEffect(page, vpnRequested) {
+        if (page == 9 && vpnRequested) {
+            while (true) {
+                onRefreshDnsStats()
+                delay(2000)
+            }
+        }
+    }
     val arabic = uiLanguage.isArabic()
     fun tr(ar: String, en: String) = if (arabic) ar else en
     if (confirmQuarantine) {
@@ -435,7 +446,7 @@ fun KanafGlassHome(
                             }
                             Switch(
                                 checked = vpnRequested,
-                                enabled = vpnRequested || privateDnsCompatible,
+                                enabled = !dnsBusy && (vpnRequested || privateDnsCompatible),
                                 onCheckedChange = { enabled ->
                                     if (enabled) confirmVpn = true else onVpnToggle(false)
                                 },
@@ -477,7 +488,7 @@ fun KanafGlassHome(
                         )) {
                             val chosen = selectedDnsProvider == host
                             val providerActive = chosen && vpnRequested
-                            val canToggle = providerActive || privateDnsCompatible
+                            val canToggle = !dnsBusy && (providerActive || privateDnsCompatible)
                             val subtitle = when (host) {
                                 "dns.adguard.com" ->
                                     tr("اسم قديم لنفس خادم AdGuard القياسي",
@@ -539,8 +550,8 @@ fun KanafGlassHome(
                             color = ink, style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold)
                         Text(tr(
-                            "عدادات محلية لهذه الجلسة فقط، بلا حفظ للنطاقات. فحص IPv6 يكشف احتمال تجاوز المرشح، ولا يثبت منع كل تسرب DNS.",
-                            "Local session-only counters without domain history. IPv6 checks identify potential bypass, not proof of leak prevention."
+                            "عدادات محلية دون سجل نطاقات. يدعم كنف طلبات DNS عبر IPv4 وIPv6 الموجهة إلى خادمه، لكن فحص الاتصال لا يثبت منع كل التجاوزات.",
+                            "Session-only counters without domain history. Kanaf handles IPv4 and IPv6 queries to its DNS servers, but this check cannot prove leak prevention."
                         ), color = secondary, style = MaterialTheme.typography.bodySmall)
                         Text(dnsSessionStats, color = ink,
                             style = MaterialTheme.typography.bodyMedium,

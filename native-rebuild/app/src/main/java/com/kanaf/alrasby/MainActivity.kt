@@ -357,6 +357,8 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
     var dnsQuickTileStatus by remember { mutableStateOf(KanafMessage.EMPTY) }
     var dnsCoverageStatus by remember { mutableStateOf(KanafMessage.EMPTY) }
     var dnsCoverageBusy by remember { mutableStateOf(false) }
+    var dnsSwitching by remember { mutableStateOf(false) }
+    var dnsStopping by remember { mutableStateOf(false) }
     var dnsSessionStats by remember {
         mutableStateOf(KanafMessage("العدادات متاحة أثناء تشغيل المرشح فقط.",
             "Counters are available only during an active DNS session."))
@@ -394,6 +396,10 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
             if (event == Lifecycle.Event.ON_RESUME) {
                 systemDns = PrivateDnsCompatibility.read(activity)
                 vpnRequested = KanafDnsVpnService.isRunning()
+                if (!vpnRequested) {
+                    dnsSwitching = false
+                    dnsStopping = false
+                }
                 selectedDnsProvider = KanafDnsVpnService.activeProvider()
                     ?: DnsProviderStore.selected(activity)
                 refreshDnsCounters()
@@ -1155,13 +1161,20 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
         privateDnsActionStatus = privateDnsActionStatus.displayed(uiLanguage),
         selectedDnsProvider = selectedDnsProvider,
         onSelectDnsProvider = { provider ->
-            if (KanafDnsVpnService.isRunning()) {
+            if (dnsStopping) {
+                vpnStatus = KanafMessage(
+                    "يجري فصل اتصال DNS، انتظر تأكيد الإيقاف.",
+                    "DNS is disconnecting; wait for the stop to complete."
+                )
+            } else if (KanafDnsVpnService.isRunning()) {
                 if (KanafDnsVpnService.isSwitching()) {
                     vpnStatus = KanafMessage(
                         "يجري التحقق من المزوّد الجديد، حاول بعد اكتمال التبديل.",
                         "The new DNS provider is being verified; finish this switch first."
                     )
                 } else if (KanafDnsVpnService.activeProvider() != provider) {
+                    val operation = dnsOperation.incrementAndGet()
+                    dnsSwitching = true
                     vpnStatus = KanafMessage(
                         "جارٍ التحقق من المزوّد المشفّر الجديد مع إبقاء الاتصال الحالي.",
                         "Verifying the new encrypted provider while keeping DNS connected."
@@ -1171,8 +1184,10 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
                         .putExtra(KanafDnsVpnService.EXTRA_PROVIDER, provider)
                     runCatching { activity.startService(change) }.onSuccess {
                         scope.launch {
+                            try {
                             repeat(52) {
                                 delay(250)
+                                if (dnsOperation.get() != operation) return@launch
                                 if (KanafDnsVpnService.activeProvider() == provider) {
                                     selectedDnsProvider = DnsProviderStore.selected(activity)
                                     vpnStatus = KanafMessage(
@@ -1203,8 +1218,12 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
                                 "لم يتأكد التبديل. تحقق من الاتصال وأعد المحاولة.",
                                 "Provider change not confirmed. Check the connection and retry."
                             )
+                            } finally {
+                                if (dnsOperation.get() == operation) dnsSwitching = false
+                            }
                         }
                     }.onFailure {
+                        dnsSwitching = false
                         vpnStatus = KanafMessage(
                             "تعذر إرسال طلب تغيير المزوّد.",
                             "Could not request a DNS provider change."
@@ -1227,6 +1246,7 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
             }
         },
         dnsSessionStats = dnsSessionStats.displayed(uiLanguage),
+        dnsBusy = dnsStopping || dnsSwitching || KanafDnsVpnService.isStarting(),
         dnsCoverageStatus = dnsCoverageStatus.displayed(uiLanguage),
         onRefreshDnsStats = { refreshDnsCounters() },
         onCheckDnsCoverage = {
@@ -1248,11 +1268,11 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
                         val activeAr = if (report.filteringActive) "نشط" else "متوقف"
                         val activeEn = if (report.filteringActive) "active" else "stopped"
                         val ipv6Ar = if (report.ipv6DnsConfigured)
-                            "عُثر على DNS IPv6 في الشبكة؛ قد يتجاوز مرشح IPv4."
-                        else "لم يظهر خادم DNS IPv6 في الشبكات المتاحة، لكن عدم التسرب غير مضمون."
+                            "الشبكة تستخدم DNS IPv6. كنف يدعم استعلامات DNS الواردة إلى عنوانه IPv6، لكن بعض التطبيقات قد تتجاوزه."
+                        else "لم يُرصد خادم DNS IPv6 خارجي؛ لا يمكن ضمان عدم التجاوز."
                         val ipv6En = if (report.ipv6DnsConfigured)
-                            "IPv6 DNS is configured; it may bypass the IPv4-only filter."
-                        else "No IPv6 DNS server was visible; leak prevention is not proven."
+                            "Underlying IPv6 DNS exists. Kanaf handles queries to its own IPv6 DNS address, but apps may bypass it."
+                        else "No external IPv6 DNS was visible; full leak prevention is not proven."
                         KanafMessage(
                             "الخادم المشفر: " + reachableAr + " · مرشح كنف: " + activeAr +
                                 ". " + ipv6Ar + " لا يشمل هذا الفحص DNS المشفّر داخل التطبيقات.",
@@ -1353,7 +1373,9 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
         },
         onVpnToggle = { enabled ->
             if (!enabled) {
-                dnsOperation.incrementAndGet()
+                val operation = dnsOperation.incrementAndGet()
+                dnsSwitching = false
+                dnsStopping = true
                 val stop = Intent(activity, KanafDnsVpnService::class.java)
                     .setAction(KanafDnsVpnService.ACTION_STOP)
                 runCatching { activity.startService(stop) }
@@ -1366,8 +1388,10 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
                 scope.launch {
                     repeat(24) {
                         delay(250)
+                        if (dnsOperation.get() != operation) return@launch
                         if (!KanafDnsVpnService.isRunning() &&
                             !KanafDnsVpnService.isStarting()) {
+                            dnsStopping = false
                             vpnRequested = false
                             refreshDnsCounters()
                             vpnStatus = KanafMessage(
@@ -1377,12 +1401,19 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
                             return@launch
                         }
                     }
+                    if (dnsOperation.get() != operation) return@launch
+                    dnsStopping = false
                     vpnRequested = KanafDnsVpnService.isRunning()
                     vpnStatus = KanafMessage(
                         "تعذر تأكيد فصل VPN. افتح إعدادات VPN في أندرويد للتحقق.",
                         "VPN disconnection could not be confirmed. Check Android VPN settings."
                     )
                 }
+            } else if (dnsStopping) {
+                vpnStatus = KanafMessage(
+                    "جارٍ إيقاف VPN، انتظر اكتمال الفصل قبل إعادة التشغيل.",
+                    "VPN is disconnecting; wait for confirmation before restarting."
+                )
             } else {
                 systemDns = PrivateDnsCompatibility.read(activity)
                 if (PrivateDnsToggle.decision(systemDns) ==

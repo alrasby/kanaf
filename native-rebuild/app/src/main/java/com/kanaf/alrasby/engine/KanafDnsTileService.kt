@@ -22,7 +22,10 @@ class KanafDnsTileService : TileService() {
         qsTile?.apply {
             label = "Kanaf DNS"
             if (Build.VERSION.SDK_INT >= 29) {
-                subtitle = when (snapshot.mode) {
+                subtitle = if (running) when (KanafDnsVpnService.activeProvider()) {
+                    DnsProviderStore.FAMILY -> "Family DNS active"
+                    else -> "Encrypted DNS active"
+                } else when (snapshot.mode) {
                     PrivateDnsCompatibility.Mode.OFF ->
                         if (running) "Filtering" else "DNS off"
                     PrivateDnsCompatibility.Mode.AUTOMATIC -> "DNS auto"
