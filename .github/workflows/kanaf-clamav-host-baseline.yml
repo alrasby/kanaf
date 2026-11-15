@@ -1,0 +1,88 @@
+name: Kanaf ClamAV host signature control
+# Isolated Linux x86_64 reference: NOT proof of Android ARM64 operation.
+on:
+  push:
+    branches: [rebuild/kanaf-native-v1]
+    paths:
+      - '.github/workflows/kanaf-clamav-host-baseline.yml'
+      - 'native-rebuild/app/src/main/assets/kanaf_test.ndb'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  linux-clamav:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install ClamAV library and CLI
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends clamav libclamav-dev
+          clamscan --version
+      - name: Verify pinned test rule and generate harmless EICAR/benign fixtures
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          from hashlib import sha256
+          rule = Path("native-rebuild/app/src/main/assets/kanaf_test.ndb")
+          assert sha256(rule.read_bytes()).hexdigest() == "f7a0ea8212c9251375ccf756743c34f59732e4edb29ee9cf58e48397c53c93be"
+          fields = rule.read_text("ascii").strip().split(":")
+          assert len(fields) == 4 and fields[:3] == ["Kanaf.EICAR.Test", "0", "*"]
+          sample = b"X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*"
+          assert len(sample) == 68 and bytes.fromhex(fields[3]) == sample
+          Path("/tmp/kanaf-eicar.bin").write_bytes(sample)
+          Path("/tmp/kanaf-benign.bin").write_bytes(b"kanaf-linux-benign-control")
+          PY
+      - name: Confirm real ClamAV CLI EICAR detection
+        run: |
+          set -euo pipefail
+          db="$GITHUB_WORKSPACE/native-rebuild/app/src/main/assets/kanaf_test.ndb"
+          status=0
+          clamscan -d "$db" --no-summary /tmp/kanaf-eicar.bin || status=$?
+          test "$status" -eq 1 || { echo "::error::CLI missed EICAR (status=$status)"; exit 1; }
+          clamscan -d "$db" --no-summary /tmp/kanaf-benign.bin
+      - name: Confirm direct libclamav API against the same database
+        run: |
+          set -euo pipefail
+          cat > /tmp/kanaf-clam-host.cpp <<'CPP'
+          #include <clamav.h>
+          #include <cstdio>
+          #include <string>
+          int main(int argc, char** argv) {
+              if (argc != 4) return 2;
+              const int start = cl_init(CL_INIT_DEFAULT);
+              if (start != CL_SUCCESS) return 1;
+              cl_engine* engine = cl_engine_new();
+              if (!engine) return 1;
+              unsigned int count = 0;
+              const int load = cl_load(argv[1], engine, &count, 0);
+              if (load || count != 1) {
+                  std::fprintf(stderr, "load=%d count=%u\n", load, count);
+                  cl_engine_free(engine);
+                  return 1;
+              }
+              if (cl_engine_compile(engine) != CL_SUCCESS) {
+                  cl_engine_free(engine);
+                  return 1;
+              }
+              cl_scan_options options{};
+              const char* name = nullptr;
+              unsigned long scanned = 0;
+              const int positive = cl_scanfile(argv[2], &name, &scanned, engine, &options);
+              const bool correct = name && (std::string(name) == "Kanaf.EICAR.Test" ||
+                  std::string(name) == "Kanaf.EICAR.Test.UNOFFICIAL");
+              std::fprintf(stderr, "direct API EICAR code=%d exactRule=%d\n", positive, correct);
+              name = nullptr;
+              scanned = 0;
+              const int benign = cl_scanfile(argv[3], &name, &scanned, engine, &options);
+              std::fprintf(stderr, "direct API benign code=%d\n", benign);
+              cl_engine_free(engine);
+              return (positive == CL_VIRUS && correct && benign == CL_CLEAN && !name) ? 0 : 1;
+          }
+          CPP
+          g++ -std=c++17 -Wall -Wextra -Werror -pedantic /tmp/kanaf-clam-host.cpp -lclamav -o /tmp/kanaf-clam-host
+          /tmp/kanaf-clam-host native-rebuild/app/src/main/assets/kanaf_test.ndb \
+            /tmp/kanaf-eicar.bin /tmp/kanaf-benign.bin
