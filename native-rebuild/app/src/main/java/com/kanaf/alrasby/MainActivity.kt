@@ -70,6 +70,9 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun KanafScreen(activity: Activity, sharedText: String?) {
     val scope = rememberCoroutineScope()
+    val uiPreferences = remember(activity) { KanafUiPreferences(activity) }
+    var uiLanguage by remember { mutableStateOf(uiPreferences.language()) }
+    var hiddenSections by remember { mutableStateOf(uiPreferences.hiddenSections()) }
     var status by remember { mutableStateOf("اختر ملفًا لفحص بصمته محليًا") }
     var busy by remember { mutableStateOf(false) }
     var selfTestStatus by remember { mutableStateOf("") }
@@ -113,7 +116,7 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
         vaultEntries.clear()
         vaultEntries.addAll(vault.list(activity))
     }
-    val arabic = java.util.Locale.getDefault().language == "ar"
+    val arabic = uiLanguage.isArabic()
     fun localized(ar: String, en: String) = if (arabic) ar else en
     val quarantinePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null && !busy) {
@@ -354,6 +357,28 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
     KanafGlassHome(
         busy = busy,
         sharedText = sharedText,
+        uiLanguage = uiLanguage,
+        hiddenSections = hiddenSections,
+        onLanguageChange = { selected ->
+            if (selected != uiLanguage) {
+                runCatching { uiPreferences.setLanguage(selected) }.onSuccess {
+                    uiLanguage = selected
+                }.onFailure {
+                    android.widget.Toast.makeText(activity,
+                        localized("تعذر حفظ اللغة", "Could not save language preference"),
+                        android.widget.Toast.LENGTH_SHORT).show()
+                }
+            }
+        },
+        onSectionVisibilityChanged = { section, visible ->
+            runCatching { uiPreferences.setSectionVisible(section, visible) }.onSuccess {
+                hiddenSections = uiPreferences.hiddenSections()
+            }.onFailure {
+                android.widget.Toast.makeText(activity,
+                    localized("تعذر حفظ إعداد القسم", "Could not save navigation preference"),
+                    android.widget.Toast.LENGTH_SHORT).show()
+            }
+        },
         scanHistory = scanHistory,
         watchNewApps = watchNewApps,
         periodicChecks = periodicChecks,
