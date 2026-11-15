@@ -1,0 +1,80 @@
+name: Kanaf true ARM64 Android emulator (Apple Silicon)
+# Targeted real ARM64 host emulation; no x86-to-ARM instruction translation.
+on:
+  push:
+    branches: [rebuild/kanaf-native-v1]
+    paths:
+      - '.github/workflows/kanaf-arm64-native-macos.yml'
+  workflow_dispatch:
+concurrency:
+  group: kanaf-native-arm64-macos
+  cancel-in-progress: true
+permissions:
+  contents: read
+  actions: read
+jobs:
+  arm64-native:
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Download pinned, verified ARM64 native engines
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          CLAM_RUN=43582067199
+          YARA_RUN=43576728366
+          for run in "$CLAM_RUN" "$YARA_RUN"; do
+            test "$(gh run view "$run" --repo "$GITHUB_REPOSITORY" --json conclusion --jq .conclusion)" = success
+          done
+          dest=native-rebuild/app/src/main/jniLibs/arm64-v8a
+          mkdir -p "$dest" /tmp/kanaf-clam /tmp/kanaf-yara
+          gh run download "$CLAM_RUN" --repo "$GITHUB_REPOSITORY" -n kanaf-clamav-arm64-diagnostics -D /tmp/kanaf-clam
+          gh run download "$YARA_RUN" --repo "$GITHUB_REPOSITORY" -n kanaf-yarax-arm64-diagnostics -D /tmp/kanaf-yara
+          cp /tmp/kanaf-clam/arm64-output/libclamav.so "$dest/"
+          cp /tmp/kanaf-clam/arm64-output/libclammspack.so "$dest/"
+          cp /tmp/kanaf-yara/libyara_x_capi.so "$dest/"
+          for so in "$dest"/*.so; do
+            python3 native-rebuild/tools/verify_arm64_elf.py "$so"
+          done
+      - name: Test real ARM64 Android emulator on native Apple Silicon host
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: arm64-v8a
+          profile: pixel_6
+          ram-size: 2048M
+          heap-size: 256M
+          ndk: 27.2.12479018
+          cmake: 3.22.1
+          emulator-options: -no-snapshot-load -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
+          emulator-boot-timeout: 900
+          disable-animations: true
+          working-directory: native-rebuild
+          script: |
+            abi="$(adb shell getprop ro.product.cpu.abi | tr -d '\r')"
+            echo "Native Android emulator primary ABI: $abi"
+            if [ "$abi" != "arm64-v8a" ]; then
+              echo "::error::This emulator is not ARM64-native"
+              exit 1
+            fi
+            bash tools/run_arm64_runtime_ci.sh
+      - name: Upload runtime instrumentation reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kanaf-apple-silicon-android-arm64-native-evidence
+          path: |
+            native-rebuild/app/build/reports/androidTests/
+            native-rebuild/app/build/outputs/androidTest-results/
+          if-no-files-found: warn
