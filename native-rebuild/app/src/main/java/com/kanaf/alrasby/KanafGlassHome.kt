@@ -748,8 +748,8 @@ fun KanafGlassHome(
                         Text(tr("حدود الإصدار التجريبي", "Preview limitations"), color = ink,
                             style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                         Text(tr(
-                            "الاختبارات على ملفات يختارها المستخدم فقط، وبحد 16 ميجابايت للمحركين. لا توجد قاعدة تهديدات شاملة أو حماية فورية أو فحص تلقائي للجهاز.",
-                            "User-selected files only, maximum 16 MiB for native scanning. No comprehensive threat database, realtime protection, or automated device-wide scan."
+                            "فحص التطبيقات المثبتة والملفات المشتركة بطلب المستخدم متاح من الرئيسية، لكن المحركين الأصليين يفحصان الملفات حتى 16 ميجابايت وبقواعد اختبارية. لا تتوفر قاعدة فيروسات إنتاجية أو حماية فورية شاملة.",
+                            "On-demand scanning of installed APKs and accessible shared files is available on Home. Native checks are capped at 16 MiB and use test-only rules; no production malware database or full real-time protection."
                         ), color = secondary)
                     }
                 }

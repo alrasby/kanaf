@@ -51,6 +51,12 @@ class KanafUiNavigationTest {
         rule.onNodeWithTag("dns_filter_switch").assertExists()
     }
 
+    @Test fun oneTapScanExplainsFilesAccessWithoutForcingIt() {
+        rule.onNodeWithTag("device_scan_button").performClick()
+        rule.onNodeWithTag("scan_apps_only").assertExists()
+        rule.onNodeWithTag("grant_files_for_auto_scan").assertExists()
+    }
+
     @Test fun advancedScanToolsMovedAwayFromHome() {
         rule.onNodeWithTag("home_native_engines_test").assertDoesNotExist()
         rule.onNodeWithTag("open_scan_tools").performClick()
