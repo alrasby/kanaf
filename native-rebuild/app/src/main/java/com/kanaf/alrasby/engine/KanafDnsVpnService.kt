@@ -11,7 +11,6 @@ import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.net.VpnService
 import android.os.Build
-import android.os.IBinder
 import android.os.ParcelFileDescriptor
 import android.os.SystemClock
 import com.kanaf.alrasby.MainActivity
@@ -54,8 +53,6 @@ class KanafDnsVpnService : VpnService() {
     )
     @Volatile private var cachedDns = emptyList<InetAddress>()
     @Volatile private var dnsFetchedAt = 0L
-
-    override fun onBind(intent: Intent?): IBinder? = super.onBind(intent)
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) {
@@ -115,8 +112,8 @@ class KanafDnsVpnService : VpnService() {
                     threads.execute { handle(packet, output) }
                 }
             }
-        } catch (_: IOException) {
-            // TUN closed by user or Android.
+        } catch (_: Exception) {
+            // TUN closed, executor shut down, or worker scheduling rejected.
         } finally {
             stopSelf()
         }

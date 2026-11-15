@@ -70,7 +70,7 @@ object DnsPacketCodec {
 
     private fun errorResponse(query: ByteArray, code: Int): ByteArray? {
         val end = questionEnd(query) ?: return null
-        if (u8(query[2]) and 0x80 != 0) return null // Never respond to a response.
+        if ((u8(query[2]) and 0x80) != 0) return null // Never respond to a response.
         val out = query.copyOfRange(0, end)
         out[2] = (0x80 or (u8(query[2]) and 0x01)).toByte() // QR + original RD
         out[3] = (0x80 or code).toByte() // RA + RCODE
@@ -89,7 +89,7 @@ object DnsPacketCodec {
             i += 2
         }
         if (i < start + size) sum += (u8(data[i]) shl 8).toLong()
-        while (sum ushr 16 != 0L) sum = (sum and 65535L) + (sum ushr 16)
+        while ((sum ushr 16) != 0L) sum = (sum and 65535L) + (sum ushr 16)
         return sum.inv().toInt() and 65535
     }
 
