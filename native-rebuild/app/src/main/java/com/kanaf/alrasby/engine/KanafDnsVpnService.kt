@@ -41,6 +41,8 @@ class KanafDnsVpnService : VpnService() {
     companion object {
         const val ACTION_START = "com.kanaf.alrasby.DNS_START"
         const val ACTION_STOP = "com.kanaf.alrasby.DNS_STOP"
+        const val ACTION_CHANGE_PROVIDER = "com.kanaf.alrasby.DNS_CHANGE_PROVIDER"
+        const val EXTRA_PROVIDER = "provider_host"
         private const val CHANNEL_ID = "kanaf_dns_ad_filter_v1"
         private const val TUN_IP = "10.111.222.1"
         private const val DNS_IP = "10.111.222.2"
@@ -49,6 +51,15 @@ class KanafDnsVpnService : VpnService() {
         @Volatile private var initializing = false
         fun isRunning(): Boolean = active
         fun isStarting(): Boolean = initializing
+        @Volatile private var switching = false
+        @Volatile private var switchError: String? = null
+        @Volatile private var currentProvider: String? = null
+        @Volatile private var sessionCounters: DnsSessionCounters? = null
+        fun isSwitching(): Boolean = switching
+        fun lastSwitchError(): String? = switchError
+        fun activeProvider(): String? = if (active) currentProvider else null
+        fun sessionStats(): DnsSessionCounters.Snapshot =
+            sessionCounters?.snapshot() ?: DnsSessionCounters.Snapshot(0, 0, 0)
     }
 
     private var tun: ParcelFileDescriptor? = null
@@ -93,11 +104,68 @@ class KanafDnsVpnService : VpnService() {
         // Never run a timed-out resolver call on the only TUN reader thread.
         ThreadPoolExecutor.AbortPolicy()
     )
-    private var providerAtStart = DnsProviderStore.STANDARD
+    @Volatile private var providerAtStart = DnsProviderStore.STANDARD
+    private val counters = DnsSessionCounters()
+    private val switchGeneration = java.util.concurrent.atomic.AtomicLong()
+
+    private fun closeTunnel() {
+        // Close the actual Android VPN interface immediately, not only the UI toggle.
+        active = false
+        initializing = false
+        starting = false
+        switching = false
+        switchGeneration.incrementAndGet()
+        startHandler.removeCallbacksAndMessages(null)
+        val current = tun
+        tun = null
+        try { current?.close() } catch (_: IOException) {}
+        sessionCounters = null
+        currentProvider = null
+        refreshTile()
+    }
+
+    private fun changeProvider(host: String?) {
+        if (!active || switching || host !in DnsProviderStore.choices) {
+            switchError = "Provider unavailable, connection inactive or change already in progress"
+            return
+        }
+        val requested = host ?: return
+        if (requested == providerAtStart) {
+            switchError = null
+            return
+        }
+        switching = true
+        switchError = null
+        val generation = switchGeneration.incrementAndGet()
+        Thread({
+            val ready = runCatching {
+                DnsSecureResolver.isReachable(this, requested)
+            }.getOrDefault(false)
+            startHandler.post {
+                if (generation != switchGeneration.get()) return@post
+                if (active && ready &&
+                    PrivateDnsCompatibility.read(this).allowsLocalVpn &&
+                    DnsProviderStore.choose(this, requested)) {
+                    // Existing VPN stays connected: no unfiltered gap or repeated VPN prompt.
+                    providerAtStart = requested
+                    currentProvider = requested
+                    switchError = null
+                } else {
+                    switchError = "New encrypted DNS provider could not be verified"
+                }
+                switching = false
+            }
+        }, "kanaf-doh-provider-check").start()
+    }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) {
+            closeTunnel()
             stopSelf()
+            return START_NOT_STICKY
+        }
+        if (intent?.action == ACTION_CHANGE_PROVIDER) {
+            changeProvider(intent.getStringExtra(EXTRA_PROVIDER))
             return START_NOT_STICKY
         }
         // Only the explicit, user-approved action can start the DNS VPN and
@@ -160,6 +228,10 @@ class KanafDnsVpnService : VpnService() {
                         ?: throw IllegalStateException("VPN permission revoked")
                     tun = descriptor
                     providerAtStart = selected
+                    currentProvider = selected
+                    sessionCounters = counters
+                    switching = false
+                    switchError = null
                     starting = false
                     initializing = false
                     active = true
@@ -207,7 +279,7 @@ class KanafDnsVpnService : VpnService() {
                     } catch (_: RejectedExecutionException) {
                         // Saturated bounded queue: provide a quick local SERVFAIL
                         // instead of stalling every new TUN packet behind DNS I/O.
-                        DnsFilterCore.reply(packet, DNS_BYTES) { null }?.let { response ->
+                        DnsFilterCore.reply(packet, DNS_BYTES, counters) { null }?.let { response ->
                             sendReply(output, response)
                         }
                     }
@@ -221,7 +293,7 @@ class KanafDnsVpnService : VpnService() {
     }
 
     private fun handle(packet: ByteArray, output: FileOutputStream) {
-        val reply = DnsFilterCore.reply(packet, DNS_BYTES, ::forward) ?: return
+        val reply = DnsFilterCore.reply(packet, DNS_BYTES, counters, ::forward) ?: return
         sendReply(output, reply)
     }
 
@@ -239,12 +311,7 @@ class KanafDnsVpnService : VpnService() {
 
     override fun onDestroy() {
         runCatching { contentResolver.unregisterContentObserver(privateDnsObserver) }
-        starting = false
-        initializing = false
-        startHandler.removeCallbacksAndMessages(null)
-        active = false
-        try { tun?.close() } catch (_: IOException) {}
-        tun = null
+        closeTunnel()
         threads.shutdownNow()
         reader?.interrupt()
         reader = null
