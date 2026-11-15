@@ -20,7 +20,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.kanaf.alrasby.engine.ThreatFeatureVector
-import com.kanaf.alrasby.engine.UnavailableThreatModel
+import com.kanaf.alrasby.engine.VerifiedLinearThreatModel
 import com.kanaf.alrasby.engine.ThreatModel
 import com.kanaf.alrasby.engine.TrustJourney
 import com.kanaf.alrasby.engine.ThreatEvidence
@@ -187,6 +187,7 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
     var signatures by remember {
         mutableStateOf(runCatching { SignatureRepository(activity).load() }.getOrNull())
     }
+    val mlModel: ThreatModel = remember { VerifiedLinearThreatModel.load(activity) }
     val trustedFeed = remember { ProductionFeedInstaller() }
     var feedStatus by remember { mutableStateOf("") }
     val feedPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -294,7 +295,7 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
                                 scanResult, signatures?.size ?: 0, snapshotConflict
                             )
                             val features = ThreatFeatureVector.from(apkEvidence, dexEvidence, zipEvidence)
-                            val modelResult = UnavailableThreatModel.classify(features)
+                            val modelResult = mlModel.classify(features)
                             val nativeDetection = nativeReports.firstNotNullOfOrNull {
                                 (it.verdict as? AntivirusEngine.Verdict.Detected)?.threatName
                             }
@@ -332,7 +333,8 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
                             } else "خطوتك التالية: ${journey.title} — ${journey.nextStep}"
                             val aiNote = when (modelResult) {
                                 is ThreatModel.Prediction.Unavailable -> "التحليل بالذكاء الاصطناعي غير متاح بعد؛ لم يتم تشغيل نموذج مدرّب."
-                                is ThreatModel.Prediction.Scored -> "نتيجة النموذج: ${modelResult.riskProbability}"
+                                is ThreatModel.Prediction.Scored ->
+                                    "درجة ML استشارية: ${modelResult.riskProbability} (نموذج ${modelResult.modelVersion}). ليست كشفًا مؤكدًا لبرمجية خبيثة."
                             }
                             listOf(decisionNote, assessmentNote, consensusNote, nativeNote, aiNote, verdict, apkNote, dexNote, zipNote)
                                 .filter { it.isNotEmpty() }.joinToString("\n")
