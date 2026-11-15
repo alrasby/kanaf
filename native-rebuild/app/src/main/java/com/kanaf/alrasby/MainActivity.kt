@@ -39,6 +39,7 @@ import com.kanaf.alrasby.engine.ProtectionControl
 import com.kanaf.alrasby.engine.ScopedFileCheckWorker
 import com.kanaf.alrasby.engine.SafQuarantine
 import com.kanaf.alrasby.engine.ProductionFeedInstaller
+import com.kanaf.alrasby.engine.InstalledAppAudit
 import com.kanaf.alrasby.engine.InstalledAppInventory
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -103,6 +104,7 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
     var appEntries by remember { mutableStateOf<List<InstalledAppInventory.Entry>>(emptyList()) }
     var appsLoaded by remember { mutableStateOf(false) }
     var appsStatus by remember { mutableStateOf("") }
+    var apkAuditStatus by remember { mutableStateOf("") }
     val vault = remember { EncryptedVault() }
     val vaultEntries = remember { mutableStateListOf<EncryptedVault.Entry>().also {
         it.addAll(runCatching { vault.list(activity) }.getOrDefault(emptyList()))
@@ -427,6 +429,31 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
                     } else {
                         appsStatus = localized("تعذر قراءة قائمة التطبيقات", "Could not list visible applications")
                     }
+                    busy = false
+                }
+            }
+        },
+        apkAuditStatus = apkAuditStatus,
+        onAuditApps = {
+            if (!busy) {
+                busy = true
+                apkAuditStatus = localized("جارٍ فحص ملفات التطبيقات الظاهرة...",
+                    "Auditing visible APK files...")
+                scope.launch {
+                    val attempt = withContext(Dispatchers.IO) {
+                        runCatching { InstalledAppAudit().run(activity) }
+                    }
+                    apkAuditStatus = if (attempt.isSuccess) {
+                        val report = attempt.getOrThrow()
+                        localized("مراجعة APK محدودة (ليست فحصًا شاملًا): ",
+                            "Limited APK review (not whole-device scanning): ") +
+                            "available=${report.candidates}, no-hash-match=${report.hashed}, " +
+                            "matches=${report.matched}, structural-flags=${report.suspiciousStructure}, " +
+                            "incomplete=${report.incomplete}, truncated=${report.truncated}. " +
+                            localized("النتائج غير كافية لإثبات سلامة التطبيقات.",
+                                "These results cannot certify app safety.")
+                    } else localized("تعذر تنفيذ مراجعة APK: ", "APK review failed: ") +
+                        attempt.exceptionOrNull()?.javaClass?.simpleName
                     busy = false
                 }
             }
