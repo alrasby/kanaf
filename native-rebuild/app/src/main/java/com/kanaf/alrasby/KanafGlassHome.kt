@@ -446,7 +446,7 @@ fun KanafGlassHome(
                             }
                             Switch(
                                 checked = vpnRequested,
-                                enabled = !dnsBusy && (vpnRequested || privateDnsCompatible),
+                                enabled = if (vpnRequested) true else !dnsBusy && privateDnsCompatible,
                                 onCheckedChange = { enabled ->
                                     if (enabled) confirmVpn = true else onVpnToggle(false)
                                 },

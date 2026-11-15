@@ -10,6 +10,38 @@ import org.junit.runner.RunWith
 /** Executes the DNS VPN's real, local packet policy on Android without VPN consent. */
 @RunWith(AndroidJUnit4::class)
 class DnsFilterAndroidTest {
+    @Test fun ipv6DnsPacketsAreFilteredWithoutSendingUpstream() {
+        val client = byteArrayOf(
+            0xfd.toByte(), 0x11, 0xbe.toByte(), 0xef.toByte(), 0xca.toByte(),
+            0xfe.toByte(), 0, 0, 0, 0, 0, 0, 0, 0, 0, 1
+        )
+        val server = client.clone().also { it[15] = 2 }
+        val question = ArrayList<Byte>()
+        listOf(0x22, 0x44, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0).forEach {
+            question.add(it.toByte())
+        }
+        for (label in "ads.doubleclick.net".split('.')) {
+            question.add(label.length.toByte())
+            label.toByteArray(Charsets.US_ASCII).forEach { question.add(it) }
+        }
+        listOf(0, 0, 1, 0, 1).forEach { question.add(it.toByte()) }
+        val packet = com.kanaf.alrasby.engine.DnsIpv6PacketCodec.buildUdp(
+            client, server, 54213, 53, question.toByteArray()
+        )!!
+        var forwarded = false
+        val answer = DnsFilterCore.reply(
+            packet, byteArrayOf(10, 111, 222.toByte(), 2), null, server
+        ) {
+            forwarded = true
+            null
+        }!!
+        assertFalse(forwarded)
+        val parsed = com.kanaf.alrasby.engine.DnsIpv6PacketCodec.parseUdp(answer)!!
+        assertEquals(54213, parsed.destinationPort)
+        assertEquals(3, parsed.dns[3].toInt() and 15)
+        assertArrayEquals(client, parsed.destinationIp)
+    }
+
     @Test fun blockedDomainYieldsLocalNxdomainWithNoUpstreamRequest() {
         val query = ArrayList<Byte>()
         listOf(0x12, 0x34, 0x01, 0, 0, 1, 0, 0, 0, 0, 0, 0).forEach {
