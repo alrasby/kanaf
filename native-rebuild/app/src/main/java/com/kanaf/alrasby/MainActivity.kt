@@ -37,6 +37,7 @@ import com.kanaf.alrasby.engine.LinkInspector
 import com.kanaf.alrasby.engine.EncryptedVault
 import com.kanaf.alrasby.engine.ProtectionControl
 import com.kanaf.alrasby.engine.ScopedFileCheckWorker
+import com.kanaf.alrasby.engine.SafQuarantine
 import com.kanaf.alrasby.engine.InstalledAppInventory
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -111,6 +112,30 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
     }
     val arabic = java.util.Locale.getDefault().language == "ar"
     fun localized(ar: String, en: String) = if (arabic) ar else en
+    val quarantinePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null && !busy) {
+            busy = true
+            scope.launch {
+                val result = withContext(Dispatchers.IO) {
+                    runCatching { SafQuarantine(vault).isolateSelectedDocument(activity, uri) }
+                }
+                val outcome = result.getOrNull()
+                vaultStatus = when (outcome) {
+                    is SafQuarantine.Outcome.Moved -> localized(
+                        "تمت إزالة المستند المختار عبر مزوّد أندرويد بعد التحقق من نسخته المشفرة. احتفظ بمفتاح الجهاز لاستعادته.",
+                        "The selected SAF document was deleted by Android's provider after its encrypted copy was verified. Retain your device key for restore.")
+                    is SafQuarantine.Outcome.CopyOnly -> localized(
+                        "لم يُعزل الملف الأصلي؛ بقيت نسخة مشفرة فقط في الخزنة: ",
+                        "Original was NOT isolated; encrypted copy only: ") + outcome.reason
+                    is SafQuarantine.Outcome.Failed -> localized(
+                        "لم ينجح الحفظ أو العزل: ", "Could not save or isolate: ") + outcome.reason
+                    null -> localized("فشلت العملية قبل اكتمالها.", "Quarantine operation failed.")
+                }
+                reloadVault()
+                busy = false
+            }
+        }
+    }
     val vaultPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null && !busy) {
             busy = true
@@ -387,6 +412,7 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
             }
         },
         onAddToVault = { if (!busy) vaultPicker.launch(arrayOf("*/*")) },
+        onQuarantineDocument = { if (!busy) quarantinePicker.launch(arrayOf("*/*")) },
         onRestoreVault = { id ->
             if (!busy) {
                 pendingRestoreId = id
