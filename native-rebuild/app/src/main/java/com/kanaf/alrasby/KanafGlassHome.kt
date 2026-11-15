@@ -48,6 +48,8 @@ fun KanafGlassHome(
     installedApps: List<InstalledAppInventory.Entry>,
     appsLoaded: Boolean,
     appsStatus: String,
+    apkAuditStatus: String,
+    onAuditApps: () -> Unit,
     onLoadApps: () -> Unit,
     onOpenAppDetails: (String) -> Unit,
     onAddToVault: () -> Unit,
@@ -606,6 +608,16 @@ fun KanafGlassHome(
                         Button(onClick = onLoadApps, enabled = !busy,
                             modifier = Modifier.fillMaxWidth()) {
                             Text(tr("عرض التطبيقات المتاحة", "List visible applications"))
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        OutlinedButton(onClick = onAuditApps, enabled = !busy,
+                            modifier = Modifier.fillMaxWidth()) {
+                            Text(tr("فحص APK للتطبيقات الظاهرة (محدود)",
+                                "Audit visible installed APKs (limited)"))
+                        }
+                        if (apkAuditStatus.isNotBlank()) {
+                            Text(apkAuditStatus, color = secondary,
+                                style = MaterialTheme.typography.bodySmall)
                         }
                         if (appsStatus.isNotBlank()) {
                             Text(appsStatus, color = secondary, style = MaterialTheme.typography.bodySmall)
