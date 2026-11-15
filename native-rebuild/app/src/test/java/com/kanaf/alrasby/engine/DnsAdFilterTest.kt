@@ -36,8 +36,8 @@ class DnsAdFilterTest {
 
     @Test fun validUdpPacketAndFragmentsAreHandledSafely() {
         val dns = query("example.com")
-        val src = byteArrayOf(10,111,222,2)
-        val dst = byteArrayOf(10,111,222,1)
+        val src = byteArrayOf(10, 111, 222.toByte(), 2)
+        val dst = byteArrayOf(10, 111, 222.toByte(), 1)
         val packet = DnsPacketCodec.buildUdp(src, dst, 53, 51741, dns)!!
         val parsed = DnsPacketCodec.parseUdp(packet)!!
         assertEquals(51741, parsed.destinationPort)
