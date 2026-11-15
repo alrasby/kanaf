@@ -1,6 +1,16 @@
 name: Kanaf ARM64 native runtime probe
 # Experimental: only this workflow/test file triggers the expensive emulator.
 on:
+  push:
+    branches: [rebuild/kanaf-native-v1]
+    paths:
+      - '.github/workflows/kanaf-arm64-runtime.yml'
+      - 'native-rebuild/app/src/androidTest/java/com/kanaf/alrasby/NativeArm64EngineRuntimeTest.kt'
+      - 'native-rebuild/tools/run_arm64_runtime_ci.sh'
+      - 'native-rebuild/app/src/main/java/com/kanaf/alrasby/engine/NativeScannerBridge.kt'
+      - 'native-rebuild/app/src/main/cpp/native_scanner.cpp'
+      - 'native-rebuild/app/src/main/cpp/clam_scan_policy.h'
+      - 'native-rebuild/app/src/main/assets/kanaf_test.ndb'
   workflow_dispatch:
 concurrency:
   group: kanaf-arm64-runtime-probe
@@ -27,7 +37,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          CLAM_RUN=43582067199
+          CLAM_RUN=43685480979
           YARA_RUN=43576728366
           for run in "$CLAM_RUN" "$YARA_RUN"; do
             test "$(gh run view "$run" --repo "$GITHUB_REPOSITORY" --json conclusion --jq .conclusion)" = success
@@ -35,6 +45,7 @@ jobs:
           dest=native-rebuild/app/src/main/jniLibs/arm64-v8a
           mkdir -p "$dest" /tmp/kanaf-clam /tmp/kanaf-yara
           gh run download "$CLAM_RUN" --repo "$GITHUB_REPOSITORY" -n kanaf-clamav-arm64-diagnostics -D /tmp/kanaf-clam
+          test "$(tr -d '\n' < /tmp/kanaf-clam/revision.txt)" = "5853e1396777bae4d909cd3dd44f58352e7cf9b3"
           gh run download "$YARA_RUN" --repo "$GITHUB_REPOSITORY" -n kanaf-yarax-arm64-diagnostics -D /tmp/kanaf-yara
           cp /tmp/kanaf-clam/arm64-output/libclamav.so "$dest/"
           cp /tmp/kanaf-clam/arm64-output/libclammspack.so "$dest/"

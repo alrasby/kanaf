@@ -133,3 +133,8 @@ The 1.4.3 Android engine is superseded by a cross-build target for **ClamAV 1.4.
 ### Minimum signed database version after app reinstall
 
 A production build that pins `kanafSignaturePublicKeyBase64` now **must also pin** a positive `-PkanafSignatureMinVersion=<VERSION>`. The offline importer rejects properly signed database releases with a version below this immutable app-binary floor, including after application data is cleared. Within an installation, `VerifiedSignatureBundle.requireNewer` additionally enforces strictly increasing versions. The publisher must raise the minimum supported version in future app releases as needed and keep the private RSA key outside the repository and build artifacts.
+
+
+### ClamAV 1.4.6 pin restored after verified new package build
+
+[GitHub Actions #43685480979](https://github.com/alrasby/kanaf/actions/runs/43685480979) passed both the 1.4.6 Android ARM64 ClamAV compilation and APK native-library packaging jobs. The 1.4.6 source commit is pinned to `5853e1396777bae4d909cd3dd44f58352e7cf9b3` and independently asserted from the downloaded revision artifact. Native packaging and translated ARM64 instrumentation workflows are again automatically triggered by relevant changes and retrieve this verified artifact run, not the older 1.4.3 build. **Runtime ARM64 EICAR-positive + benign-negative checks remain a distinct must-pass gate**; no production malware-signature database is bundled.
