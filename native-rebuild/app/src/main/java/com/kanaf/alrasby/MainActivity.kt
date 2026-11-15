@@ -138,16 +138,27 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
                 deviceScanStatus = attempted.fold(
                     onSuccess = { (files, apps) ->
                         val findingsAr = files.findings.joinToString("\n") { finding ->
-                            finding.name + " — " + finding.label + " (" +
-                                com.kanaf.alrasby.engine.ThreatFamily.label(finding.label, true) + ")"
+                            if (finding.kind == ScopedDeviceScan.FindingKind.STRUCTURAL_WARNING) {
+                                finding.name + " — تحذير بنيوي: مسارات أرشيف غير آمنة؛ " +
+                                    "ليس دليلًا على وجود برمجية خبيثة"
+                            } else {
+                                finding.name + " — " + finding.label + " (" +
+                                    com.kanaf.alrasby.engine.ThreatFamily.label(finding.label, true) + ")"
+                            }
                         }
                         val findingsEn = files.findings.joinToString("\n") { finding ->
-                            finding.name + " — " + finding.label + " (" +
-                                com.kanaf.alrasby.engine.ThreatFamily.label(finding.label, false) + ")"
+                            if (finding.kind == ScopedDeviceScan.FindingKind.STRUCTURAL_WARNING) {
+                                finding.name + " — Archive structure warning: unsafe paths; " +
+                                    "not proof of malware"
+                            } else {
+                                finding.name + " — " + finding.label + " (" +
+                                    com.kanaf.alrasby.engine.ThreatFamily.label(finding.label, false) + ")"
+                            }
                         }
                         KanafMessage(
-                            "فحص ضمن نطاق إذن المجلد، وليس فحصًا شاملًا للجهاز. ملفات فُحصت=" +
-                                files.scanned + "، تطابقات توقيع=" + files.matched +
+                            "فحص ضمن نطاق إذن المجلد، وليس فحصًا شاملًا للجهاز. ملفات تمت محاولة فحصها=" +
+                                files.attempted + "، بدون تطابق معروف=" + files.scanned +
+                                "، تطابقات توقيع=" + files.matched +
                                 "، غير مكتمل=" + files.incomplete +
                                 "، مؤشرات بنيوية=" + files.structuralWarnings +
                                 "، حد الفحص=" + files.truncated + ".\n" +
@@ -156,8 +167,9 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
                                 "تجاوز الحد=${apps.truncated}.\n" +
                                 findingsAr.take(2500) +
                                 "\nلا يُحذف أي ملف. عدم التطابق لا يعني السلامة، والفحص غير المكتمل لا يُعد نظيفًا.",
-                            "User-authorized folder only; not a full-device scan. Files checked=" +
-                                files.scanned + ", signature matches=" + files.matched +
+                            "User-authorized folder only; not a full-device scan. Files attempted=" +
+                                files.attempted + ", no known matches=" + files.scanned +
+                                ", signature matches=" + files.matched +
                                 ", incomplete=" + files.incomplete +
                                 ", structural flags=" + files.structuralWarnings +
                                 ", limits reached=" + files.truncated + ".\n" +

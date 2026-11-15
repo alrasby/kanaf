@@ -39,6 +39,11 @@ class KanafUiNavigationTest {
         rule.onNodeWithText("Made with ❤️ By NabdhServ.Net").assertDoesNotExist()
     }
 
+    @Test fun homeExposesScopedScanAndVpnConsentControlsWithoutActivatingThem() {
+        rule.onNodeWithTag("device_scan_button").assertExists()
+        rule.onNodeWithTag("dns_filter_switch").assertExists()
+    }
+
     @Test fun hideAndShowLinksTabWithoutHidingScanOrSettings() {
         rule.onNodeWithTag("settings_button").performClick()
         rule.onNodeWithTag("nav_switch_links").performScrollTo().performClick()

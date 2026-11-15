@@ -7,12 +7,15 @@ import android.provider.DocumentsContract
 import java.util.ArrayDeque
 
 /**
- * An explicitly user-selected SAF tree only. Never deletes/quarantines a source.
- * Recursive and bounded: a file is not certified clean if any scan gate is missing.
+ * On-demand scan of ONE Android user-authorized SAF tree. No deletion,
+ * quarantine, broad storage privilege or guarantee of full-device coverage.
+ * JNI scans remain subject to their independent fail-closed self-test gates.
  */
 class ScopedDeviceScan {
-    data class Finding(val name: String, val label: String)
+    enum class FindingKind { SIGNATURE_MATCH, STRUCTURAL_WARNING }
+    data class Finding(val name: String, val label: String, val kind: FindingKind)
     data class Report(
+        val attempted: Int,
         val scanned: Int,
         val matched: Int,
         val incomplete: Int,
@@ -29,7 +32,6 @@ class ScopedDeviceScan {
         const val MAX_DURATION_MS = 120_000L
     }
 
-    /** Provider grants are scoped by Android; no MANAGE_EXTERNAL_STORAGE needed. */
     fun scan(context: Context, tree: Uri, cancelled: () -> Boolean = { false }): Report {
         require(tree.scheme == "content") { "Only Android SAF content trees are supported" }
         val start = SystemClock.elapsedRealtime()
@@ -37,15 +39,13 @@ class ScopedDeviceScan {
         val signatures = runCatching { SignatureRepository(context).load() }.getOrNull()
         val roots = ArrayDeque<Pair<String, Int>>()
         roots.add(DocumentsContract.getTreeDocumentId(tree) to 0)
+        val accounting = ScopedScanAccounting(MAX_FILES)
         var directories = 0
-        var scanned = 0
-        var matched = 0
-        var incomplete = 0
-        var structuralWarnings = 0
         var truncated = false
         val findings = ArrayList<Finding>()
         fun expired(): Boolean = cancelled() ||
             SystemClock.elapsedRealtime() - start >= MAX_DURATION_MS
+
         while (roots.isNotEmpty()) {
             if (expired() || directories >= MAX_DIRECTORIES) {
                 truncated = true
@@ -63,7 +63,7 @@ class ScopedDeviceScan {
                 )
                 val cursor = resolver.query(children, columns, null, null, null)
                 if (cursor == null) {
-                    incomplete++
+                    accounting.recordProviderError()
                     continue
                 }
                 cursor.use { records ->
@@ -72,28 +72,36 @@ class ScopedDeviceScan {
                     val typeCol = records.getColumnIndexOrThrow(columns[2])
                     val sizeCol = records.getColumnIndexOrThrow(columns[3])
                     while (records.moveToNext()) {
-                        if (expired() || scanned + matched + incomplete >= MAX_FILES) {
+                        if (expired() || accounting.atLimit) {
                             truncated = true
                             break
                         }
                         val id = records.getString(idCol)
                         if (id.isNullOrBlank()) {
-                            incomplete++
+                            accounting.recordProviderError()
                             continue
                         }
                         val mime = records.getString(typeCol).orEmpty()
                         if (mime == DocumentsContract.Document.MIME_TYPE_DIR) {
                             if (depth >= MAX_DEPTH || roots.size >= MAX_DIRECTORIES) {
                                 truncated = true
-                            } else roots.addLast(id to (depth + 1))
+                            } else {
+                                roots.addLast(id to (depth + 1))
+                            }
                             continue
+                        }
+                        // Count file slots ONCE, even if the archive check also
+                        // reports an incomplete condition or a structural warning.
+                        if (!accounting.beginFile()) {
+                            truncated = true
+                            break
                         }
                         val display = records.getString(nameCol).orEmpty()
                             .replace('\n', ' ').replace('\r', ' ').take(90)
                             .ifBlank { "unnamed-document" }
                         val size = if (records.isNull(sizeCol)) -1L else records.getLong(sizeCol)
                         if (size > MAX_FILE_BYTES) {
-                            incomplete++
+                            accounting.record(ScopedScanAccounting.Outcome.INCOMPLETE)
                             continue
                         }
                         val uri = DocumentsContract.buildDocumentUriUsingTree(tree, id)
@@ -104,50 +112,63 @@ class ScopedDeviceScan {
                                     signatures = signatures ?: emptyMap())
                             ).scan({ resolver.openInputStream(uri) }, ::expired)
                             if (hashVerdict is AntivirusEngine.Verdict.Incomplete) {
-                                incomplete++
+                                accounting.record(ScopedScanAccounting.Outcome.INCOMPLETE)
                                 continue
                             }
-                            // Execute both genuine native engines through the worker IPC;
-                            // they may be INCOMPLETE until their real self-tests pass.
                             val native = NativeScannerBridge.scan(context, uri)
                             val consensus = EngineConsensus.evaluate(listOf(
                                 EngineConsensus.Report("kanaf-sha256", hashVerdict),
                                 EngineConsensus.Report("clamav", native.clamav),
                                 EngineConsensus.Report("yara-x", native.yaraX)
                             ), setOf("kanaf-sha256", "clamav", "yara-x"))
-                            when (consensus) {
+                            val outcome = when (consensus) {
                                 is EngineConsensus.Decision.Threat -> {
-                                    matched++
                                     val label = (consensus.detections.first().verdict
                                         as AntivirusEngine.Verdict.Detected).threatName
-                                    if (findings.size < 12) findings.add(Finding(display, label))
+                                    if (findings.size < 12) findings.add(
+                                        Finding(display, label, FindingKind.SIGNATURE_MATCH))
+                                    ScopedScanAccounting.Outcome.SIGNATURE_MATCH
                                 }
-                                is EngineConsensus.Decision.NoKnownMatch -> scanned++
-                                is EngineConsensus.Decision.Inconclusive -> incomplete++
+                                is EngineConsensus.Decision.NoKnownMatch ->
+                                    ScopedScanAccounting.Outcome.NO_KNOWN_MATCH
+                                is EngineConsensus.Decision.Inconclusive ->
+                                    ScopedScanAccounting.Outcome.INCOMPLETE
                             }
+                            var structuralIncomplete = false
                             if (display.endsWith(".apk", true) ||
                                 display.endsWith(".zip", true) ||
-                                mime == "application/zip") {
+                                mime == "application/zip" ||
+                                mime == "application/vnd.android.package-archive") {
                                 val structural = resolver.openInputStream(uri)?.use {
                                     ZipInspector().inspect(it)
                                 }
                                 when (structural) {
                                     is ZipInspector.Result.Complete -> {
                                         if (structural.summary.unsafeNames > 0) {
-                                            structuralWarnings++
-                                            if (findings.size < 12) findings.add(
-                                                Finding(display, "Structural.UnsafeArchivePaths"))
+                                            accounting.recordStructureWarning()
+                                            if (findings.size < 12) findings.add(Finding(
+                                                display, "Structural.UnsafeArchivePaths",
+                                                FindingKind.STRUCTURAL_WARNING))
                                         }
                                     }
-                                    else -> incomplete++
+                                    else -> structuralIncomplete = true
                                 }
                             }
-                        } catch (_: Exception) { incomplete++ }
+                            accounting.record(outcome, structuralIncomplete)
+                        } catch (_: Exception) {
+                            accounting.record(ScopedScanAccounting.Outcome.INCOMPLETE)
+                        }
                     }
                 }
-            } catch (_: Exception) { incomplete++ }
+            } catch (_: Exception) {
+                accounting.recordProviderError()
+            }
         }
-        return Report(scanned, matched, incomplete, structuralWarnings,
-            truncated || roots.isNotEmpty() || expired(), findings)
+        return Report(
+            accounting.attemptedFiles,
+            accounting.noKnownMatches, accounting.signatureMatches,
+            accounting.incompleteChecks, accounting.structureWarnings,
+            truncated || roots.isNotEmpty() || expired(), findings
+        )
     }
 }
