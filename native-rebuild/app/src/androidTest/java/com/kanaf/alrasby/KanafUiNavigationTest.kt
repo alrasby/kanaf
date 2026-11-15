@@ -35,17 +35,28 @@ class KanafUiNavigationTest {
         rule.onNodeWithTag("lang_en").performScrollTo().performClick()
         rule.onNodeWithText("Language & display").assertExists()
         rule.onNodeWithTag("settings_button").performClick()
+        rule.onNodeWithTag("more_features").performClick()
         rule.onNodeWithTag("nav_scan").assertExists()
         rule.onNodeWithText("Made with ❤️ By NabdhServ.Net").assertDoesNotExist()
     }
 
-    @Test fun homeExposesNativeScanAndAndroidDnsControlsWithoutActivatingThem() {
+    @Test fun oneTapHomeAndIndependentDnsPageDoNotCrowdScreen() {
         rule.onNodeWithTag("device_scan_button").assertExists()
-        rule.onNodeWithTag("home_native_engines_test").assertExists()
+        rule.onNodeWithTag("open_dns_page").assertExists()
+        rule.onNodeWithTag("dns_filter_switch").assertDoesNotExist()
+        rule.onNodeWithTag("open_dns_page").performClick()
         rule.onNodeWithTag("dns_system_off").assertExists()
         rule.onNodeWithTag("dns_system_auto").assertExists()
         rule.onNodeWithTag("dns_add_provider").assertExists()
         rule.onNodeWithTag("dns_filter_switch").assertExists()
+    }
+
+    @Test fun advancedScanToolsMovedAwayFromHome() {
+        rule.onNodeWithTag("home_native_engines_test").assertDoesNotExist()
+        rule.onNodeWithTag("open_scan_tools").performClick()
+        rule.onNodeWithTag("home_native_engines_test").assertExists()
+        rule.onNodeWithTag("manual_file_scan").assertExists()
+        rule.onNodeWithTag("request_storage_scan_access").assertExists()
     }
 
     @Test fun hideAndShowLinksTabWithoutHidingScanOrSettings() {
@@ -56,6 +67,7 @@ class KanafUiNavigationTest {
         )
         assertFalse(settings.hiddenSections().isEmpty())
         rule.onNodeWithTag("settings_button").performClick()
+        rule.onNodeWithTag("more_features").performClick()
         rule.onNodeWithTag("nav_scan").assertExists()
         rule.onNodeWithTag("nav_links").assertDoesNotExist()
         rule.onNodeWithTag("settings_button").performClick()
