@@ -90,43 +90,51 @@ class AutomaticDeviceScan {
                 incomplete++
                 return
             }
-            val hash = HashSignatureEngine(
+            // All three engines must describe the same immutable file snapshot.
+            // The SHA-256 adapter reads first; native JNI copies a second time.
+            // A changed input invalidates an apparent detection rather than
+            // silently treating two different versions as one malicious file.
+            val hashVerdict = HashSignatureEngine(
                 signatures,
                 StreamScanner(maxBytes = MAX_HASH_BYTES,
                     maxDurationNanos = 25_000_000_000L,
                     signatures = signatures ?: emptyMap())
             ).scan({ file.inputStream() }, ::stopped)
-            when (hash) {
-                is AntivirusEngine.Verdict.Detected -> {
-                    matched++
-                    if (findings.size < 20) findings.add(Finding(
-                        display, hash.threatName, true))
-                }
-                is AntivirusEngine.Verdict.NoKnownMatch -> hashed++
-                is AntivirusEngine.Verdict.Incomplete -> incomplete++
+            if (hashVerdict is AntivirusEngine.Verdict.NoKnownMatch ||
+                hashVerdict is AntivirusEngine.Verdict.Detected) {
+                hashed++ // Number of successfully computed SHA-256 hashes.
             }
-            // Native rules can scan only <=16 MiB files. Every other file is
-            // explicitly partial, not clean. Keep the worker process bounded.
-            if (file.length() <= MAX_NATIVE_BYTES &&
-                nativeChecked < MAX_NATIVE_CHECKS && !stopped()) {
+            val canNativeScan = file.length() <= MAX_NATIVE_BYTES &&
+                nativeChecked < MAX_NATIVE_CHECKS && !stopped()
+            val native = if (canNativeScan) {
                 nativeChecked++
-                val native = runCatching {
-                    NativeScannerBridge.scan(context, Uri.fromFile(file))
-                }.getOrNull()
-                if (native == null) incomplete++
-                else {
-                    val verdicts = listOf(native.clamav, native.yaraX)
-                    val nativeDetections = verdicts.filterIsInstance<AntivirusEngine.Verdict.Detected>()
-                    if (nativeDetections.isNotEmpty()) {
-                        // One file with two EICAR test-rule matches is ONE finding.
-                        if (hash !is AntivirusEngine.Verdict.Detected) matched++
-                        if (findings.size < 20 && hash !is AntivirusEngine.Verdict.Detected) {
-                            findings.add(Finding(display, nativeDetections.first().threatName, true))
-                        }
-                    }
-                    if (verdicts.any { it is AntivirusEngine.Verdict.Incomplete }) incomplete++
+                runCatching { NativeScannerBridge.scan(context, Uri.fromFile(file)) }.getOrNull()
+            } else null
+            val clam = native?.clamav
+                ?: AntivirusEngine.Verdict.Incomplete("native-unavailable-or-limited")
+            val yara = native?.yaraX
+                ?: AntivirusEngine.Verdict.Incomplete("native-unavailable-or-limited")
+            when (val consensus = AutomaticScanVerdicts.evaluate(hashVerdict, clam, yara)) {
+                is EngineConsensus.Decision.Threat -> {
+                    matched++
+                    val match = consensus.detections.first().verdict
+                        as AntivirusEngine.Verdict.Detected
+                    if (findings.size < 20) findings.add(
+                        Finding(display, match.threatName, true))
+                    // A confirmed detection may coexist with an unavailable engine.
+                    // The report should still expose the incomplete coverage.
+                    if (consensus.incomplete.isNotEmpty()) incomplete++
                 }
-            } else incomplete++
+                is EngineConsensus.Decision.NoKnownMatch -> Unit
+                is EngineConsensus.Decision.Inconclusive -> {
+                    incomplete++
+                    if (consensus.uncorroboratedDetections.isNotEmpty() &&
+                        findings.size < 20) {
+                        findings.add(Finding(
+                            display, "File changed between engine scans; rescan required", false))
+                    }
+                }
+            }
             if (apk && file.length() <= 32L * 1024 * 1024 && !stopped()) {
                 when (val parsed = runCatching {
                     file.inputStream().use { ApkStructureInspector().inspect(it, ::stopped) }
