@@ -211,7 +211,7 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
         keepSessionHistory = keepSessionHistory,
         onSessionHistoryChanged = { enabled ->
             keepSessionHistory = enabled
-            if (!enabled) scanHistory.clear()
+            com.kanaf.alrasby.engine.SessionHistoryPolicy.onEnabledChanged(scanHistory, enabled)
         },
         onClearHistory = { scanHistory.clear() },
         selfTestStatus = selfTestStatus,
