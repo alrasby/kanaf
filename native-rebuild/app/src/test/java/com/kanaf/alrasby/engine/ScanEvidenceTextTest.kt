@@ -29,6 +29,17 @@ class ScanEvidenceTextTest {
         assertTrue(local.contains("ليست نتيجة سلامة"))
         assertTrue(native.contains("غير معتمدة"))
     }
+    @Test fun backdoorCategoryRequiresActualSignatureMatch() {
+        val found = AntivirusEngine.Verdict.Detected("Backdoor.Android.Agent", sha)
+        assertTrue(ScanEvidenceText.hashLabel(found, 1, false).contains("Backdoor"))
+        assertTrue(ScanEvidenceText.hashLabel(found, 1, true).contains("باب خلفي"))
+        assertTrue(ScanEvidenceText.nativeLabel("YARA-X", found, false, false)
+            .contains("Signature match"))
+        val sample = AntivirusEngine.Verdict.Detected("Kanaf_EICAR_Test", sha)
+        assertTrue(ScanEvidenceText.nativeLabel("YARA-X", sample, false, false)
+            .contains("Harmless EICAR"))
+    }
+
     @Test fun nonConflictingAndIncompleteResultsKeepOriginalWording() {
         val decision = EngineConsensus.evaluate(
             listOf(EngineConsensus.Report("clamav", AntivirusEngine.Verdict.NoKnownMatch(sha))),
