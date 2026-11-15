@@ -34,6 +34,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.kanaf.alrasby.engine.ThreatFeatureVector
 import com.kanaf.alrasby.engine.VerifiedLinearThreatModel
@@ -143,6 +144,8 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
             PackageManager.PERMISSION_GRANTED)
     }
     val automaticScanCancellation = remember { AtomicBoolean(false) }
+    var askFilesBeforeScan by rememberSaveable { mutableStateOf(false) }
+    var scanOnFilesPermissionReturn by remember { mutableStateOf(false) }
     fun startAutomaticDeviceScan() {
         if (busy) return
         automaticScanCancellation.set(false)
@@ -230,24 +233,29 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
         ActivityResultContracts.StartActivityForResult()
     ) {
         sharedStorageAccess = if (Build.VERSION.SDK_INT >= 30)
-            Environment.isExternalStorageManager() else
-            activity.checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) ==
-                PackageManager.PERMISSION_GRANTED
+            Environment.isExternalStorageManager()
+        else activity.checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) ==
+            PackageManager.PERMISSION_GRANTED
         scanAccessStatus = if (sharedStorageAccess)
-            KanafMessage("تم تفعيل وصول الملفات المشتركة. اضغط «فحص الجهاز».",
-                "Shared files access enabled. Tap Scan device.")
-        else KanafMessage("لم يُمنح الإذن. يمكنك فحص التطبيقات دون وصول الملفات.",
-            "Access was not granted. Installed apps can still be scanned.")
+            KanafMessage("تم منح إذن الملفات المشتركة.", "Shared-files access granted.")
+        else KanafMessage("لم يُمنح إذن الملفات؛ سيُفحص ما يمكن الوصول إليه.",
+            "Shared-files access denied; scanning only accessible applications.")
+        if (scanOnFilesPermissionReturn) {
+            scanOnFilesPermissionReturn = false
+            startAutomaticDeviceScan()
+        }
     }
     val oldStoragePermission = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
         sharedStorageAccess = granted
         scanAccessStatus = if (granted)
-            KanafMessage("تم السماح بالوصول إلى الملفات المشتركة.",
-                "Shared files access granted.")
-        else KanafMessage("فحص التطبيقات متاح دون إذن الملفات.",
-                "App scanning is available without file access.")
+            KanafMessage("تم منح إذن الملفات المشتركة.", "Shared-files access granted.")
+        else KanafMessage("ستُفحص التطبيقات فقط.", "Only installed apps can be scanned.")
+        if (scanOnFilesPermissionReturn) {
+            scanOnFilesPermissionReturn = false
+            startAutomaticDeviceScan()
+        }
     }
     // A one-shot SAF grant, not a device-wide storage permission. No automatic deletion.
     val deviceScanPicker = rememberLauncherForActivityResult(
@@ -775,6 +783,41 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
             }
         }
     }
+    if (askFilesBeforeScan) {
+        AlertDialog(
+            onDismissRequest = { askFilesBeforeScan = false },
+            title = { Text(localized("فحص الملفات", "Scan shared files")) },
+            text = { Text(localized(
+                "يمكنك فحص التطبيقات فورًا دون أذونات إضافية. لتضمين التنزيلات والصور والملفات المشتركة، يحتاج كنف إلى موافقة واحدة من إعدادات Android. لا يصل إلى بيانات التطبيقات الخاصة ولا يحذف شيئًا.",
+                "You can scan installed apps without extra permissions. To include downloads, photos and shared files, allow Android's one-time file access. Private app data remains protected and nothing is deleted."
+            )) },
+            confirmButton = {
+                TextButton(onClick = {
+                    askFilesBeforeScan = false
+                    scanOnFilesPermissionReturn = true
+                    if (Build.VERSION.SDK_INT >= 30) {
+                        val request = Intent(
+                            Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                            Uri.parse("package:" + activity.packageName)
+                        )
+                        runCatching { sharedAccessLauncher.launch(request) }
+                            .onFailure { sharedAccessLauncher.launch(
+                                Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)) }
+                    } else oldStoragePermission.launch(Manifest.permission.READ_EXTERNAL_STORAGE)
+                }, modifier = Modifier.testTag("grant_files_for_auto_scan")) {
+                    Text(localized("السماح ثم الفحص", "Allow and scan"))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    askFilesBeforeScan = false
+                    startAutomaticDeviceScan()
+                }, modifier = Modifier.testTag("scan_apps_only")) {
+                    Text(localized("فحص التطبيقات فقط", "Apps only"))
+                }
+            }
+        )
+    }
     KanafGlassHome(
         busy = busy,
         sharedText = sharedText,
@@ -1006,7 +1049,14 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
         status = status.displayed(uiLanguage),
         onPickFile = { picker.launch(arrayOf("*/*")) },
         deviceScanStatus = deviceScanStatus.displayed(uiLanguage),
-        onDeviceScan = { startAutomaticDeviceScan() },
+        onDeviceScan = {
+            sharedStorageAccess = if (Build.VERSION.SDK_INT >= 30)
+                Environment.isExternalStorageManager()
+            else activity.checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) ==
+                PackageManager.PERMISSION_GRANTED
+            if (sharedStorageAccess) startAutomaticDeviceScan()
+            else askFilesBeforeScan = true
+        },
         onScanChosenFolder = { if (!busy) deviceScanPicker.launch(null) },
         onStopDeviceScan = { automaticScanCancellation.set(true) },
         autoScanProgress = autoScanProgress,

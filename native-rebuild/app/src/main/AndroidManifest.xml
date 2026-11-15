@@ -5,7 +5,8 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- AV core: broad installed-package inventory. Requires Google Play
          sensitive-permission declaration and review before store publishing. -->
-    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"
+        tools:ignore="QueryAllPackagesPermission" />
     <!-- AV core: one-time user-approved shared-files access on Android 11+.
          Does NOT grant access to /data or Android/data protected directories. -->
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
