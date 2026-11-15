@@ -125,7 +125,7 @@ class KanafDnsVpnService : VpnService() {
     }
 
     private fun changeProvider(host: String?) {
-        if (!active || switching || host !in DnsProviderStore.choices) {
+        if (!active || switching || host == null || host !in DnsProviderStore.choices) {
             switchError = "Provider unavailable, connection inactive or change already in progress"
             return
         }
