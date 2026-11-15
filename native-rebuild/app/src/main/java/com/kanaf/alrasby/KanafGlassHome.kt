@@ -20,6 +20,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.kanaf.alrasby.engine.LinkInspector
 import com.kanaf.alrasby.engine.EncryptedVault
+import com.kanaf.alrasby.engine.InstalledAppInventory
 
 private val Teal = Color(0xFF146C70)
 private val Aqua = Color(0xFF3DDFB0)
@@ -34,6 +35,11 @@ fun KanafGlassHome(
     onShareReport: () -> Unit,
     vaultItems: List<EncryptedVault.Entry>,
     vaultStatus: String,
+    installedApps: List<InstalledAppInventory.Entry>,
+    appsLoaded: Boolean,
+    appsStatus: String,
+    onLoadApps: () -> Unit,
+    onOpenAppDetails: (String) -> Unit,
     onAddToVault: () -> Unit,
     onRestoreVault: (String) -> Unit,
     onDeleteVault: (String) -> Unit,
@@ -52,6 +58,7 @@ fun KanafGlassHome(
     var linkReport by remember { mutableStateOf<LinkInspector.Report?>(null) }
     var confirmVaultSave by remember { mutableStateOf(false) }
     var deleteVaultId by remember { mutableStateOf<String?>(null) }
+    var appSearch by remember { mutableStateOf("") }
     LaunchedEffect(sharedText) {
         if (!sharedText.isNullOrBlank()) {
             linkInput = sharedText
@@ -153,7 +160,8 @@ fun KanafGlassHome(
                         tr("المحركات", "Engines"),
                         tr("حول كنف", "About"),
                         tr("الإعدادات", "Settings"),
-                        tr("الخزنة", "Vault")
+                        tr("الخزنة", "Vault"),
+                        tr("التطبيقات", "Apps")
                     ).forEachIndexed { index, title ->
                         if (page == index) {
                             Button(
@@ -516,6 +524,63 @@ fun KanafGlassHome(
                                     enabled = !busy,
                                     modifier = Modifier.weight(1f)) {
                                     Text(tr("حذف النسخة", "Delete copy"))
+                                }
+                            }
+                        }
+                    }
+                }
+                if (page == 7) {
+                    GlassPanel(card, stroke) {
+                        Text(tr("مراجعة التطبيقات", "App review"), color = ink,
+                            style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        Text(tr(
+                            "يعرض كنف التطبيقات القابلة للتشغيل التي يسمح أندرويد برؤيتها، مع عدد الأذونات المطلوبة. هذه مراجعة معلومات وليست كشفًا عن الفيروسات، ولا يغيّر كنف أي إذن من تلقاء نفسه.",
+                            "Lists launchable apps visible under Android package rules, with their requested permission counts. This is information review, NOT malware detection. Kanaf cannot silently change permissions."
+                        ), color = secondary, style = MaterialTheme.typography.bodyMedium)
+                        Spacer(Modifier.height(12.dp))
+                        Button(onClick = onLoadApps, enabled = !busy,
+                            modifier = Modifier.fillMaxWidth()) {
+                            Text(tr("عرض التطبيقات المتاحة", "List visible applications"))
+                        }
+                        if (appsStatus.isNotBlank()) {
+                            Text(appsStatus, color = secondary, style = MaterialTheme.typography.bodySmall)
+                        }
+                        if (appsLoaded) {
+                            Spacer(Modifier.height(12.dp))
+                            OutlinedTextField(value = appSearch,
+                                onValueChange = { appSearch = it.take(80) },
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true,
+                                label = { Text(tr("بحث بالاسم أو الحزمة", "Search name or package")) })
+                        }
+                    }
+                    if (appsLoaded) {
+                        val matches = installedApps.filter {
+                            it.displayName.contains(appSearch, ignoreCase = true) ||
+                                it.packageName.contains(appSearch, ignoreCase = true)
+                        }
+                        GlassPanel(card, stroke) {
+                            Text(tr("المعروض: ", "Matches: ") + matches.size +
+                                tr(" (أول 60 نتيجة)", " (first 60 shown)"),
+                                color = secondary, style = MaterialTheme.typography.bodySmall)
+                        }
+                        matches.take(60).forEach { entry ->
+                            GlassPanel(card, stroke) {
+                                Text(entry.displayName, color = ink,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.SemiBold)
+                                Text(entry.packageName, color = secondary,
+                                    style = MaterialTheme.typography.bodySmall)
+                                Text(if (entry.requestedPermissionCount != null) {
+                                    tr("عدد الأذونات المعلنة: ", "Declared permission count: ") +
+                                        entry.requestedPermissionCount
+                                } else tr("بيانات الأذونات غير متاحة", "Permission data unavailable"),
+                                    color = secondary, style = MaterialTheme.typography.bodySmall)
+                                Spacer(Modifier.height(8.dp))
+                                OutlinedButton(
+                                    onClick = { onOpenAppDetails(entry.packageName) },
+                                    modifier = Modifier.fillMaxWidth()) {
+                                    Text(tr("إدارة التطبيق في أندرويد", "Manage in Android Settings"))
                                 }
                             }
                         }
