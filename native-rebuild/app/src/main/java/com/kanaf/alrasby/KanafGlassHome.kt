@@ -464,45 +464,63 @@ fun KanafGlassHome(
                             color = ink, style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold)
                         Text(tr(
-                            "يمكن تفعيل مزوّد واحد فقط. اختيار مزوّد جديد يلغي السابق تلقائيًا. أوقف كنف لتغيير المزوّد.",
-                            "One provider at a time. Selecting another deactivates the previous one. Stop Kanaf to change providers."
+                            "فعّل نطاقًا واحدًا. إيقاف مفتاحه يوقف مرشح كنف؛ لتغييره أثناء التشغيل أوقف المرشح أولًا.",
+                            "Enable one provider. Turning its switch off stops filtering; stop Kanaf before switching providers."
                         ), color = secondary, style = MaterialTheme.typography.bodySmall)
                         for (host in listOf(
                             "dns.adguard.com", "dns.adguard-dns.com",
                             "family.adguard-dns.com"
                         )) {
+                            val chosen = selectedDnsProvider == host
+                            val providerActive = chosen && vpnRequested
+                            val canToggle = providerActive || (!vpnRequested && privateDnsCompatible)
                             val subtitle = when (host) {
                                 "dns.adguard.com" ->
-                                    tr("اسم قديم يُحوّل إلى خادم AdGuard الرسمي",
-                                        "Legacy name uses the current official AdGuard server")
+                                    tr("اسم قديم لنفس خادم AdGuard القياسي",
+                                        "Legacy alias of the standard AdGuard server")
                                 "family.adguard-dns.com" ->
-                                    tr("حجب الإعلانات والتتبع والمحتوى العائلي",
-                                        "Ads, tracking and family protection")
+                                    tr("إعلانات وتتبع وحماية عائلية", "Ads, tracking and family filtering")
                                 else ->
-                                    tr("حجب الإعلانات والتتبع", "Ads and tracking")
+                                    tr("إعلانات وتتبع", "Ads and tracking")
+                            }
+                            fun requestActivation() {
+                                if (!vpnRequested && privateDnsCompatible) {
+                                    onSelectDnsProvider(host)
+                                    confirmVpn = true
+                                }
                             }
                             Row(
                                 modifier = Modifier.fillMaxWidth()
-                                    .heightIn(min = 64.dp)
-                                    .clickable(enabled = !vpnRequested) {
-                                        onSelectDnsProvider(host)
+                                    .heightIn(min = 60.dp)
+                                    .clickable(enabled = canToggle) {
+                                        if (providerActive) onVpnToggle(false)
+                                        else requestActivation()
                                     }
                                     .testTag("dns_provider_" + host.replace('.', '_')),
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
                                 Column(Modifier.weight(1f)) {
                                     Text(host, color = ink,
                                         style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = if (selectedDnsProvider == host)
+                                        fontWeight = if (chosen)
                                             FontWeight.Bold else FontWeight.Medium)
-                                    Text(subtitle, color = secondary,
+                                    Text(
+                                        subtitle + if (chosen && !vpnRequested)
+                                            tr(" · محفوظ للاستخدام", " · saved choice") else "",
+                                        color = secondary,
                                         style = MaterialTheme.typography.labelSmall)
                                 }
-                                RadioButton(
-                                    selected = selectedDnsProvider == host,
-                                    enabled = !vpnRequested,
-                                    onClick = { onSelectDnsProvider(host) }
+                                Switch(
+                                    checked = providerActive,
+                                    enabled = canToggle,
+                                    onCheckedChange = { enable ->
+                                        if (enable) requestActivation()
+                                        else if (providerActive) onVpnToggle(false)
+                                    },
+                                    modifier = Modifier.testTag(
+                                        "dns_provider_switch_" + host.replace('.', '_')
+                                    )
                                 )
                             }
                         }
