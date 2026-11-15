@@ -31,6 +31,13 @@ fun KanafGlassHome(
     busy: Boolean,
     sharedText: String?,
     scanHistory: List<String>,
+    watchNewApps: Boolean,
+    periodicChecks: Boolean,
+    protectionStatus: String,
+    onWatchNewApps: (Boolean) -> Unit,
+    onChangePeriodic: (Boolean) -> Unit,
+    onRunScopedCheck: () -> Unit,
+    onRefreshProtection: () -> Unit,
     hasScanReport: Boolean,
     onShareReport: () -> Unit,
     vaultItems: List<EncryptedVault.Entry>,
@@ -161,7 +168,8 @@ fun KanafGlassHome(
                         tr("حول كنف", "About"),
                         tr("الإعدادات", "Settings"),
                         tr("الخزنة", "Vault"),
-                        tr("التطبيقات", "Apps")
+                        tr("التطبيقات", "Apps"),
+                        tr("الحماية", "Protection")
                     ).forEachIndexed { index, title ->
                         if (page == index) {
                             Button(
@@ -584,6 +592,58 @@ fun KanafGlassHome(
                                 }
                             }
                         }
+                    }
+                }
+                if (page == 8) {
+                    GlassPanel(card, stroke) {
+                        Text(tr("مراقبة التطبيقات بإذن المستخدم", "Opt-in app monitoring"), color = ink,
+                            style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        Text(tr(
+                            "يرصد كنف أحداث تثبيت/تحديث التطبيقات التي يرسلها أندرويد ويعرض تنبيهًا للمراجعة اليدوية فقط. لا يفحص التطبيقات تلقائيًا بحثًا عن الفيروسات.",
+                            "Kanaf observes Android package install/update broadcasts and prompts a manual review only. No automatic malware scanning of installed apps."
+                        ), color = secondary, style = MaterialTheme.typography.bodyMedium)
+                        Spacer(Modifier.height(12.dp))
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text(tr("تنبيهات تثبيت التطبيقات", "App-install review alerts"),
+                                modifier = Modifier.weight(1f), color = ink)
+                            Switch(checked = watchNewApps, onCheckedChange = onWatchNewApps)
+                        }
+                    }
+                    GlassPanel(card, stroke) {
+                        Text(tr("الفحص الدوري للملفات", "Scheduled scoped file check"), color = ink,
+                            style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        Text(tr(
+                            "اختر مجلدًا محددًا تمنح كنف حق قراءته. يعمل الفحص كل 24 ساعة تقريبًا بحسب قيود البطارية، ويطابق بصمات SHA-256 لحد أقصى 32 ملفًا مباشرًا في الدورة. لا يفحص الجهاز كله ولا يعمل كحماية فورية.",
+                            "Choose a folder explicitly. Android schedules an approximate 24-hour check of up to 32 direct child files against local SHA-256 signatures. This is not a whole-device or realtime scan."
+                        ), color = secondary, style = MaterialTheme.typography.bodyMedium)
+                        Spacer(Modifier.height(12.dp))
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text(tr("فحص مجلد محدد دوريًا", "Periodic selected-folder check"),
+                                modifier = Modifier.weight(1f), color = ink)
+                            Switch(checked = periodicChecks, onCheckedChange = onChangePeriodic)
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        OutlinedButton(onClick = onRunScopedCheck, enabled = periodicChecks && !busy,
+                            modifier = Modifier.fillMaxWidth()) {
+                            Text(tr("طلب فحص المجلد الآن", "Request folder check now"))
+                        }
+                        TextButton(onClick = onRefreshProtection, modifier = Modifier.fillMaxWidth()) {
+                            Text(tr("تحديث نتيجة آخر فحص", "Refresh last check status"))
+                        }
+                        if (protectionStatus.isNotBlank()) {
+                            Text(protectionStatus, color = secondary,
+                                style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                    GlassPanel(card, stroke) {
+                        Text(tr("حدود الحماية الحالية", "Protection scope and limits"), color = ink,
+                            style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                        Text(tr(
+                            "قاعدة التوقيعات الافتراضية اختبارية. على أندرويد الحديث لا يمكن للتطبيق العادي قراءة ملفات جميع التطبيقات أو اعتراض استخدامها. لا يُصدر كنف حكم سلامة عند تعذر الفحص.",
+                            "Bundled signatures are test-only. Android limits inspection of unrelated apps and private files. Kanaf does not declare unchecked content safe."
+                        ), color = secondary, style = MaterialTheme.typography.bodyMedium)
                     }
                 }
                 Text(
