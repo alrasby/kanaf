@@ -77,15 +77,20 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
         mutableStateOf(KanafMessage("اختر ملفًا لفحصه محليًا", "Choose a file to scan locally"))
     }
     var busy by remember { mutableStateOf(false) }
-    var selfTestStatus by remember { mutableStateOf("") }
+    var selfTestStatus by remember { mutableStateOf(KanafMessage.EMPTY) }
     var hasScanReport by remember { mutableStateOf(false) }
     var watchNewApps by remember { mutableStateOf(ProtectionControl.installWatchEnabled(activity)) }
     var periodicChecks by remember { mutableStateOf(ProtectionControl.periodicEnabled(activity)) }
-    var protectionStatus by remember { mutableStateOf(ProtectionControl.lastResult(activity)) }
+    var protectionStatus by remember {
+        mutableStateOf(KanafMessage.fromScheduledStatus(ProtectionControl.lastResult(activity)))
+    }
     val notificationPermission = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
-        if (!granted) protectionStatus = "Notifications disabled by Android. Checks still require opt-in."
+        if (!granted) protectionStatus = KanafMessage(
+            "أذونات الإشعارات معطلة في أندرويد. تبقى الميزات بحاجة إلى موافقة المستخدم.",
+            "Android notifications are disabled. Protection features still require opt-in."
+        )
     }
     val folderPicker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocumentTree()
@@ -97,19 +102,24 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
                 )
                 ProtectionControl.enableTreeChecks(activity, tree)
                 periodicChecks = true
-                protectionStatus = "Selected-folder SHA-256 check scheduled approximately every 24 hours."
+                protectionStatus = KanafMessage(
+                    "تمت جدولة فحص بصمات SHA-256 للمجلد المختار كل 24 ساعة تقريبًا.",
+                    "Selected-folder SHA-256 checks scheduled approximately every 24 hours."
+                )
             }.onFailure {
-                protectionStatus = "Folder access unavailable: " + it.javaClass.simpleName
+                protectionStatus = KanafMessage(
+                    "تعذر الوصول للمجلد: ", "Folder access unavailable: "
+                ).append(it.javaClass.simpleName)
             }
         }
     }
-    var vaultStatus by remember { mutableStateOf("") }
+    var vaultStatus by remember { mutableStateOf(KanafMessage.EMPTY) }
     var pendingRestoreId by rememberSaveable { mutableStateOf<String?>(null) }
     val inventory = remember { InstalledAppInventory() }
     var appEntries by remember { mutableStateOf<List<InstalledAppInventory.Entry>>(emptyList()) }
     var appsLoaded by remember { mutableStateOf(false) }
-    var appsStatus by remember { mutableStateOf("") }
-    var apkAuditStatus by remember { mutableStateOf("") }
+    var appsStatus by remember { mutableStateOf(KanafMessage.EMPTY) }
+    var apkAuditStatus by remember { mutableStateOf(KanafMessage.EMPTY) }
     val vault = remember { EncryptedVault() }
     val vaultEntries = remember { mutableStateListOf<EncryptedVault.Entry>().also {
         it.addAll(runCatching { vault.list(activity) }.getOrDefault(emptyList()))
@@ -129,15 +139,18 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
                 }
                 val outcome = result.getOrNull()
                 vaultStatus = when (outcome) {
-                    is SafQuarantine.Outcome.Moved -> localized(
-                        "تمت إزالة المستند المختار عبر مزوّد أندرويد بعد التحقق من نسخته المشفرة. احتفظ بمفتاح الجهاز لاستعادته.",
-                        "The selected SAF document was deleted by Android's provider after its encrypted copy was verified. Retain your device key for restore.")
-                    is SafQuarantine.Outcome.CopyOnly -> localized(
+                    is SafQuarantine.Outcome.Moved -> KanafMessage(
+                        "تم حذف المستند الأصلي بعد التحقق من النسخة المشفرة. احتفظ بمفتاح الجهاز لاستعادتها.",
+                        "The selected original was deleted by Android after its encrypted copy was verified. Keep the device key for recovery."
+                    )
+                    is SafQuarantine.Outcome.CopyOnly -> KanafMessage(
                         "لم يُعزل الملف الأصلي؛ بقيت نسخة مشفرة فقط في الخزنة: ",
-                        "Original was NOT isolated; encrypted copy only: ") + outcome.reason
-                    is SafQuarantine.Outcome.Failed -> localized(
-                        "لم ينجح الحفظ أو العزل: ", "Could not save or isolate: ") + outcome.reason
-                    null -> localized("فشلت العملية قبل اكتمالها.", "Quarantine operation failed.")
+                        "Original was NOT isolated; encrypted copy only: "
+                    ).append(outcome.reason)
+                    is SafQuarantine.Outcome.Failed -> KanafMessage(
+                        "لم ينجح الحفظ أو العزل: ", "Could not save or isolate: "
+                    ).append(outcome.reason)
+                    null -> KanafMessage("فشلت العملية قبل اكتمالها.", "Quarantine operation failed.")
                 }
                 reloadVault()
                 busy = false
@@ -153,11 +166,11 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
                 }
                 vaultStatus = if (result.isSuccess) {
                     reloadVault()
-                    localized("حُفظت نسخة مشفرة داخل كنف. لم يُحذف الملف الأصلي.",
-                        "Encrypted copy saved in Kanaf. The source file was not deleted.")
+                    KanafMessage("حُفظت نسخة مشفرة داخل كنف، ولم يُحذف الملف الأصلي.",
+                        "Encrypted copy saved in Kanaf; the original was not deleted.")
                 } else {
-                    localized("تعذر حفظ النسخة المشفرة: ", "Encrypted copy failed: ") +
-                        result.exceptionOrNull()?.javaClass?.simpleName
+                    KanafMessage("تعذر حفظ النسخة المشفرة: ", "Encrypted copy failed: ")
+                        .append(result.exceptionOrNull()?.javaClass?.simpleName.orEmpty())
                 }
                 busy = false
             }
@@ -175,13 +188,13 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
                     runCatching { vault.restore(activity, id, uri) }
                 }
                 vaultStatus = if (result.isSuccess) {
-                    localized("اكتملت الاستعادة إلى المستند الذي اخترته. النسخة المشفرة ما زالت محفوظة.",
+                    KanafMessage("اكتملت الاستعادة؛ ما زالت النسخة المشفرة محفوظة في الخزنة.",
                         "Restored to your chosen document. The encrypted copy remains in the vault.")
                 } else {
-                    localized(
-                        "فشلت الاستعادة. قد يكون المستند الجديد غير مكتمل؛ احذفه قبل المحاولة مجددًا: ",
-                        "Restore failed. The destination may contain partial data; delete it before retrying: "
-                    ) + result.exceptionOrNull()?.javaClass?.simpleName
+                    KanafMessage(
+                        "فشلت الاستعادة. قد يكون الملف الناتج غير مكتمل؛ احذفه قبل المحاولة مجددًا: ",
+                        "Restore failed. The output may be partial; delete it before retrying: "
+                    ).append(result.exceptionOrNull()?.javaClass?.simpleName.orEmpty())
                 }
                 busy = false
             }
@@ -195,7 +208,7 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
     }
     val mlModel: ThreatModel = remember { VerifiedLinearThreatModel.load(activity) }
     val trustedFeed = remember { ProductionFeedInstaller() }
-    var feedStatus by remember { mutableStateOf("") }
+    var feedStatus by remember { mutableStateOf(KanafMessage.EMPTY) }
     val feedPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null && !busy) {
             busy = true
@@ -205,12 +218,15 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
                 }
                 if (outcome.isSuccess) {
                     signatures = runCatching { SignatureRepository(activity).load() }.getOrNull()
-                    feedStatus = localized("قاعدة التوقيعات الموقعة مثبتة؛ الإصدار ",
-                        "Verified signature database installed, version ") + outcome.getOrThrow()
+                    feedStatus = KanafMessage(
+                        "تم تثبيت قاعدة توقيعات موثوقة؛ الإصدار ",
+                        "Verified signature database installed, version "
+                    ).append(outcome.getOrThrow().toString())
                 } else {
-                    feedStatus = localized("رُفض التحديث غير الموثوق أو غير الصالح: ",
-                        "Untrusted or invalid feed rejected: ") +
-                        outcome.exceptionOrNull()?.javaClass?.simpleName
+                    feedStatus = KanafMessage(
+                        "رُفض تحديث غير موثوق أو غير صالح: ",
+                        "Untrusted or invalid feed rejected: "
+                    ).append(outcome.exceptionOrNull()?.javaClass?.simpleName.orEmpty())
                 }
                 busy = false
             }
@@ -469,7 +485,7 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
         scanHistory = if (arabic) scanHistoryArabic else scanHistoryEnglish,
         watchNewApps = watchNewApps,
         periodicChecks = periodicChecks,
-        protectionStatus = protectionStatus,
+        protectionStatus = protectionStatus.displayed(uiLanguage),
         onWatchNewApps = { enabled ->
             ProtectionControl.setInstallWatch(activity, enabled)
             watchNewApps = enabled
@@ -505,7 +521,7 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
         onRefreshProtection = { protectionStatus = ProtectionControl.lastResult(activity) },
         hasScanReport = hasScanReport,
         canImportSignedFeed = trustedFeed.configured(),
-        signedFeedStatus = feedStatus,
+        signedFeedStatus = feedStatus.displayed(uiLanguage),
         onImportSignedFeed = { if (!busy && trustedFeed.configured())
             feedPicker.launch(arrayOf("application/zip", "application/octet-stream")) },
         onShareReport = {
@@ -522,10 +538,10 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
             }
         },
         vaultItems = vaultEntries,
-        vaultStatus = vaultStatus,
+        vaultStatus = vaultStatus.displayed(uiLanguage),
         installedApps = appEntries,
         appsLoaded = appsLoaded,
-        appsStatus = appsStatus,
+        appsStatus = appsStatus.displayed(uiLanguage),
         onLoadApps = {
             if (!busy) {
                 busy = true
@@ -547,7 +563,7 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
                 }
             }
         },
-        apkAuditStatus = apkAuditStatus,
+        apkAuditStatus = apkAuditStatus.displayed(uiLanguage),
         onAuditApps = {
             if (!busy) {
                 busy = true
@@ -614,7 +630,7 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
             scanHistoryArabic.clear()
             scanHistoryEnglish.clear()
         },
-        selfTestStatus = selfTestStatus,
+        selfTestStatus = selfTestStatus.displayed(uiLanguage),
         onTestEngines = {
             if (!busy) {
                 busy = true
