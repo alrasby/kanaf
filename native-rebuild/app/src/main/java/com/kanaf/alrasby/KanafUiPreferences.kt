@@ -80,6 +80,30 @@ data class KanafMessage(val ar: String, val en: String) {
 
     companion object {
         val EMPTY = KanafMessage("", "")
+        fun fromScheduledStatus(raw: String): KanafMessage {
+            if (raw == "No scheduled check has completed") {
+                return KanafMessage("لم يكتمل أي فحص مجدول بعد.", raw)
+            }
+            if (raw.startsWith("INCOMPLETE: selected folder permission lost")) {
+                return KanafMessage("لم يكتمل الفحص: فقد التطبيق إذن قراءة المجلد المختار.", raw)
+            }
+            if (raw.startsWith("INCOMPLETE: signature database unavailable")) {
+                return KanafMessage("لم يكتمل الفحص: قاعدة التوقيعات غير متاحة.", raw)
+            }
+            val counts = Regex(
+                "Scoped SHA-256: checked=(\\d+) matches=(\\d+) incomplete=(\\d+) truncated=(true|false)"
+            ).matchEntire(raw)
+            if (counts != null) {
+                val (checked, matches, incomplete, truncated) = counts.destructured
+                return KanafMessage(
+                    "فحص المجلد المحدد: فُحص $checked، تطابقات $matches، " +
+                        "غير مكتمل $incomplete، " +
+                        if (truncated == "true") "تجاوز حد الملفات." else "لم يتجاوز حد الملفات.",
+                    raw
+                )
+            }
+            return KanafMessage("تفاصيل آخر فحص: $raw", raw)
+        }
         fun combine(lines: List<KanafMessage>): KanafMessage = KanafMessage(
             lines.map { it.ar }.filter { it.isNotBlank() }.joinToString("\n"),
             lines.map { it.en }.filter { it.isNotBlank() }.joinToString("\n")
