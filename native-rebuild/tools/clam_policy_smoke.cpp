@@ -27,6 +27,15 @@ int main() {
     assert(!kanaf::configureClamAcOnly(&invalidMatcher, &setNumber));
     assert(!kanaf::configureClamAcOnly<FakeEngine>(nullptr, &setNumber));
     assert(!kanaf::configureClamAcOnly<FakeEngine>(&matcher, nullptr));
+    FakeEngine cache;
+    static_assert(kanaf::kClamDisableCacheField == 25);
+    assert(kanaf::disableClamCleanCache(&cache, &setNumber));
+    assert(cache.calls == 1);
+    FakeEngine invalidCache;
+    invalidCache.failAt = 1;
+    assert(!kanaf::disableClamCleanCache(&invalidCache, &setNumber));
+    assert(!kanaf::disableClamCleanCache<FakeEngine>(nullptr, &setNumber));
+    assert(!kanaf::disableClamCleanCache<FakeEngine>(&cache, nullptr));
     FakeEngine ready;
     assert(kanaf::configureClamLimits(&ready, &setNumber));
     assert(ready.calls == 5);
