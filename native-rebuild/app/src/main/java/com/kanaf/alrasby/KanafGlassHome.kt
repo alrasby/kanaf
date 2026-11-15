@@ -74,6 +74,10 @@ fun KanafGlassHome(
     onPickFile: () -> Unit,
     deviceScanStatus: String,
     onDeviceScan: () -> Unit,
+    vpnRequested: Boolean,
+    vpnStatus: String,
+    onVpnToggle: (Boolean) -> Unit,
+    onVpnRefresh: () -> Unit,
     onOpenSystemApps: () -> Unit,
     onOpenWebsite: () -> Unit
 ) {
@@ -84,6 +88,7 @@ fun KanafGlassHome(
     var linkReport by remember { mutableStateOf<LinkInspector.Report?>(null) }
     var confirmVaultSave by remember { mutableStateOf(false) }
     var confirmQuarantine by remember { mutableStateOf(false) }
+    var confirmVpn by remember { mutableStateOf(false) }
     var deleteVaultId by remember { mutableStateOf<String?>(null) }
     var appSearch by remember { mutableStateOf("") }
     LaunchedEffect(sharedText) {
@@ -157,6 +162,24 @@ fun KanafGlassHome(
             }
         )
     }
+    if (confirmVpn) {
+        AlertDialog(
+            onDismissRequest = { confirmVpn = false },
+            title = { Text(tr("تفعيل مرشح إعلانات DNS", "Enable DNS ad filter")) },
+            text = { Text(tr(
+                "يتطلب أندرويد موافقة VPN. لا يعمل كنف مع VPN آخر في الوقت نفسه، وقد يؤثر في الاتصال. الحجب محدود لنطاقات DNS المعروفة، ولا يزيل إعلانات HTTPS أو الإعلانات المدمجة أو DNS الخاص. هل تريد المتابعة؟",
+                "Android requires VPN approval. Only one VPN can run at a time; starting Kanaf may disconnect another VPN and affect connectivity. This only filters known DNS hosts, not HTTPS, embedded ads, private DNS or DoH. Continue?"
+            )) },
+            confirmButton = {
+                TextButton(onClick = { confirmVpn = false; onVpnToggle(true) }) {
+                    Text(tr("المتابعة", "Continue"))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmVpn = false }) { Text(tr("إلغاء", "Cancel")) }
+            }
+        )
+    }
     fun signalText(signal: LinkInspector.Signal): String = when (signal) {
         LinkInspector.Signal.UNENCRYPTED_HTTP -> tr("اتصال HTTP غير مشفر", "Unencrypted HTTP connection")
         LinkInspector.Signal.USER_INFO -> tr("عنوان قد يخفي المضيف الحقيقي باستخدام @", "User-info (@) may disguise the real host")
@@ -165,6 +188,7 @@ fun KanafGlassHome(
         LinkInspector.Signal.NONSTANDARD_PORT -> tr("منفذ اتصال غير معتاد", "Nonstandard connection port")
         LinkInspector.Signal.LONG_URL -> tr("عنوان طويل بصورة غير اعتيادية", "Unusually long link")
         LinkInspector.Signal.INVALID_HOST -> tr("تعذر تحليل عنوان المضيف بثقة", "Unable to parse the host reliably")
+        LinkInspector.Signal.AD_TRACKER -> tr("نطاق إعلانات أو تتبع معروف، وليس دليلًا على برمجية خبيثة", "Known ad/tracker host; not proof of malware")
     }
     val dark = isSystemInDarkTheme()
     val background = if (dark) Night else Color(0xFFF2F7F7)
@@ -343,6 +367,30 @@ fun KanafGlassHome(
                         tr("فحص بنية الملفات ومطابقة التوقيعات المحلية، مع اختبار ClamAV وYARA-X بقواعد EICAR المحدودة. عدم العثور على تطابق لا يثبت السلامة.", "Local SHA-256 and file structure checks; ClamAV and YARA-X test-rule scans recognize EICAR only. No match does not prove safety."),
                         color = secondary, style = MaterialTheme.typography.bodySmall
                     )
+                }
+                GlassPanel(card, stroke) {
+                    Text(tr("كاشف الإعلانات ومرشح DNS", "Ad and tracker DNS filter"),
+                        color = ink, style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold)
+                    Text(tr(
+                        "يحجب مجموعة محدودة من نطاقات الإعلانات والتتبع المعروفة عند تفعيل VPN المحلي. لا يقرأ محتوى الرسائل أو يحذف ملفات، ولا يعمل بالتزامن مع VPN آخر. بعض الإعلانات وDNS المشفر لا يشملها الحجب.",
+                        "Opt-in local VPN blocks a small curated set of DNS ad/tracker hosts. It does not read messages or delete files. It cannot run alongside another VPN, and encrypted DNS or embedded ads may bypass it."
+                    ), color = secondary, style = MaterialTheme.typography.bodySmall)
+                    Spacer(Modifier.height(8.dp))
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Text(tr("طلب تفعيل حجب DNS", "Request DNS filtering"),
+                            modifier = Modifier.weight(1f), color = ink)
+                        Switch(checked = vpnRequested,
+                            onCheckedChange = { enabled ->
+                                if (enabled) confirmVpn = true else onVpnToggle(false)
+                            },
+                            modifier = Modifier.testTag("dns_filter_switch"))
+                    }
+                    OutlinedButton(onClick = onVpnRefresh, modifier = Modifier.fillMaxWidth()) {
+                        Text(tr("التحقق من حالة المرشح", "Refresh filter status"))
+                    }
+                    if (vpnStatus.isNotBlank())
+                        Text(vpnStatus, color = secondary, style = MaterialTheme.typography.bodySmall)
                 }
                 } // end scan page
 

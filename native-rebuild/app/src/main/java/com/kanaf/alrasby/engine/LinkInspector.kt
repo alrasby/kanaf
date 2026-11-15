@@ -12,7 +12,7 @@ object LinkInspector {
     private val ipv4Pattern = Regex("(?:[0-9]{1,3}\\.){3}[0-9]{1,3}")
 
     enum class Verdict { NOT_VERIFIED, REVIEW, INVALID }
-    enum class Signal { UNENCRYPTED_HTTP, USER_INFO, IP_ADDRESS, PUNYCODE, NONSTANDARD_PORT, LONG_URL, INVALID_HOST }
+    enum class Signal { UNENCRYPTED_HTTP, USER_INFO, IP_ADDRESS, PUNYCODE, NONSTANDARD_PORT, LONG_URL, INVALID_HOST, AD_TRACKER }
     data class Item(val url: String, val host: String?, val verdict: Verdict, val signals: List<Signal>)
     data class Report(val items: List<Item>, val truncated: Boolean)
 
@@ -40,6 +40,7 @@ object LinkInspector {
         val expectedPort = if (uri.scheme.equals("https", ignoreCase = true)) 443 else 80
         if (uri.port >= 0 && uri.port != expectedPort) signals += Signal.NONSTANDARD_PORT
         if (url.length > MAX_URL_CHARS) signals += Signal.LONG_URL
+        if (AdDomainRules.isAdOrTracker(host)) signals += Signal.AD_TRACKER
         return Item(url, host, if (signals.isEmpty()) Verdict.NOT_VERIFIED else Verdict.REVIEW, signals)
     }
 }

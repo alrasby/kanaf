@@ -3,6 +3,8 @@ package com.kanaf.alrasby
 import android.app.Activity
 import android.content.Intent
 import android.net.Uri
+import android.net.VpnService
+import com.kanaf.alrasby.engine.KanafDnsVpnService
 import android.Manifest
 import android.os.Build
 import android.content.pm.PackageManager
@@ -174,6 +176,37 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
                 busy = false
             }
         }
+    }
+    var vpnRequested by remember { mutableStateOf(KanafDnsVpnService.isRunning()) }
+    var vpnStatus by remember { mutableStateOf(KanafMessage(
+        "مرشح DNS غير مفعل إلا بموافقتك. يلزم VPN، ولا يمكن تشغيل VPN آخر معه.",
+        "DNS filter is opt-in and requires VPN permission; it cannot run with another VPN."
+    )) }
+    fun startDnsFilter() {
+        runCatching {
+            val start = Intent(activity, KanafDnsVpnService::class.java)
+                .setAction(KanafDnsVpnService.ACTION_START)
+            activity.startForegroundService(start)
+        }.onSuccess {
+            vpnRequested = true
+            vpnStatus = KanafMessage(
+                "طُلب بدء حجب DNS. تحقق من حالة VPN في النظام؛ الحجب محدود.",
+                "DNS filtering requested. Check Android VPN status; coverage is limited."
+            )
+        }.onFailure {
+            vpnRequested = false
+            vpnStatus = KanafMessage("تعذر بدء مرشح DNS: ", "Could not start DNS filter: ")
+                .append(it.javaClass.simpleName)
+        }
+    }
+    val vpnPermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) startDnsFilter()
+        else vpnStatus = KanafMessage(
+            "لم تُمنح صلاحية VPN، والحجب غير مفعل.",
+            "VPN permission was denied; blocking remains off."
+        )
     }
     var vaultStatus by remember { mutableStateOf(KanafMessage.EMPTY) }
     var pendingRestoreId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -751,6 +784,27 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
         onPickFile = { picker.launch(arrayOf("*/*")) },
         deviceScanStatus = deviceScanStatus.displayed(uiLanguage),
         onDeviceScan = { if (!busy) deviceScanPicker.launch(null) },
+        vpnRequested = vpnRequested,
+        vpnStatus = vpnStatus.displayed(uiLanguage),
+        onVpnToggle = { enabled ->
+            if (!enabled) {
+                activity.stopService(Intent(activity, KanafDnsVpnService::class.java))
+                vpnRequested = false
+                vpnStatus = KanafMessage("أُرسل طلب إيقاف مرشح DNS.", "DNS filter stop requested.")
+            } else {
+                val approval = VpnService.prepare(activity)
+                if (approval == null) startDnsFilter() else vpnPermission.launch(approval)
+            }
+        },
+        onVpnRefresh = {
+            vpnRequested = KanafDnsVpnService.isRunning()
+            vpnStatus = if (vpnRequested) KanafMessage(
+                "مرشح DNS المحلي يعمل (تغطية محدودة).",
+                "Local DNS filter is running (limited coverage)."
+            ) else KanafMessage(
+                "مرشح DNS غير نشط.", "DNS filter is not active."
+            )
+        },
         onOpenSystemApps = {
             runCatching {
                 activity.startActivity(Intent(android.provider.Settings.ACTION_APPLICATION_SETTINGS))
