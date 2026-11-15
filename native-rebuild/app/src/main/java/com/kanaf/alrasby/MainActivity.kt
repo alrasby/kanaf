@@ -30,6 +30,7 @@ import com.kanaf.alrasby.engine.ApkStructureInspector
 import com.kanaf.alrasby.engine.ZipInspector
 import com.kanaf.alrasby.engine.LinkInspector
 import com.kanaf.alrasby.engine.EncryptedVault
+import com.kanaf.alrasby.engine.InstalledAppInventory
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -65,6 +66,10 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
     var hasScanReport by remember { mutableStateOf(false) }
     var vaultStatus by remember { mutableStateOf("") }
     var pendingRestoreId by rememberSaveable { mutableStateOf<String?>(null) }
+    val inventory = remember { InstalledAppInventory() }
+    var appEntries by remember { mutableStateOf<List<InstalledAppInventory.Entry>>(emptyList()) }
+    var appsLoaded by remember { mutableStateOf(false) }
+    var appsStatus by remember { mutableStateOf("") }
     val vault = remember { EncryptedVault() }
     val vaultEntries = remember { mutableStateListOf<EncryptedVault.Entry>().also {
         it.addAll(runCatching { vault.list(activity) }.getOrDefault(emptyList()))
@@ -283,6 +288,37 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
         },
         vaultItems = vaultEntries,
         vaultStatus = vaultStatus,
+        installedApps = appEntries,
+        appsLoaded = appsLoaded,
+        appsStatus = appsStatus,
+        onLoadApps = {
+            if (!busy) {
+                busy = true
+                scope.launch {
+                    val found = withContext(Dispatchers.IO) {
+                        runCatching { inventory.load(activity) }
+                    }
+                    if (found.isSuccess) {
+                        appEntries = found.getOrThrow()
+                        appsLoaded = true
+                        appsStatus = localized(
+                            "هذه التطبيقات القابلة للتشغيل الظاهرة لكنف فقط؛ لم يتم فحصها بحثًا عن البرمجيات الخبيثة.",
+                            "Only launchable apps visible to Kanaf are listed; no malware scanning was performed."
+                        )
+                    } else {
+                        appsStatus = localized("تعذر قراءة قائمة التطبيقات", "Could not list visible applications")
+                    }
+                    busy = false
+                }
+            }
+        },
+        onOpenAppDetails = { packageName ->
+            runCatching {
+                activity.startActivity(inventory.settingsIntent(packageName))
+            }.onFailure {
+                appsStatus = localized("تعذر فتح صفحة التطبيق", "Could not open Android app details")
+            }
+        },
         onAddToVault = { if (!busy) vaultPicker.launch(arrayOf("*/*")) },
         onRestoreVault = { id ->
             if (!busy) {
