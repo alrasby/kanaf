@@ -29,6 +29,8 @@ fun KanafGlassHome(
     busy: Boolean,
     sharedText: String?,
     scanHistory: List<String>,
+    keepSessionHistory: Boolean,
+    onSessionHistoryChanged: (Boolean) -> Unit,
     onClearHistory: () -> Unit,
     status: String,
     selfTestStatus: String,
@@ -98,7 +100,8 @@ fun KanafGlassHome(
                         tr("الروابط", "Links"),
                         tr("السجل", "History"),
                         tr("المحركات", "Engines"),
-                        tr("حول كنف", "About")
+                        tr("حول كنف", "About"),
+                        tr("الإعدادات", "Settings")
                     ).forEachIndexed { index, title ->
                         if (page == index) {
                             Button(
@@ -261,10 +264,16 @@ fun KanafGlassHome(
                                 Text(tr("مسح", "Clear"))
                             }
                         }
-                        Text(tr(
-                            "آخر عشر نتائج مختصرة فقط، دون حفظ أسماء الملفات. يُمسح السجل عند إغلاق التطبيق.",
-                            "Up to ten short results, without file names. History is cleared when the app closes."
-                        ), color = secondary, style = MaterialTheme.typography.bodySmall)
+                        Text(
+                            if (keepSessionHistory) tr(
+                                "آخر عشر نتائج مختصرة فقط، دون حفظ أسماء الملفات. يُمسح السجل عند إغلاق التطبيق.",
+                                "Up to ten short results, without file names. History is cleared when the app closes."
+                            ) else tr(
+                                "سجل الجلسة معطل. لن تُحفظ نتائج الفحوصات التالية في السجل.",
+                                "Session history is disabled. Future scan results will not be added to history."
+                            ),
+                            color = secondary, style = MaterialTheme.typography.bodySmall
+                        )
                     }
                     if (scanHistory.isEmpty()) {
                         GlassPanel(card, stroke) {
@@ -351,6 +360,35 @@ fun KanafGlassHome(
                             "كنف — استوديو الأمان. هذه نسخة اختبار تقني للمحركات، ولا تعادل حماية جهاز كاملة.",
                             "Kanaf Security Studio. This is a technical preview of the native engines, not complete device protection."
                         ), color = secondary)
+                    }
+                }
+                if (page == 5) {
+                    GlassPanel(card, stroke) {
+                        Text(tr("إعدادات الخصوصية", "Privacy settings"), color = ink,
+                            style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.height(12.dp))
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween) {
+                            Column(Modifier.weight(1f)) {
+                                Text(tr("سجل فحوصات الجلسة", "Session scan history"),
+                                    color = ink, style = MaterialTheme.typography.titleMedium)
+                                Text(tr(
+                                    "احتفظ بآخر عشر نتائج مختصرة في الذاكرة فقط. عند الإيقاف يُمسح السجل فورًا.",
+                                    "Keep up to ten brief results in memory only. Turning this off clears the history immediately."
+                                ), color = secondary, style = MaterialTheme.typography.bodySmall)
+                            }
+                            Spacer(Modifier.width(12.dp))
+                            Switch(checked = keepSessionHistory, onCheckedChange = onSessionHistoryChanged)
+                        }
+                    }
+                    GlassPanel(card, stroke) {
+                        Text(tr("أذونات ونطاق الحماية", "Permissions and protection scope"),
+                            color = ink, style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold)
+                        Text(tr(
+                            "يُفحص فقط الملف الذي تختاره. لا تُقرأ الرسائل أو التطبيقات الأخرى بصمت، ولا توجد حماية تلقائية في الخلفية أو تحديثات توقيعات عبر الشبكة.",
+                            "Only files you choose are scanned. Messages and other apps are not silently inspected. Background protection and remote signature updates are not enabled."
+                        ), color = secondary, style = MaterialTheme.typography.bodyMedium)
                     }
                 }
                 Text(
