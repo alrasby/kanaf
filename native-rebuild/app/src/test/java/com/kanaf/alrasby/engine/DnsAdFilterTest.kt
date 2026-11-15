@@ -64,6 +64,47 @@ class DnsAdFilterTest {
         assertFalse(DnsPacketCodec.matchesResponse(question, notAResponse))
     }
 
+    @Test fun blockedQueryUsesActualVpnPolicyWithoutForwarding() {
+        val client = byteArrayOf(10, 111, 222.toByte(), 1)
+        val server = byteArrayOf(10, 111, 222.toByte(), 2)
+        val packet = DnsPacketCodec.buildUdp(
+            client, server, 53001, 53, query("ads.doubleclick.net"))!!
+        var calls = 0
+        val reply = DnsFilterCore.reply(packet, server) { calls++; null }!!
+        assertEquals(0, calls)
+        val decoded = DnsPacketCodec.parseUdp(reply)!!
+        assertEquals(53001, decoded.destinationPort)
+        assertEquals(3, decoded.dns[3].toInt() and 15)
+        assertArrayEquals(client, decoded.destinationIp)
+    }
+
+    @Test fun goodUpstreamResponsePassesButForgedIdReturnsServfail() {
+        val client = byteArrayOf(10, 111, 222.toByte(), 1)
+        val server = byteArrayOf(10, 111, 222.toByte(), 2)
+        val dns = query("example.com")
+        val packet = DnsPacketCodec.buildUdp(client, server, 53002, 53, dns)!!
+        val valid = DnsPacketCodec.nxdomain(dns)!!
+        assertArrayEquals(valid, DnsPacketCodec.parseUdp(
+            DnsFilterCore.reply(packet, server) { valid }!!)!!.dns)
+        val forged = valid.copyOf().also { it[1] = 13 }
+        assertEquals(2, DnsPacketCodec.parseUdp(
+            DnsFilterCore.reply(packet, server) { forged }!!)!!.dns[3].toInt() and 15)
+        assertEquals(2, DnsPacketCodec.parseUdp(
+            DnsFilterCore.reply(packet, server) { null }!!)!!.dns[3].toInt() and 15)
+    }
+
+    @Test fun unsolicitedDnsResponseIsNotForwarded() {
+        val client = byteArrayOf(10, 111, 222.toByte(), 1)
+        val server = byteArrayOf(10, 111, 222.toByte(), 2)
+        val packet = DnsPacketCodec.buildUdp(
+            client, server, 53003, 53,
+            DnsPacketCodec.nxdomain(query("example.com"))!!
+        )!!
+        var used = false
+        assertNull(DnsFilterCore.reply(packet, server) { used = true; null })
+        assertFalse(used)
+    }
+
     @Test fun malformedOrCompressedQuestionIsNotClassified() {
         val q = query("example.com")
         q[12] = 0xc0.toByte()

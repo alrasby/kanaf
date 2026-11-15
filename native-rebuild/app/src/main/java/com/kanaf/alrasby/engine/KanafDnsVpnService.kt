@@ -24,6 +24,7 @@ import java.net.DatagramSocket
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.util.concurrent.ArrayBlockingQueue
+import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.ThreadPoolExecutor
 import java.util.concurrent.TimeUnit
 
@@ -50,7 +51,8 @@ class KanafDnsVpnService : VpnService() {
     private val lock = Any()
     private val threads = ThreadPoolExecutor(
         2, 4, 20, TimeUnit.SECONDS, ArrayBlockingQueue(32),
-        ThreadPoolExecutor.CallerRunsPolicy()
+        // Never run a timed-out resolver call on the only TUN reader thread.
+        ThreadPoolExecutor.AbortPolicy()
     )
     // Keep the DNS server paired with the network that advertised it.
     private data class Upstream(val network: Network, val address: InetAddress)
@@ -68,6 +70,9 @@ class KanafDnsVpnService : VpnService() {
             if (Build.VERSION.SDK_INT >= 34) {
                 startForeground(15041, notify, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
             } else startForeground(15041, notify)
+            // Never activate a DNS-only VPN with no usable resolver; otherwise
+            // regular browsing would fail even though no ad blocking is possible.
+            check(upstreams().isNotEmpty()) { "underlying-dns-unavailable" }
             val builder = Builder().setSession("Kanaf DNS ad filter")
                 .setMtu(1500).addAddress(TUN_IP, 32)
                 .addDnsServer(DNS_IP).addRoute(DNS_IP, 32).setBlocking(true)
@@ -112,7 +117,15 @@ class KanafDnsVpnService : VpnService() {
                 if (count < 0) break
                 if (count > 0) {
                     val packet = buffer.copyOf(count)
-                    threads.execute { handle(packet, output) }
+                    try {
+                        threads.execute { handle(packet, output) }
+                    } catch (_: RejectedExecutionException) {
+                        // Saturated bounded queue: provide a quick local SERVFAIL
+                        // instead of stalling every new TUN packet behind DNS I/O.
+                        DnsFilterCore.reply(packet, DNS_BYTES) { null }?.let { response ->
+                            sendReply(output, response)
+                        }
+                    }
                 }
             }
         } catch (_: Exception) {
@@ -123,15 +136,11 @@ class KanafDnsVpnService : VpnService() {
     }
 
     private fun handle(packet: ByteArray, output: FileOutputStream) {
-        val query = DnsPacketCodec.parseUdp(packet) ?: return
-        if (query.destinationPort != 53 || !query.destinationIp.contentEquals(DNS_BYTES)) return
-        val domain = DnsPacketCodec.questionName(query.dns)
-        val response = if (domain != null && AdDomainRules.isAdOrTracker(domain)) {
-            DnsPacketCodec.nxdomain(query.dns)
-        } else forward(query.dns) ?: DnsPacketCodec.servfail(query.dns)
-        if (response == null) return
-        val reply = DnsPacketCodec.buildUdp(DNS_BYTES, query.sourceIp, 53, query.sourcePort, response)
-            ?: return
+        val reply = DnsFilterCore.reply(packet, DNS_BYTES, ::forward) ?: return
+        sendReply(output, reply)
+    }
+
+    private fun sendReply(output: FileOutputStream, reply: ByteArray) {
         synchronized(lock) {
             try { if (active) output.write(reply) }
             catch (_: IOException) { /* interface closed */ }
@@ -153,10 +162,14 @@ class KanafDnsVpnService : VpnService() {
                     val packet = DatagramPacket(data, data.size)
                     socket.receive(packet)
                     val response = data.copyOf(packet.length)
-                    if (DnsPacketCodec.matchesResponse(request, response)) return response
+                    // The central DNS policy verifies the complete DNS
+                    // response before anything is sent back into the VPN.
+                    return response
                 }
             } catch (_: IOException) {
                 // Underlying network may have changed; try another resolver.
+            } catch (_: SecurityException) {
+                // The selected network may have been revoked while binding.
             }
         }
         return null
