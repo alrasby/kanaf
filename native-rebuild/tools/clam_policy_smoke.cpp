@@ -41,5 +41,32 @@ int main() {
     assert(!kanaf::isIncompleteLimitAlert(nullptr));
     assert(!kanaf::isIncompleteLimitAlert("Eicar-Test-Signature"));
     assert(!kanaf::isIncompleteLimitAlert("Heuristics.Limits.ExceededFake"));
+    assert(kanaf::isPinnedClamRuntime("1.4.3"));
+    assert(!kanaf::isPinnedClamRuntime(nullptr));
+    assert(!kanaf::isPinnedClamRuntime("1.4.4"));
+    assert(!kanaf::isPinnedClamRuntime("1.4.3-patched"));
+    assert(!kanaf::validClamThreatName(nullptr));
+    assert(!kanaf::validClamThreatName(""));
+    assert(kanaf::validClamThreatName("Kanaf.EICAR.Test.UNOFFICIAL"));
+    assert(kanaf::validClamThreatName("Win.Trojan.Agent-3"));
+    assert(!kanaf::validClamThreatName("Fake threat"));
+    assert(!kanaf::validClamThreatName("newline\\ncontrol"));
+    assert(!kanaf::validClamThreatName(std::string(129, 'X').c_str()));
+    assert(kanaf::classifyClamScan(0, nullptr) == "NO_MATCH");
+    assert(kanaf::classifyClamScan(0, "") == "NO_MATCH");
+    assert(kanaf::classifyClamScan(0, "Fake.Rule") ==
+        "INCOMPLETE:clamav-contradictory-result");
+    assert(kanaf::classifyClamScan(1, "Kanaf.EICAR.Test.UNOFFICIAL") ==
+        "DETECTED:Kanaf.EICAR.Test.UNOFFICIAL");
+    assert(kanaf::classifyClamScan(1, nullptr) ==
+        "INCOMPLETE:clamav-invalid-threat-name");
+    assert(kanaf::classifyClamScan(1, "") ==
+        "INCOMPLETE:clamav-invalid-threat-name");
+    assert(kanaf::classifyClamScan(1, "Threat\\nInjected") ==
+        "INCOMPLETE:clamav-invalid-threat-name");
+    assert(kanaf::classifyClamScan(1, "Heuristics.Limits.Exceeded.MaxScanSize") ==
+        "INCOMPLETE:clamav-resource-limit");
+    assert(kanaf::classifyClamScan(13, "Fake.Rule") ==
+        "INCOMPLETE:clamav-scan-failed");
     return 0;
 }
