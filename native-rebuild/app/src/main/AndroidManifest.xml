@@ -1,4 +1,5 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Scoped to launchable apps; no broad package visibility permission. -->
     <queries>
         <intent>
@@ -18,6 +19,15 @@
                 <data android:mimeType="text/plain"/>
             </intent-filter>
         </activity>
+        <!-- Opt-in best-effort package event prompt; not a persistent realtime scanner.
+             Protected Android package broadcasts; unavailable/hidden apps are not scanned. -->
+        <receiver android:name=".engine.PackageChangeReceiver" android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.PACKAGE_ADDED" />
+                <action android:name="android.intent.action.PACKAGE_REPLACED" />
+                <data android:scheme="package" />
+            </intent-filter>
+        </receiver>
         <!-- Crash containment only: separate process, same app UID. Not an isolated UID. -->
         <service android:name=".engine.NativeScannerService"
             android:process=":scanner" android:exported="false" />
