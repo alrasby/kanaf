@@ -144,6 +144,7 @@ jobs:
           timeout 480 cmake -S clamav-upstream -B out -G Ninja \
             -DCMAKE_TOOLCHAIN_FILE="$NDK/build/cmake/android.toolchain.cmake" \
             -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-26 \
+            -DCMAKE_SHARED_LINKER_FLAGS="-Wl,-z,max-page-size=16384 -Wl,-z,common-page-size=16384" \
             -DRUST_COMPILER_TARGET=aarch64-linux-android \
             -DENABLE_LIBCLAMAV_ONLY=ON -DENABLE_TESTS=OFF \
             -Dtest_run_result:STRING=0 -Dtest_run_result__TRYRUN_OUTPUT:STRING="" \
@@ -177,14 +178,14 @@ jobs:
               readelf -h /tmp/kanaf-clamav-member.o | grep AArch64
               cp "$lib" arm64-output/
             else
-              python3 native-rebuild/tools/verify_arm64_elf.py "$lib"
+              python3 native-rebuild/tools/verify_arm64_elf.py --require-16kb "$lib"
               readelf -h "$lib" | grep AArch64
               cp -L "$lib" arm64-output/
             fi
           done < libraries.txt
           # libclamav links libclammspack dynamically: ship and validate it too.
           test -s out/libclammspack/libclammspack.so
-          python3 native-rebuild/tools/verify_arm64_elf.py out/libclammspack/libclammspack.so
+          python3 native-rebuild/tools/verify_arm64_elf.py --require-16kb out/libclammspack/libclammspack.so
           cp -L out/libclammspack/libclammspack.so arm64-output/
           # Record the DT_NEEDED closure for Android packaging and loader tests.
           for so in arm64-output/*.so; do

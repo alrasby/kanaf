@@ -36,10 +36,12 @@ jobs:
           export CC_aarch64_linux_android="$CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER"
           export AR_aarch64_linux_android="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar"
           export CARGO_TARGET_AARCH64_LINUX_ANDROID_AR="$AR_aarch64_linux_android"
+          # Link using 16 KiB PT_LOAD segments for Android 15+ devices.
+          export CARGO_TARGET_AARCH64_LINUX_ANDROID_RUSTFLAGS="-C link-arg=-Wl,-z,max-page-size=16384 -C link-arg=-Wl,-z,common-page-size=16384"
           cd yarax-upstream
           CARGO_BUILD_JOBS=2 CARGO_INCREMENTAL=0 timeout 1800 cargo build --locked --release --target aarch64-linux-android -p yara-x-capi 2>&1 | tee ../build.log
           test -s target/aarch64-linux-android/release/libyara_x_capi.so
-          python3 ../native-rebuild/tools/verify_arm64_elf.py target/aarch64-linux-android/release/libyara_x_capi.so
+          python3 ../native-rebuild/tools/verify_arm64_elf.py --require-16kb target/aarch64-linux-android/release/libyara_x_capi.so
           readelf -h target/aarch64-linux-android/release/libyara_x_capi.so | grep AArch64
           readelf -d target/aarch64-linux-android/release/libyara_x_capi.so | tee ../dynamic-dependencies.txt
           cp target/aarch64-linux-android/release/libyara_x_capi.so ../libyara_x_capi.so
