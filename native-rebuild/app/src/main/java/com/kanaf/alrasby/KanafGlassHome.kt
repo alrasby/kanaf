@@ -75,6 +75,14 @@ fun KanafGlassHome(
     onPickFile: () -> Unit,
     deviceScanStatus: String,
     onDeviceScan: () -> Unit,
+    onScanChosenFolder: () -> Unit,
+    onStopDeviceScan: () -> Unit,
+    autoScanProgress: String,
+    sharedStorageAccess: Boolean,
+    scanAccessStatus: String,
+    onRequestSharedStorage: () -> Unit,
+    rulesUpdateStatus: String,
+    onUpdateThreatRules: () -> Unit,
     vpnRequested: Boolean,
     vpnStatus: String,
     onVpnToggle: (Boolean) -> Unit,
@@ -99,6 +107,9 @@ fun KanafGlassHome(
     var confirmQuarantine by remember { mutableStateOf(false) }
     var confirmVpn by remember { mutableStateOf(false) }
     var customPrivateDns by rememberSaveable { mutableStateOf("") }
+    var sectionsOpen by rememberSaveable { mutableStateOf(false) }
+    var detailsOpen by rememberSaveable { mutableStateOf(false) }
+    var dnsAdvanced by rememberSaveable { mutableStateOf(false) }
     var deleteVaultId by remember { mutableStateOf<String?>(null) }
     var appSearch by remember { mutableStateOf("") }
     LaunchedEffect(sharedText) {
@@ -252,7 +263,8 @@ fun KanafGlassHome(
                             style = MaterialTheme.typography.labelMedium)
                     }
                 }
-                if (page != 5) {
+                if ((page != 0 && page != 5 && page != 9 && page != 10) ||
+                    (page == 0 && sectionsOpen)) {
                     FlowRow(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -296,106 +308,118 @@ fun KanafGlassHome(
                     verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
                 if (page == 0) {
-                GlassPanel(card, stroke) {
-                    Text(tr("مركز الحماية", "Protection center"), color = secondary, style = MaterialTheme.typography.titleMedium)
-                    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                        KanafShieldEmblem(busy = busy, dark = dark)
-                    }
-                    Spacer(Modifier.height(12.dp))
-                    Text(
-                        if (busy) tr("الفحص جارٍ…", "Scanning…") else tr("جاهز لفحص ملف", "Ready to scan a file"),
-                        color = ink, style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        tr("خصوصيتك أولًا. يتم تحليل الملف محليًا دون رفعه أو حذفه.", "Privacy first. The selected file is analyzed locally without upload or deletion."),
-                        color = secondary, style = MaterialTheme.typography.bodyMedium
-                    )
-                    Spacer(Modifier.height(20.dp))
-                    Button(
-                        onClick = onPickFile, enabled = !busy,
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp),
-                        shape = RoundedCornerShape(18.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = if (dark) Aqua else Teal,
-                            contentColor = if (dark) Night else Color.White
-                        )
-                    ) {
-                        Text(if (busy) tr("جارٍ الفحص…", "Scanning…")
-                            else tr("فحص ملف بـ ClamAV وYARA-X", "Scan file with ClamAV + YARA-X"),
-                            fontWeight = FontWeight.Bold)
-                    }
-                    Spacer(Modifier.height(10.dp))
-                    OutlinedButton(
-                        onClick = onDeviceScan, enabled = !busy,
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp)
-                            .testTag("device_scan_button"),
-                        shape = RoundedCornerShape(18.dp)
-                    ) {
-                        Text(tr("فحص ملفات الجهاز والتطبيقات المتاحة", "Scan permitted device files and apps"),
-                            fontWeight = FontWeight.Bold)
-                    }
-                    Text(tr(
-                        "يستخدم فحص المجلد محركي ClamAV وYARA-X وبصمة SHA-256، ضمن إذنك وحدود الحجم والوقت. يفحص بعض APK الظاهرة فقط، دون ملفات التطبيقات الخاصة أو حذف شيء. قواعد الكشف الحالية اختبارية، وليست قاعدة فيروسات شاملة.",
-                        "Scoped folder scan uses ClamAV, YARA-X and SHA-256 within your permission and resource limits; only some visible APKs can be audited. Nothing is deleted. Detection rules remain test-only."
-                    ), color = secondary, style = MaterialTheme.typography.bodySmall)
-                    Spacer(Modifier.height(8.dp))
-                    Text("ClamAV 1.4.6  •  YARA-X 0.13.0",
-                        color = if (dark) Aqua else Teal,
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold)
-                    OutlinedButton(
-                        onClick = onTestEngines, enabled = !busy,
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
-                            .testTag("home_native_engines_test")
-                    ) {
-                        Text(tr("اختبار المحركين بعينة EICAR الآمنة", "Self-test engines with harmless EICAR"))
-                    }
-                    if (selfTestStatus.isNotBlank()) {
-                        Text(selfTestStatus, color = secondary,
-                            style = MaterialTheme.typography.bodySmall)
-                    }
-                    if (busy) {
-                        Spacer(Modifier.height(12.dp))
-                        LinearProgressIndicator(Modifier.fillMaxWidth(), color = Aqua)
-                    }
-                }
-                if (deviceScanStatus.isNotBlank()) {
                     GlassPanel(card, stroke) {
-                        Text(tr("تقرير فحص الجهاز المحدود", "Scoped device scan report"),
-                            color = ink, style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold)
-                        Text(deviceScanStatus, color = secondary, style = MaterialTheme.typography.bodySmall)
-                    }
-                }
-                GlassPanel(card, stroke) {
-                    Text(tr("نتيجة الفحص", "Scan result"), color = ink, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                    Spacer(Modifier.height(12.dp))
-                    Text(status, color = secondary, style = MaterialTheme.typography.bodyMedium)
-                    if (hasScanReport) {
-                        Spacer(Modifier.height(12.dp))
-                        OutlinedButton(
-                            onClick = onShareReport, enabled = !busy,
-                            modifier = Modifier.fillMaxWidth()
-                        ) { Text(tr("مشاركة التقرير باختياري", "Share report manually")) }
+                        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                            KanafShieldEmblem(busy = busy, dark = dark)
+                        }
+                        Text(
+                            if (busy) tr("جارٍ فحص جهازك", "Scanning your device")
+                            else tr("كنف يحمي خصوصيتك", "Kanaf protects your privacy"),
+                            color = ink, style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center
+                        )
                         Text(tr(
-                            "قد يتضمن التقرير بصمة SHA-256. لن تتم مشاركته إلا بعد اختيارك لتطبيق الاستلام.",
-                            "The report may contain a SHA-256 fingerprint. Nothing is shared until you choose a recipient app."
+                            "افحص التطبيقات والملفات المتاحة بضغطة واحدة. لا اختيار ملفات ولا حذف تلقائي.",
+                            "One-tap inspection of installed apps and accessible files. No picker or automatic deletion."
+                        ), color = secondary, style = MaterialTheme.typography.bodyMedium,
+                            textAlign = TextAlign.Center)
+                        Spacer(Modifier.height(14.dp))
+                        Button(onClick = onDeviceScan, enabled = !busy,
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 60.dp)
+                                .testTag("device_scan_button"),
+                            shape = RoundedCornerShape(20.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (dark) Aqua else Teal,
+                                contentColor = if (dark) Night else Color.White
+                            )
+                        ) {
+                            Text(if (busy) tr("جارٍ الفحص…", "Scanning…")
+                                else tr("فحص الجهاز الآن", "Scan device now"),
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold)
+                        }
+                        if (busy) {
+                            Spacer(Modifier.height(8.dp))
+                            LinearProgressIndicator(Modifier.fillMaxWidth(), color = Aqua)
+                            if (autoScanProgress.isNotBlank()) {
+                                Text(autoScanProgress, color = secondary,
+                                    style = MaterialTheme.typography.bodySmall)
+                            }
+                            TextButton(onClick = onStopDeviceScan,
+                                modifier = Modifier.fillMaxWidth()
+                                    .testTag("stop_device_scan")) {
+                                Text(tr("إيقاف الفحص", "Stop scan"))
+                            }
+                        }
+                        Text(
+                            if (sharedStorageAccess)
+                                tr("إذن الملفات المشتركة متاح", "Shared-files permission available")
+                            else tr("فحص التطبيقات متاح؛ إذن الملفات يوسّع نطاق الفحص.",
+                                "App scanning is available; files permission expands coverage."),
+                            color = secondary, style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                    if (deviceScanStatus.isNotBlank()) {
+                        GlassPanel(card, stroke) {
+                            Text(tr("نتيجة الفحص", "Scan result"),
+                                color = ink, fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.titleMedium)
+                            Text(deviceScanStatus, color = secondary,
+                                maxLines = if (detailsOpen) Int.MAX_VALUE else 5,
+                                style = MaterialTheme.typography.bodySmall)
+                            TextButton(onClick = { detailsOpen = !detailsOpen },
+                                modifier = Modifier.fillMaxWidth()
+                                    .testTag("scan_report_details")) {
+                                Text(if (detailsOpen) tr("إخفاء التفاصيل", "Hide details")
+                                    else tr("عرض التقرير", "View report"))
+                            }
+                        }
+                    }
+                    Row(Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        OutlinedButton(onClick = { page = 9 },
+                            modifier = Modifier.weight(1f).heightIn(min = 56.dp)
+                                .testTag("open_dns_page"),
+                            shape = RoundedCornerShape(18.dp)) {
+                            Text(tr("DNS وحجب الإعلانات", "DNS & ad blocking"),
+                                maxLines = 2, textAlign = TextAlign.Center)
+                        }
+                        OutlinedButton(onClick = { page = 10 },
+                            modifier = Modifier.weight(1f).heightIn(min = 56.dp)
+                                .testTag("open_scan_tools"),
+                            shape = RoundedCornerShape(18.dp)) {
+                            Text(tr("خيارات الفحص", "Scan options"),
+                                maxLines = 2, textAlign = TextAlign.Center)
+                        }
+                    }
+                    GlassPanel(card, stroke) {
+                        Text(tr("محركات الفحص", "Detection engines"), color = ink,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold)
+                        Text("ClamAV 1.4.6   •   YARA-X 0.13.0",
+                            color = if (dark) Aqua else Teal)
+                        Text(tr(
+                            "قواعد التهديدات الحالية اختبارية فقط؛ عدم العثور على تطابق لا يعني أن الجهاز خالٍ من الفيروسات.",
+                            "Threat rules remain test-only; no match does not mean the device is malware-free."
                         ), color = secondary, style = MaterialTheme.typography.bodySmall)
                     }
+                    TextButton(onClick = { sectionsOpen = !sectionsOpen },
+                        modifier = Modifier.fillMaxWidth().testTag("more_features")) {
+                        Text(if (sectionsOpen) tr("إخفاء الأقسام", "Hide sections")
+                            else tr("المزيد من ميزات كنف", "More Kanaf features"))
+                    }
                 }
-                GlassPanel(card, stroke) {
-                    Text(tr("قدرات الفحص الحالية", "Current scanning capabilities"), color = ink, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                    Spacer(Modifier.height(10.dp))
-                    Text("SHA-256  •  ZIP  •  APK  •  DEX", color = if (dark) Aqua else Teal,
-                        style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        tr("فحص بنية الملفات ومطابقة التوقيعات المحلية، مع اختبار ClamAV وYARA-X بقواعد EICAR المحدودة. عدم العثور على تطابق لا يثبت السلامة.", "Local SHA-256 and file structure checks; ClamAV and YARA-X test-rule scans recognize EICAR only. No match does not prove safety."),
-                        color = secondary, style = MaterialTheme.typography.bodySmall
-                    )
-                }
+                if (page == 9) {
+                    GlassPanel(card, stroke) {
+                        Text(tr("إعدادات DNS", "DNS settings"), color = ink,
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold)
+                        Text(tr(
+                            "هذه الإعدادات مستقلة عن فحص الفيروسات. يمكنك استخدام DNS الخاص في الهاتف أو VPN كنف المحلي، وليس كليهما في الوقت نفسه.",
+                            "DNS controls are separate from antivirus scanning. Choose Android Private DNS or Kanaf local VPN, not both simultaneously."
+                        ), color = secondary, style = MaterialTheme.typography.bodySmall)
+                    }
                 if (privateDnsAvailable) GlassPanel(card, stroke) {
                     Text(tr("Private DNS للنظام", "Android Private DNS"),
                         color = ink, style = MaterialTheme.typography.titleMedium,
@@ -457,8 +481,8 @@ fun KanafGlassHome(
                         color = ink, style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold)
                     Text(tr(
-                        "مرشح VPN اختياري. مع صلاحية ADB الخاصة يمكن إيقاف Private DNS عند التشغيل وإعادته إلى Auto عند الإيقاف. من دون الصلاحية يلزم تعطيله يدويًا. الحجب محدود ولا يمس ملفاتك.",
-                        "Opt-in DNS VPN: with an external ADB secure-settings grant it can switch system Private DNS Off on activation and back to Auto on stop. Without the grant, select Off manually. Filtering remains limited."
+                        "مرشح VPN محلي اختياري يحجب بعض نطاقات الإعلانات. للمستخدم العادي: اضبط DNS الخاص في الهاتف على «إيقاف» أولًا، دون الحاجة إلى ADB.",
+                        "Optional local VPN blocks a limited list of ad domains. No ADB needed: turn Android Private DNS Off in system settings first."
                     ), color = secondary, style = MaterialTheme.typography.bodySmall)
                     Spacer(Modifier.height(8.dp))
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -473,10 +497,17 @@ fun KanafGlassHome(
                     }
                     if (!privateDnsCompatible && !privateDnsCanAutoSwitch && !vpnRequested) {
                         Text(tr(
-                            "لا يمكن التبديل التلقائي حاليًا. اختر DNS متوقف في الهاتف، أو امنح كنف صلاحية ADB الاختيارية مرة واحدة.",
-                            "Automatic switching is unavailable. Set Private DNS Off in Android settings, or grant the optional ADB permission once."
+                            "لفتح مرشح كنف اختر «DNS متوقف» من إعدادات الهاتف أولًا. لا تحتاج إعدادات المطور.",
+                            "To enable Kanaf's filter, select Private DNS Off in phone settings. Developer tools are not needed."
                         ), color = secondary, style = MaterialTheme.typography.bodySmall)
                     }
+                    TextButton(
+                        onClick = { dnsAdvanced = !dnsAdvanced },
+                        modifier = Modifier.fillMaxWidth().testTag("dns_advanced_options")
+                    ) {
+                        Text(tr("خيارات متقدمة اختيارية", "Optional advanced options"))
+                    }
+                    if (dnsAdvanced) {
                     if (privateDnsAvailable) {
                         Text(
                             if (privateDnsCanAutoSwitch)
@@ -493,13 +524,62 @@ fun KanafGlassHome(
                             }
                         }
                     }
+                    }
                     OutlinedButton(onClick = onVpnRefresh, modifier = Modifier.fillMaxWidth()) {
                         Text(tr("التحقق من حالة المرشح", "Refresh filter status"))
                     }
                     if (vpnStatus.isNotBlank())
                         Text(vpnStatus, color = secondary, style = MaterialTheme.typography.bodySmall)
                 }
-                } // end scan page
+                }
+                if (page == 10) {
+                    GlassPanel(card, stroke) {
+                        Text(tr("خيارات الفحص والأذونات", "Scan options & permissions"),
+                            color = ink, style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold)
+                        Text(tr(
+                            "فحص التطبيقات يبدأ من الرئيسية دون اختيار أي ملف. إذن الملفات المشتركة مطلوب مرة واحدة فقط لتوسيع النطاق؛ ولا يتيح قراءة بيانات التطبيقات الخاصة.",
+                            "Installed-app scanning starts from Home without a file picker. One-time shared-files permission expands coverage but cannot access private app data."
+                        ), color = secondary, style = MaterialTheme.typography.bodySmall)
+                        OutlinedButton(onClick = onRequestSharedStorage,
+                            modifier = Modifier.fillMaxWidth()
+                                .testTag("request_storage_scan_access")) {
+                            Text(if (sharedStorageAccess)
+                                tr("إدارة إذن الملفات المشتركة", "Manage shared-files permission")
+                                else tr("السماح بفحص الملفات المشتركة", "Allow shared-files access"))
+                        }
+                        if (scanAccessStatus.isNotBlank()) {
+                            Text(scanAccessStatus, color = secondary,
+                                style = MaterialTheme.typography.bodySmall)
+                        }
+                        OutlinedButton(onClick = onPickFile, enabled = !busy,
+                            modifier = Modifier.fillMaxWidth().testTag("manual_file_scan")) {
+                            Text(tr("فحص ملف منفرد", "Scan individual file"))
+                        }
+                        OutlinedButton(onClick = onScanChosenFolder, enabled = !busy,
+                            modifier = Modifier.fillMaxWidth().testTag("manual_folder_scan")) {
+                            Text(tr("فحص مجلد محدد", "Scan selected folder"))
+                        }
+                        OutlinedButton(onClick = onTestEngines, enabled = !busy,
+                            modifier = Modifier.fillMaxWidth()
+                                .testTag("home_native_engines_test")) {
+                            Text(tr("اختبار محركي ClamAV وYARA-X", "Self-test ClamAV and YARA-X"))
+                        }
+                        if (selfTestStatus.isNotBlank()) {
+                            Text(selfTestStatus, color = secondary,
+                                style = MaterialTheme.typography.bodySmall)
+                        }
+                        if (status.isNotBlank()) {
+                            Text(status, color = secondary,
+                                style = MaterialTheme.typography.bodySmall)
+                        }
+                        if (hasScanReport) {
+                            TextButton(onClick = onShareReport, enabled = !busy) {
+                                Text(tr("مشاركة التقرير اختياريًا", "Share report manually"))
+                            }
+                        }
+                    }
+                }
 
                 if (page == 1) {
                     GlassPanel(card, stroke) {
@@ -793,8 +873,8 @@ fun KanafGlassHome(
                             color = ink, style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.SemiBold)
                         Text(tr(
-                            "يختار المستخدم الملفات للفحص يدويًا. مراقبة تثبيت التطبيقات وفحص مجلد محدد دورياً اختياريان من قسم الحماية. لا يستطيع كنف الوصول إلى جميع ملفات الجهاز أو منع تشغيل التطبيقات تلقائيًا.",
-                            "Files are selected by the user. Optional install-event review and scheduled selected-folder checks are available in Protection. Kanaf cannot inspect every private file or automatically block other apps."
+                            "يفحص كنف حزم التطبيقات بطلب المستخدم دون اختيار ملف، ويمكنه فحص الملفات المشتركة بعد إذن أندرويد. لا يستطيع قراءة بيانات التطبيقات الخاصة أو ملفات النظام.",
+                            "Kanaf scans installed APKs on request without a file picker. It inspects shared files with Android's special access, but cannot read private app data or protected system files."
                         ), color = secondary, style = MaterialTheme.typography.bodyMedium)
                         Spacer(Modifier.height(12.dp))
                         OutlinedButton(onClick = onOpenSystemApps,
@@ -806,6 +886,24 @@ fun KanafGlassHome(
                             "يفتح إعدادات أندرويد الرسمية لإدارة الأذونات يدويًا. لا يغيّر كنف أذونات التطبيقات الأخرى.",
                             "Opens official Android settings for manual controls. Kanaf does not modify other apps' permissions."
                         ), color = secondary, style = MaterialTheme.typography.bodySmall)
+                    }
+                    GlassPanel(card, stroke) {
+                        Text(tr("تحديث قواعد ومحركات الكشف", "Threat rules & engine updates"),
+                            color = ink, style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold)
+                        Text(tr(
+                            "يتحقق كنف من قاعدة تهديدات موقعة من الناشر. تحديث ملفات المحركات الأصلية يتطلب تحديث التطبيق نفسه.",
+                            "Kanaf checks a publisher-signed threat database. Native engine binaries update through application releases."
+                        ), color = secondary, style = MaterialTheme.typography.bodySmall)
+                        OutlinedButton(onClick = onUpdateThreatRules, enabled = !busy,
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)
+                                .testTag("update_detection_rules")) {
+                            Text(tr("التحقق من تحديثات الكشف", "Check detection updates"))
+                        }
+                        if (rulesUpdateStatus.isNotBlank()) {
+                            Text(rulesUpdateStatus, color = secondary,
+                                style = MaterialTheme.typography.bodySmall)
+                        }
                     }
                     GlassPanel(card, stroke) {
                         Text(tr("حول كنف", "About Kanaf"), color = ink,
@@ -1021,7 +1119,7 @@ fun KanafGlassHome(
                     textAlign = TextAlign.Center
                 )
                 Text(
-                    tr("نسخة تطويرية · لا توفر حماية شاملة أو فحصًا تلقائيًا للجهاز", "Preview build · no comprehensive or automatic device protection"),
+                    tr("نسخة تطويرية · فحص تلقائي بطلب المستخدم وقواعد محدودة", "Preview build · on-demand automatic scanning, limited test rules"),
                     modifier = Modifier.fillMaxWidth(),
                     color = secondary, style = MaterialTheme.typography.labelSmall,
                     textAlign = TextAlign.Center
