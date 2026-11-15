@@ -54,6 +54,8 @@ class KanafUiNavigationTest {
         rule.onNodeWithTag("dns_provider_switch_family_adguard-dns_com").assertExists()
         rule.onNodeWithTag("dns_add_quick_tile").assertExists()
         rule.onNodeWithTag("dns_filter_switch").assertExists()
+        rule.onNodeWithTag("dns_refresh_stats").assertExists()
+        rule.onNodeWithTag("dns_check_coverage").assertExists()
         rule.onNodeWithTag("dns_advanced_options").assertExists()
     }
 
