@@ -19,6 +19,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.kanaf.alrasby.engine.LinkInspector
+import com.kanaf.alrasby.engine.EncryptedVault
 
 private val Teal = Color(0xFF146C70)
 private val Aqua = Color(0xFF3DDFB0)
@@ -29,6 +30,13 @@ fun KanafGlassHome(
     busy: Boolean,
     sharedText: String?,
     scanHistory: List<String>,
+    hasScanReport: Boolean,
+    onShareReport: () -> Unit,
+    vaultItems: List<EncryptedVault.Entry>,
+    vaultStatus: String,
+    onAddToVault: () -> Unit,
+    onRestoreVault: (String) -> Unit,
+    onDeleteVault: (String) -> Unit,
     keepSessionHistory: Boolean,
     onSessionHistoryChanged: (Boolean) -> Unit,
     onClearHistory: () -> Unit,
@@ -41,6 +49,8 @@ fun KanafGlassHome(
     var page by remember { mutableIntStateOf(if (sharedText.isNullOrBlank()) 0 else 1) }
     var linkInput by remember { mutableStateOf(sharedText.orEmpty()) }
     var linkReport by remember { mutableStateOf<LinkInspector.Report?>(null) }
+    var confirmVaultSave by remember { mutableStateOf(false) }
+    var deleteVaultId by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(sharedText) {
         if (!sharedText.isNullOrBlank()) {
             linkInput = sharedText
@@ -52,6 +62,46 @@ fun KanafGlassHome(
     LaunchedEffect(page) { scrollState.scrollTo(0) }
     val arabic = java.util.Locale.getDefault().language == "ar"
     fun tr(ar: String, en: String) = if (arabic) ar else en
+    if (confirmVaultSave) {
+        AlertDialog(
+            onDismissRequest = { confirmVaultSave = false },
+            title = { Text(tr("إضافة نسخة مشفرة", "Save encrypted copy")) },
+            text = { Text(tr(
+                "سيختار المستخدم ملفًا لنسخه إلى خزنة كنف المشفرة (16 ميجابايت كحد أقصى). الملف الأصلي لن يُحذف أو يُعزل عن التطبيقات الأخرى. لا تفتح ملفات غير موثوقة.",
+                "Choose a file to copy into Kanaf's encrypted vault (up to 16 MiB). The original remains accessible to other apps: this is not automatic quarantine. Do not open untrusted files."
+            )) },
+            confirmButton = {
+                TextButton(onClick = { confirmVaultSave = false; onAddToVault() }) {
+                    Text(tr("اختيار ملف", "Choose file"))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmVaultSave = false }) {
+                    Text(tr("إلغاء", "Cancel"))
+                }
+            }
+        )
+    }
+    deleteVaultId?.let { selected ->
+        AlertDialog(
+            onDismissRequest = { deleteVaultId = null },
+            title = { Text(tr("حذف النسخة المشفرة؟", "Delete encrypted copy?")) },
+            text = { Text(tr(
+                "سيُحذف الملف المشفر المخزن داخل كنف فقط. لا يمكن التراجع عن الحذف، ولن يتأثر الملف الأصلي.",
+                "This permanently deletes only the copy stored in Kanaf. The original file remains unchanged."
+            )) },
+            confirmButton = {
+                TextButton(onClick = { deleteVaultId = null; onDeleteVault(selected) }) {
+                    Text(tr("حذف النسخة", "Delete copy"))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { deleteVaultId = null }) {
+                    Text(tr("إلغاء", "Cancel"))
+                }
+            }
+        )
+    }
     fun signalText(signal: LinkInspector.Signal): String = when (signal) {
         LinkInspector.Signal.UNENCRYPTED_HTTP -> tr("اتصال HTTP غير مشفر", "Unencrypted HTTP connection")
         LinkInspector.Signal.USER_INFO -> tr("عنوان قد يخفي المضيف الحقيقي باستخدام @", "User-info (@) may disguise the real host")
@@ -101,7 +151,8 @@ fun KanafGlassHome(
                         tr("السجل", "History"),
                         tr("المحركات", "Engines"),
                         tr("حول كنف", "About"),
-                        tr("الإعدادات", "Settings")
+                        tr("الإعدادات", "Settings"),
+                        tr("الخزنة", "Vault")
                     ).forEachIndexed { index, title ->
                         if (page == index) {
                             Button(
@@ -158,6 +209,17 @@ fun KanafGlassHome(
                     Text(tr("نتيجة الفحص", "Scan result"), color = ink, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                     Spacer(Modifier.height(12.dp))
                     Text(status, color = secondary, style = MaterialTheme.typography.bodyMedium)
+                    if (hasScanReport) {
+                        Spacer(Modifier.height(12.dp))
+                        OutlinedButton(
+                            onClick = onShareReport, enabled = !busy,
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text(tr("مشاركة التقرير باختياري", "Share report manually")) }
+                        Text(tr(
+                            "قد يتضمن التقرير بصمة SHA-256. لن تتم مشاركته إلا بعد اختيارك لتطبيق الاستلام.",
+                            "The report may contain a SHA-256 fingerprint. Nothing is shared until you choose a recipient app."
+                        ), color = secondary, style = MaterialTheme.typography.bodySmall)
+                    }
                 }
                 GlassPanel(card, stroke) {
                     Text(tr("قدرات الفحص الحالية", "Current scanning capabilities"), color = ink, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
@@ -389,6 +451,63 @@ fun KanafGlassHome(
                             "يُفحص فقط الملف الذي تختاره. لا تُقرأ الرسائل أو التطبيقات الأخرى بصمت، ولا توجد حماية تلقائية في الخلفية أو تحديثات توقيعات عبر الشبكة.",
                             "Only files you choose are scanned. Messages and other apps are not silently inspected. Background protection and remote signature updates are not enabled."
                         ), color = secondary, style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+                if (page == 6) {
+                    GlassPanel(card, stroke) {
+                        Text(tr("الخزنة المشفرة", "Encrypted vault"), color = ink,
+                            style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.height(8.dp))
+                        Text(tr(
+                            "تحتفظ كنف بنسخة مشفرة محليًا بمفتاح من Android Keystore. لا تتصل بالإنترنت ولا تحفظ أسماء الملفات. تبقى الملفات الأصلية في مكانها؛ ليست هذه ميزة حجر تلقائي.",
+                            "Kanaf keeps an encrypted local copy using Android Keystore. No uploads or original filenames are stored. Original files are unchanged; this is not automatic quarantine."
+                        ), color = secondary, style = MaterialTheme.typography.bodyMedium)
+                        Spacer(Modifier.height(12.dp))
+                        Button(onClick = { confirmVaultSave = true }, enabled = !busy,
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                            shape = RoundedCornerShape(16.dp)) {
+                            Text(tr("إضافة ملف إلى الخزنة", "Add file to vault"))
+                        }
+                        Text(tr(
+                            "ملفات حتى 16 ميجابايت. يؤدي مسح بيانات التطبيق أو فقدان مفتاح Keystore إلى تعذر استعادة النسخ المشفرة.",
+                            "Files up to 16 MiB. Clearing app data or losing the Android Keystore key makes vault files unrecoverable."
+                        ), color = secondary, style = MaterialTheme.typography.bodySmall)
+                        if (vaultStatus.isNotBlank()) {
+                            Spacer(Modifier.height(12.dp))
+                            Text(vaultStatus, color = ink, style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                    if (vaultItems.isEmpty()) {
+                        GlassPanel(card, stroke) {
+                            Text(tr("الخزنة فارغة حاليًا", "No encrypted copies yet"),
+                                color = secondary)
+                        }
+                    } else vaultItems.forEachIndexed { index, entry ->
+                        GlassPanel(card, stroke) {
+                            Text(tr("نسخة مشفرة", "Encrypted copy") + " #${index + 1}",
+                                color = ink, style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold)
+                            Text(tr("المعرّف: ", "ID: ") + entry.id.take(8) +
+                                " · " + (entry.storedBytes / 1024) + " KiB",
+                                color = secondary, style = MaterialTheme.typography.bodySmall)
+                            Text(java.text.DateFormat.getDateTimeInstance()
+                                .format(java.util.Date(entry.savedAtMillis)),
+                                color = secondary, style = MaterialTheme.typography.bodySmall)
+                            Spacer(Modifier.height(8.dp))
+                            Row(Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Button(onClick = { onRestoreVault(entry.id) },
+                                    enabled = !busy,
+                                    modifier = Modifier.weight(1f)) {
+                                    Text(tr("استعادة إلى ملف", "Restore file"))
+                                }
+                                OutlinedButton(onClick = { deleteVaultId = entry.id },
+                                    enabled = !busy,
+                                    modifier = Modifier.weight(1f)) {
+                                    Text(tr("حذف النسخة", "Delete copy"))
+                                }
+                            }
+                        }
                     }
                 }
                 Text(
