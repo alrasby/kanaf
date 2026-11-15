@@ -5,12 +5,12 @@
 #include <cstring>
 #include <string>
 
-// ClamAV 1.4.3 (clamav-1.4.3/libclamav/clamav.h) ABI ordinal values.
+// ClamAV 1.4.6 (clamav-1.4.6/libclamav/clamav.h) ABI ordinal values.
 // Do NOT reuse with a different ClamAV version without rechecking the header.
 namespace kanaf {
 // Only the exact audited libclamav C ABI may be called via dlsym.
 inline bool isPinnedClamRuntime(const char* version) {
-    return version != nullptr && std::strcmp(version, "1.4.3") == 0;
+    return version != nullptr && std::strcmp(version, "1.4.6") == 0;
 }
 
 // Treat unnamed, malformed or oversized native detections as incomplete.
@@ -27,7 +27,7 @@ inline bool validClamThreatName(const char* name) {
     return length > 0 && length <= 128 && name[length] == '\0';
 }
 
-// ClamAV 1.4.3: CL_ENGINE_AC_ONLY=10. Configure before cl_load because
+// ClamAV 1.4.6: CL_ENGINE_AC_ONLY=10. Configure before cl_load because
 // cli_initroots builds the matcher while the database is being loaded.
 inline constexpr int kClamAcOnlyField = 10;
 inline constexpr int kClamDisableCacheField = 25;
@@ -73,7 +73,7 @@ inline bool isIncompleteLimitAlert(const char* name) {
     return std::strncmp(name, kLimitName, len) == 0 &&
            (name[len] == '\0' || name[len] == '.');
 }
-// ClamAV 1.4.3: CL_CLEAN=0 and CL_VIRUS=1. Other codes are errors.
+// ClamAV 1.4.6: CL_CLEAN=0 and CL_VIRUS=1. Other codes are errors.
 inline std::string classifyClamScan(int code, const char* name) {
     if (code == 0) {
         // A contradictory name on CL_CLEAN cannot be trusted.

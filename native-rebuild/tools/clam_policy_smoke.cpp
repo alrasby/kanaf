@@ -50,10 +50,10 @@ int main() {
     assert(!kanaf::isIncompleteLimitAlert(nullptr));
     assert(!kanaf::isIncompleteLimitAlert("Eicar-Test-Signature"));
     assert(!kanaf::isIncompleteLimitAlert("Heuristics.Limits.ExceededFake"));
-    assert(kanaf::isPinnedClamRuntime("1.4.3"));
+    assert(kanaf::isPinnedClamRuntime("1.4.6"));
     assert(!kanaf::isPinnedClamRuntime(nullptr));
-    assert(!kanaf::isPinnedClamRuntime("1.4.4"));
-    assert(!kanaf::isPinnedClamRuntime("1.4.3-patched"));
+    assert(!kanaf::isPinnedClamRuntime("1.4.3"));
+    assert(!kanaf::isPinnedClamRuntime("1.4.6-patched"));
     assert(!kanaf::validClamThreatName(nullptr));
     assert(!kanaf::validClamThreatName(""));
     assert(kanaf::validClamThreatName("Kanaf.EICAR.Test.UNOFFICIAL"));

@@ -123,3 +123,8 @@ The translated Android ARM64 run #10 FAILED the actual engine detection gate: Cl
 ## ClamAV Android matcher controlled experiment (15 Nov 2026)
 
 The ClamAV 1.4.3 source places simple NDB signatures in Boyer–Moore by default; `CL_ENGINE_AC_ONLY` switches to a supported Aho–Corasick matcher. For Kanaf's EICAR-only prototype, the bridge now enables the AC-only option (ABI ordinal 10) **before `cl_load` initializes the matcher roots**, rejecting a failed option rather than continuing insecurely. Host C++ regression cases cover the setting and failure handling. This remains an experiment until strict ARM64 EICAR-positive/benign-negative checks pass, and performance must be re-evaluated before any full production database.
+
+
+## ClamAV 1.4.6 security migration (candidate, NOT certified)
+
+The 1.4.3 Android engine is superseded by a cross-build target for **ClamAV 1.4.6 LTS**, following upstream security patches. The app now requires exactly **1.4.6**, and rejects the old native library as `INCOMPLETE:clamav-version-mismatch`. The independent native APK packaging and translated-ARM64 runtime workflows were temporarily switched to manual invocation during this upgrade to avoid publishing an APK with the outdated 1.4.3 engine. Once a new 1.4.6 engine build succeeds, re-pin its successful artifact run ID and restore automatic triggers. Only a successful native ARM64 EICAR positive and benign negative test, followed by genuine-device QA, can open the detection gate. Production threat signatures, dataset validation and trusted signing keys remain independent release prerequisites.

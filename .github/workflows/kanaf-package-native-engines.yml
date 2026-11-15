@@ -1,8 +1,5 @@
 name: Kanaf Android APK with isolated native engines
 on:
-  push:
-    branches: [rebuild/kanaf-native-v1]
-    paths: ['.github/workflows/kanaf-package-native-engines.yml', 'native-rebuild/app/**', 'native-rebuild/build.gradle.kts', 'native-rebuild/settings.gradle.kts', 'native-rebuild/gradle.properties', 'native-rebuild/tools/verify_arm64_elf.py']
   workflow_dispatch:
   workflow_call:
 permissions:

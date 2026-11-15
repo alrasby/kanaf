@@ -150,7 +150,7 @@ object NativeScannerBridge {
                 benign.delete()
             }
             clamGate = NativeEngineGate("clamav", libraries.clamavLoaded, clamRulesOK, clamOK,
-                engineVersion = "1.4.3", rulesVersion = "EICAR-test-v1")
+                engineVersion = "1.4.6", rulesVersion = "EICAR-test-v1")
             yaraGate = NativeEngineGate("yara-x", libraries.yaraXLoaded, yaraRulesOK, yaraOK,
                 engineVersion = "0.13.0", rulesVersion = "EICAR-test-v1")
 

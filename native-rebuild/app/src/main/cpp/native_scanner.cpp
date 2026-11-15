@@ -94,7 +94,7 @@ std::string clamScan(const char* file, const char* database) {
             const char* name = nullptr;
             unsigned long scanned = 0;
             ClScanOptions options{};
-            // ClamAV 1.4.3 parsers: archive, ELF, PDF, HTML, PE.
+            // ClamAV 1.4.6 parsers: archive, ELF, PDF, HTML, PE.
             // Alert on engine resource limit exhaustion; never label it malware or clean.
             options.parse = 0x1 | 0x2 | 0x4 | 0x100 | 0x200;
             options.general = 0x4;   // CL_SCAN_GENERAL_HEURISTICS
@@ -104,7 +104,7 @@ std::string clamScan(const char* file, const char* database) {
             __android_log_print(ANDROID_LOG_INFO, "KanafClamNative",
                 "ClamAV scan code=%d scannedUnits=%lu", verdict, scanned);
             // A diagnostic on the harmless built-in EICAR vector only.
-            // ClamAV 1.4.3's cli_magic_scan has a direct raw-pattern path
+            // ClamAV 1.4.6's cli_magic_scan has a direct raw-pattern path
             // when no parse or heuristic options are enabled. Check whether
             // the options, rather than the database, suppress matching.
             // This result is NEVER returned as the verdict or a readiness gate.

@@ -36,7 +36,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          git clone --depth 1 --branch clamav-1.4.3 https://github.com/Cisco-Talos/clamav.git clamav-upstream
+          git clone --depth 1 --branch clamav-1.4.6 https://github.com/Cisco-Talos/clamav.git clamav-upstream
           git -C clamav-upstream rev-parse HEAD | tee revision.txt
           export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang"
           export CC_aarch64_linux_android="$CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER"
@@ -126,7 +126,7 @@ jobs:
           cmake --install jsonc-build
           test -s jsonc-android/include/json-c/json.h
           test -s jsonc-android/lib/libjson-c.a
-          # ClamAV 1.4.3 FindRust probes the HOST for native linker libraries
+          # ClamAV 1.4.6 FindRust probes the HOST for native linker libraries
           # even when cross-compiling. Probe the Android target instead.
           python3 - <<'PY'
           from pathlib import Path
