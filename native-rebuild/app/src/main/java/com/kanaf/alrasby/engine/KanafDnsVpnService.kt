@@ -1,6 +1,8 @@
 package com.kanaf.alrasby.engine
 
 import android.app.Notification
+import android.content.ComponentName
+import android.service.quicksettings.TileService
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -75,6 +77,16 @@ class KanafDnsVpnService : VpnService() {
         }
     }
     private var reader: Thread? = null
+    private var starting = false
+    private val startHandler = Handler(Looper.getMainLooper())
+
+    private fun refreshTile() {
+        runCatching {
+            TileService.requestListeningState(
+                this, ComponentName(this, KanafDnsTileService::class.java)
+            )
+        }
+    }
     private val lock = Any()
     private val threads = ThreadPoolExecutor(
         2, 4, 20, TimeUnit.SECONDS, ArrayBlockingQueue(32),
@@ -91,33 +103,57 @@ class KanafDnsVpnService : VpnService() {
             stopSelf()
             return START_NOT_STICKY
         }
-        if (active) return START_STICKY
+        if (active || starting) return START_NOT_STICKY
         try {
             val notify = notification()
             if (Build.VERSION.SDK_INT >= 34) {
                 startForeground(15041, notify, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
             } else startForeground(15041, notify)
-            // Android Private DNS is always preferred. A competing route can
-            // cause "Private DNS server cannot be accessed" and internet loss.
-            check(PrivateDnsCompatibility.read(this).allowsLocalVpn) {
-                "android-private-dns-has-priority"
+            // Only an explicit user-initiated VPN start can request this handoff.
+            check(PrivateDnsToggle.prepare(this)) { "private-dns-permission-required" }
+            starting = true
+            establishAfterDnsTransition(0)
+        } catch (_: Exception) {
+            stopSelf()
+        }
+        return START_NOT_STICKY
+    }
+
+    /**
+     * Wait briefly for Android's DNS-over-TLS state to settle after the
+     * optional system mode change. Never establish VPN while encrypted DNS is
+     * still active; failure rolls back to Auto through onDestroy().
+     */
+    private fun establishAfterDnsTransition(attempt: Int) {
+        if (!starting) return
+        try {
+            val state = PrivateDnsCompatibility.read(this)
+            check(state.mode == PrivateDnsCompatibility.Mode.OFF) {
+                "private-dns-was-changed-externally"
             }
-            // Never activate a DNS-only VPN with no usable resolver; otherwise
-            // regular browsing would fail even though no ad blocking is possible.
+            if (!state.allowsLocalVpn) {
+                if (attempt < 6) {
+                    startHandler.postDelayed({ establishAfterDnsTransition(attempt + 1) }, 400)
+                } else stopSelf()
+                return
+            }
             check(upstreams().isNotEmpty()) { "underlying-dns-unavailable" }
             val builder = Builder().setSession("Kanaf DNS ad filter")
                 .setMtu(1500).addAddress(TUN_IP, 32)
                 .addDnsServer(DNS_IP).addRoute(DNS_IP, 32).setBlocking(true)
             try { builder.addDisallowedApplication(packageName) }
-            catch (_: PackageManager.NameNotFoundException) { /* own app always exists */ }
-            val descriptor = builder.establish() ?: throw IllegalStateException("VPN permission revoked")
+            catch (_: PackageManager.NameNotFoundException) { /* own app exists */ }
+            val descriptor = builder.establish()
+                ?: throw IllegalStateException("VPN permission revoked")
             tun = descriptor
+            starting = false
             active = true
-            reader = Thread({ runLoop(descriptor) }, "kanaf-dns-reader").also { it.start() }
+            refreshTile()
+            reader = Thread({ runLoop(descriptor) }, "kanaf-dns-reader")
+                .also { it.start() }
         } catch (_: Exception) {
             stopSelf()
         }
-        return START_NOT_STICKY
     }
 
     private fun notification(): Notification {
@@ -232,6 +268,8 @@ class KanafDnsVpnService : VpnService() {
 
     override fun onDestroy() {
         runCatching { contentResolver.unregisterContentObserver(privateDnsObserver) }
+        starting = false
+        startHandler.removeCallbacksAndMessages(null)
         active = false
         try { tun?.close() } catch (_: IOException) {}
         tun = null
@@ -239,6 +277,8 @@ class KanafDnsVpnService : VpnService() {
         reader?.interrupt()
         reader = null
         stopForeground(STOP_FOREGROUND_REMOVE)
+        PrivateDnsToggle.restoreAuto(this)
+        refreshTile()
         super.onDestroy()
     }
 }

@@ -16,22 +16,24 @@ import com.kanaf.alrasby.R
 class KanafDnsTileService : TileService() {
     override fun onStartListening() {
         super.onStartListening()
+        PrivateDnsToggle.recoverIfStopped(this)
         val snapshot = PrivateDnsCompatibility.read(this)
+        val running = KanafDnsVpnService.isRunning()
         qsTile?.apply {
             label = "Kanaf DNS"
             if (Build.VERSION.SDK_INT >= 29) {
                 subtitle = when (snapshot.mode) {
-                    PrivateDnsCompatibility.Mode.OFF -> "DNS off"
+                    PrivateDnsCompatibility.Mode.OFF ->
+                        if (running) "Filtering" else "DNS off"
                     PrivateDnsCompatibility.Mode.AUTOMATIC -> "DNS auto"
                     PrivateDnsCompatibility.Mode.PROVIDER -> "Private DNS"
-                    PrivateDnsCompatibility.Mode.UNKNOWN -> "Open settings"
+                    PrivateDnsCompatibility.Mode.UNKNOWN -> "Unavailable"
                 }
             }
-            state = if (snapshot.mode == PrivateDnsCompatibility.Mode.PROVIDER)
-                Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
+            state = if (running) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
             icon = Icon.createWithResource(
                 this@KanafDnsTileService, R.drawable.kanaf_status_icon)
-            contentDescription = "Open Android Private DNS settings"
+            contentDescription = if (running) "Stop Kanaf DNS" else "Start Kanaf DNS"
             updateTile()
         }
     }
@@ -41,7 +43,12 @@ class KanafDnsTileService : TileService() {
     @SuppressLint("StartActivityAndCollapseDeprecated")
     override fun onClick() {
         super.onClick()
-        val intent = Intent(this, DnsSettingsShortcutActivity::class.java)
+        if (KanafDnsVpnService.isRunning()) {
+            stopService(Intent(this, KanafDnsVpnService::class.java))
+            qsTile?.apply { state = Tile.STATE_INACTIVE; updateTile() }
+            return
+        }
+        val intent = Intent(this, DnsTileControlActivity::class.java)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         if (Build.VERSION.SDK_INT >= 34) {
             val pending = PendingIntent.getActivity(this, 417, intent,
