@@ -39,6 +39,9 @@ fun KanafGlassHome(
     onRunScopedCheck: () -> Unit,
     onRefreshProtection: () -> Unit,
     hasScanReport: Boolean,
+    canImportSignedFeed: Boolean,
+    signedFeedStatus: String,
+    onImportSignedFeed: () -> Unit,
     onShareReport: () -> Unit,
     vaultItems: List<EncryptedVault.Entry>,
     vaultStatus: String,
@@ -443,6 +446,31 @@ fun KanafGlassHome(
                             "الاختبارات على ملفات يختارها المستخدم فقط، وبحد 16 ميجابايت للمحركين. لا توجد قاعدة تهديدات شاملة أو حماية فورية أو فحص تلقائي للجهاز.",
                             "User-selected files only, maximum 16 MiB for native scanning. No comprehensive threat database, realtime protection, or automated device-wide scan."
                         ), color = secondary)
+                    }
+                }
+                if (page == 3) {
+                    GlassPanel(card, stroke) {
+                        Text(tr("قواعد التهديدات الموقعة", "Authenticated threat database"), color = ink,
+                            style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                        Text(tr(
+                            "استيراد قاعدة بصمات SHA-256 من حزمة موقعة بواسطة مفتاح الإنتاج المثبت داخل التطبيق. لا يمكن الوثوق بمفتاح أو قاعدة يأتيان من مصدر غير مُعتمد.",
+                            "Import an offline SHA-256 database only if its RSA signature verifies against the production key pinned inside Kanaf. An untrusted source cannot supply its own key."
+                        ), color = secondary, style = MaterialTheme.typography.bodyMedium)
+                        Spacer(Modifier.height(12.dp))
+                        OutlinedButton(onClick = onImportSignedFeed,
+                            enabled = canImportSignedFeed && !busy,
+                            modifier = Modifier.fillMaxWidth()) {
+                            Text(tr("استيراد قاعدة موقعة", "Import signed database"))
+                        }
+                        if (!canImportSignedFeed) {
+                            Text(tr(
+                                "غير مفعّل: لم يُثبّت مفتاح توقيع إنتاجي موثوق في البناء. القواعد الحالية اختبارية.",
+                                "Disabled: no trusted production signing key is embedded in this build. Current signatures remain test-only."
+                            ), color = secondary, style = MaterialTheme.typography.bodySmall)
+                        }
+                        if (signedFeedStatus.isNotBlank()) {
+                            Text(signedFeedStatus, color = secondary, style = MaterialTheme.typography.bodySmall)
+                        }
                     }
                 }
                 if (page == 4) {
