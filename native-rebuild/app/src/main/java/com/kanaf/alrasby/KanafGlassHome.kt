@@ -44,6 +44,7 @@ fun KanafGlassHome(
     selfTestStatus: String,
     onTestEngines: () -> Unit,
     onPickFile: () -> Unit,
+    onOpenSystemApps: () -> Unit,
     onOpenWebsite: () -> Unit
 ) {
     var page by remember { mutableIntStateOf(if (sharedText.isNullOrBlank()) 0 else 1) }
@@ -451,6 +452,16 @@ fun KanafGlassHome(
                             "يُفحص فقط الملف الذي تختاره. لا تُقرأ الرسائل أو التطبيقات الأخرى بصمت، ولا توجد حماية تلقائية في الخلفية أو تحديثات توقيعات عبر الشبكة.",
                             "Only files you choose are scanned. Messages and other apps are not silently inspected. Background protection and remote signature updates are not enabled."
                         ), color = secondary, style = MaterialTheme.typography.bodyMedium)
+                        Spacer(Modifier.height(12.dp))
+                        OutlinedButton(onClick = onOpenSystemApps,
+                            modifier = Modifier.fillMaxWidth()) {
+                            Text(tr("إدارة التطبيقات والأذونات عبر أندرويد",
+                                "Manage apps and permissions in Android"))
+                        }
+                        Text(tr(
+                            "يفتح إعدادات أندرويد الرسمية لتعديل الأذونات أو إيقاف تطبيق يدويًا؛ لا يقيّد كنف التطبيقات من تلقاء نفسه.",
+                            "Opens Android system settings for manual permissions or app controls; Kanaf does not restrict other apps itself."
+                        ), color = secondary, style = MaterialTheme.typography.bodySmall)
                     }
                 }
                 if (page == 6) {
