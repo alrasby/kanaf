@@ -27,9 +27,9 @@ class InstalledAppAudit {
         var suspicious = 0
         var incomplete = 0
         val start = android.os.SystemClock.elapsedRealtime()
-        for (app in selected) {
+        for ((index, app) in selected.withIndex()) {
             if (cancelled() || android.os.SystemClock.elapsedRealtime() - start >= 120_000L) {
-                incomplete += selected.size - (hashed + matched + incomplete)
+                incomplete += selected.size - index
                 break
             }
             try {
