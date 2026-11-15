@@ -28,7 +28,7 @@ class SessionHistoryPolicyTest {
 
     @Test fun disablingCanImmediatelyClearPreviouslyHeldResults() {
         val history = mutableListOf("old")
-        history.clear()
+        SessionHistoryPolicy.onEnabledChanged(history, false)
         SessionHistoryPolicy.record(history, "new", false)
         assertTrue(history.isEmpty())
     }
