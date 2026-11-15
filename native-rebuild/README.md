@@ -11,6 +11,7 @@ antivirus until native detection, update trust, and on-device tests are complete
 - Fail-closed multi-engine consensus and evidence-based decision guidance. If all completed SHA-256 hashes do not match (e.g. SAF content changes between reads), the aggregate result is explicitly inconclusive rather than a falsely confirmed detection; the individual matches remain available for review. Bad digests, empty labels and missing engines also fail closed.
 - ClamAV 1.4.3 and YARA-X 0.13.0 Android ARM64 libraries built in isolated CI jobs.
 - JNI bridge with a 16 MiB staging ceiling and 30-second cooperative copy deadline. Native calls are delegated to the separate `:scanner` process; the parent process never calls the JNI scan symbols.
+- The JNI bridge also verifies the runtime's exact ClamAV 1.4.3 version before using its pinned C ABI. Missing symbols or a different version fail closed. Native detections without a bounded, valid rule identifier, and contradictory CL_CLEAN + rule name results, are incomplete rather than reported as clean or confirmed malware.
 - ClamAV 1.4.3 native engine now sets decompressed scan budget (32 MiB), contained-file limit (16 MiB), recursion depth (8), file-count cap (512), and engine scan time (20 seconds). Limit-exceeded heuristic alerts are deliberately reported as **incomplete**, not malware or clean; missing/failed limit configuration aborts that engine. ABI ordinals are pinned to ClamAV 1.4.3 and host C++ regression-tested.
 - YARA-X 0.13.0 now requires a 20-second per-scan timeout; an unsupported/failed timeout or scanner error yields **incomplete**. A received matching-rule callback with an unreadable, oversized or invalid identifier also yields **incomplete**, never a false `NO_MATCH`. Host C++ regression tests cover the callback policy.
 - Private native scan copies are sealed read-only and SHA-256 verified before and after engine execution; changed or truncated snapshots fail closed. YARA-X also reads a bounded, stable regular-file snapshot (no symlinks/FIFOs), checks EOF and before/after metadata to prevent false negatives if a file changes while being read. JVM and native C++ regressions cover this policy.
@@ -77,6 +78,10 @@ The scoped `kanaf-arm64-runtime.yml` workflow tries to execute the **real ARM64*
 ## ClamAV ARM64 memory-map diagnostic
 
 ARM64 probe #7 verified that disabling ClamAV's clean cache **did not** resolve the native EICAR `NO_MATCH`; therefore that experimental option was reverted. The debug-only native self-test now compares the same harmless built-in EICAR bytes via ClamAV's `cl_scanfile` and `cl_fmap_open_memory` + `cl_scanmap_callback`. Both comparisons use the same compiled signature database and **neither changes any verdict or readiness gate**. A memory-only detection would indicate a disk/file-map path issue; two no-matches point to signature-matcher/library integration. This test must not be used to claim production antivirus coverage.
+
+## Strict ARM64 runtime #10 outcome (15 Nov 2026)
+
+The translated Android ARM64 run #10 FAILED the actual engine detection gate: ClamAV loaded one test rule but returned CL_CLEAN for EICAR via normal, raw and memory-backed scans, even with AC-only matching; YARA-X passed its EICAR and benign checks. The APK #58 packaging and native CI #301 passed, but do not establish ClamAV functionality. This unresolved platform-specific result must not be bypassed with fake detections, a fallback clean verdict, or a production claim. Verify an actual Android ARM64 device or independently reproduce the Android target binary on a native ARM64 Android environment before accepting the engine.
 
 ## ClamAV Android matcher controlled experiment (15 Nov 2026)
 
