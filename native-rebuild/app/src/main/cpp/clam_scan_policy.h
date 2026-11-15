@@ -12,17 +12,15 @@ struct ClamLimit {
     long long value;
 };
 inline constexpr long long MiB = 1024LL * 1024;
-inline constexpr std::array<ClamLimit, 6> kClamLimits{{
+inline constexpr std::array<ClamLimit, 5> kClamLimits{{
     {0, 32 * MiB},  // CL_ENGINE_MAX_SCANSIZE: aggregate decompressed bytes
     {1, 16 * MiB},  // CL_ENGINE_MAX_FILESIZE: per contained file
     {2, 8},         // CL_ENGINE_MAX_RECURSION
     {3, 512},       // CL_ENGINE_MAX_FILES
     {31, 20000},    // CL_ENGINE_MAX_SCANTIME, milliseconds
-    {25, 1},         // CL_ENGINE_DISABLE_CACHE (1.4.3): bypass MD5/cache early return
 }};
 static_assert(kClamLimits[0].value >= kClamLimits[1].value);
 static_assert(kClamLimits[4].value > 0 && kClamLimits[4].value < 90000);
-static_assert(kClamLimits[5].field == 25 && kClamLimits[5].value == 1);
 
 template <typename Engine>
 bool configureClamLimits(Engine* engine, int (*setNum)(Engine*, int, long long)) {

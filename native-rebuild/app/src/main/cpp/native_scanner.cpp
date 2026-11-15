@@ -101,6 +101,37 @@ std::string clamScan(const char* file, const char* database) {
                 __android_log_print(ANDROID_LOG_INFO, "KanafClamNative",
                     "Built-in EICAR raw-only scan code=%d scannedUnits=%lu named=%d",
                     rawCode, rawScanned, rawName != nullptr ? 1 : 0);
+                // Compare the same harmless fixture in memory to isolate
+                // Android file-mapping/descriptor behavior from signature matching.
+                // Never use this diagnostic result for any security verdict.
+                auto fixture = kanaf::readStableFile(file, 16U * 1024U * 1024U);
+                auto openMemory = symbol<void* (*)(const void*, size_t)>(
+                    lib, "cl_fmap_open_memory");
+                auto closeMemory = symbol<void (*)(void*)>(lib, "cl_fmap_close");
+                auto scanMemory = symbol<int (*)(void*, const char*, const char**,
+                    unsigned long*, const ClEngine*, ClScanOptions*, void*)>(
+                    lib, "cl_scanmap_callback");
+                if (fixture.status == kanaf::SnapshotStatus::Complete &&
+                    !fixture.bytes.empty() && openMemory && closeMemory && scanMemory) {
+                    void* map = openMemory(fixture.bytes.data(), fixture.bytes.size());
+                    if (map) {
+                        const char* mappedName = nullptr;
+                        unsigned long mappedScanned = 0;
+                        ClScanOptions noOptions{};
+                        int memoryCode = scanMemory(map, nullptr, &mappedName,
+                            &mappedScanned, engine, &noOptions, nullptr);
+                        __android_log_print(ANDROID_LOG_INFO, "KanafClamNative",
+                            "Built-in EICAR memory scan code=%d scannedUnits=%lu named=%d",
+                            memoryCode, mappedScanned, mappedName != nullptr ? 1 : 0);
+                        closeMemory(map);
+                    } else {
+                        __android_log_print(ANDROID_LOG_INFO, "KanafClamNative",
+                            "Built-in EICAR memory map unavailable");
+                    }
+                } else {
+                    __android_log_print(ANDROID_LOG_INFO, "KanafClamNative",
+                        "Built-in EICAR memory scan API unavailable");
+                }
             }
 #endif
             if (verdict == 1 && kanaf::isIncompleteLimitAlert(name)) {
