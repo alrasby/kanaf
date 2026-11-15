@@ -138,6 +138,26 @@ class EncryptedVault {
         }
     }
 
+    /** Authenticate the stored ciphertext and stream its verified plaintext to
+     * an in-memory SHA-256 sink, without writing plaintext to disk. */
+    @Synchronized
+    fun verifiedPlaintextDigest(context: Context, id: String): String {
+        val sealed = file(context, id)
+        if (!sealed.isFile || java.nio.file.Files.isSymbolicLink(sealed.toPath()) ||
+            sealed.length() !in 32L..VaultCipher.MAX_ENVELOPE_BYTES) {
+            throw IOException("vault-copy-invalid")
+        }
+        val digest = java.security.MessageDigest.getInstance("SHA-256")
+        val sink = object : java.io.OutputStream() {
+            override fun write(value: Int) { digest.update(value.toByte()) }
+            override fun write(bytes: ByteArray, off: Int, len: Int) {
+                digest.update(bytes, off, len)
+            }
+        }
+        sealed.inputStream().use { input -> VaultCipher.decrypt(input, sink, key(), id) }
+        return digest.digest().joinToString("") { "%02x".format(it.toInt() and 0xff) }
+    }
+
     /** Deletes only the local encrypted copy; never the source or a restored file. */
     @Synchronized
     fun delete(context: Context, id: String): Boolean {
