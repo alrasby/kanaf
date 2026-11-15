@@ -3,10 +3,30 @@
 #include <array>
 #include <cstddef>
 #include <cstring>
+#include <string>
 
 // ClamAV 1.4.3 (clamav-1.4.3/libclamav/clamav.h) ABI ordinal values.
 // Do NOT reuse with a different ClamAV version without rechecking the header.
 namespace kanaf {
+// Only the exact audited libclamav C ABI may be called via dlsym.
+inline bool isPinnedClamRuntime(const char* version) {
+    return version != nullptr && std::strcmp(version, "1.4.3") == 0;
+}
+
+// Treat unnamed, malformed or oversized native detections as incomplete.
+// The worker must never invent a generic threat identifier.
+inline bool validClamThreatName(const char* name) {
+    if (!name) return false;
+    std::size_t length = 0;
+    for (; length < 128 && name[length] != '\0'; ++length) {
+        const unsigned char c = static_cast<unsigned char>(name[length]);
+        if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+              (c >= '0' && c <= '9') || c == '.' || c == '_' ||
+              c == ':' || c == '+' || c == '-')) return false;
+    }
+    return length > 0 && length <= 128 && name[length] == '\0';
+}
+
 // ClamAV 1.4.3: CL_ENGINE_AC_ONLY=10. Configure before cl_load because
 // cli_initroots builds the matcher while the database is being loaded.
 inline constexpr int kClamAcOnlyField = 10;
@@ -45,5 +65,16 @@ inline bool isIncompleteLimitAlert(const char* name) {
     constexpr size_t len = sizeof(kLimitName) - 1;
     return std::strncmp(name, kLimitName, len) == 0 &&
            (name[len] == '\0' || name[len] == '.');
+}
+// ClamAV 1.4.3: CL_CLEAN=0 and CL_VIRUS=1. Other codes are errors.
+inline std::string classifyClamScan(int code, const char* name) {
+    if (code == 0) {
+        // A contradictory name on CL_CLEAN cannot be trusted.
+        return name && name[0] != '\0' ? "INCOMPLETE:clamav-contradictory-result" : "NO_MATCH";
+    }
+    if (code != 1) return "INCOMPLETE:clamav-scan-failed";
+    if (isIncompleteLimitAlert(name)) return "INCOMPLETE:clamav-resource-limit";
+    if (!validClamThreatName(name)) return "INCOMPLETE:clamav-invalid-threat-name";
+    return std::string("DETECTED:") + name;
 }
 } // namespace kanaf
