@@ -37,6 +37,21 @@ antivirus until native detection, update trust, and on-device tests are complete
 - **Offline production signature feed import** uses an explicitly build-pinned RSA PUBLIC key, a strict ZIP containing `manifest.txt` and `signatures.tsv`, a signed version/SHA-256 manifest, AtomicFile persistence and anti-rollback checks. The importer remains DISABLED when the release key is unprovisioned (default builds), and no production feed or automatic network update is asserted. Production release signing, source provenance, threat-feed operational QA and model data remain outstanding.
 - JUnit regression tests and CI build, lint and APK native-library assertions.
 
+## Publisher-owned signed signature feed (not yet provisioned)
+
+1. Hold the RSA private signing key outside this repository and outside the APK; set the corresponding SPKI DER public key Base64 for a trusted release build using `-PkanafSignaturePublicKeyBase64=<PUBLIC_DER_BASE64>`. Never inject a private key into CI artifacts or upload it to ChatGPT.
+2. Validate candidate SHA-256 threat labels and their licensing/attribution with the publisher. Sign a monotonically increasing version using `python3 tools/sign_signature_feed.py --database signed-signatures.tsv --version 1 --private-key /private/publisher.pem --output signed-feed.zip`.
+3. The **Engines / المحركات** screen enables manual local import only in builds with the pinned public key. The import rejects invalid ZIP layout, wrong RSA signature, mismatched digest, corrupt database, or rollback. No network updater is present.
+4. A release cannot claim production malware coverage until feed acquisition, false-positive testing, legal review, rollback policies and on-device detector validation have independently passed.
+
+## New opt-in protection QA
+
+- **Protection / الحماية**: install event alerts start disabled. On Android 13+, enable notification permission explicitly. Test install/replacement notifications on a physical device; package broadcast delivery is best-effort under Android power/background limits.
+- Select a directory through Android's document-tree picker for the 24-hour WorkManager SHA-256 checks; grant persists only while this feature is enabled and is revoked on opt-out. The run examines at most 32 direct-child files. Status says `incomplete` for unreadable/oversized files. The check is not a device-wide scan.
+- **Apps / التطبيقات**: the on-demand APK audit checks up to 20 visible base APKs, and reports inaccessible, split or oversized APKs as incomplete. Do not infer safety from missing SHA-256 matches.
+- **Vault / الخزنة**: explicitly consent to quarantine a selected SAF document. Verify the original disappears only if its document provider supports deletion and after a fully authenticated encrypted copy has been created; failures must be labelled copy-only. Restore to a new user-selected SAF file, verify it, and test reboot/reinstall key-loss behavior. This does not isolate files inside other apps.
+- Physical-device and emulator tests for the new Android WorkManager/broadcast/Keystore/SAF flows remain mandatory before calling them release-ready.
+
 ## On-device validation
 
 1. Install a recent ARM64 *debug* APK from the `kanaf-android-native-engine-apk`
