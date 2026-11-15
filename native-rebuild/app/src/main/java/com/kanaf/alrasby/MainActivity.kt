@@ -38,6 +38,7 @@ import com.kanaf.alrasby.engine.EncryptedVault
 import com.kanaf.alrasby.engine.ProtectionControl
 import com.kanaf.alrasby.engine.ScopedFileCheckWorker
 import com.kanaf.alrasby.engine.SafQuarantine
+import com.kanaf.alrasby.engine.ProductionFeedInstaller
 import com.kanaf.alrasby.engine.InstalledAppInventory
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -181,8 +182,30 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
     }
     val scanHistory = remember { mutableStateListOf<String>() }
     var keepSessionHistory by rememberSaveable { mutableStateOf(true) }
-    val signatures = remember {
-        runCatching { SignatureRepository(activity).load() }.getOrNull()
+    var signatures by remember {
+        mutableStateOf(runCatching { SignatureRepository(activity).load() }.getOrNull())
+    }
+    val trustedFeed = remember { ProductionFeedInstaller() }
+    var feedStatus by remember { mutableStateOf("") }
+    val feedPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null && !busy) {
+            busy = true
+            scope.launch {
+                val outcome = withContext(Dispatchers.IO) {
+                    runCatching { trustedFeed.importSignedZip(activity, uri) }
+                }
+                if (outcome.isSuccess) {
+                    signatures = runCatching { SignatureRepository(activity).load() }.getOrNull()
+                    feedStatus = localized("قاعدة التوقيعات الموقعة مثبتة؛ الإصدار ",
+                        "Verified signature database installed, version ") + outcome.getOrThrow()
+                } else {
+                    feedStatus = localized("رُفض التحديث غير الموثوق أو غير الصالح: ",
+                        "Untrusted or invalid feed rejected: ") +
+                        outcome.exceptionOrNull()?.javaClass?.simpleName
+                }
+                busy = false
+            }
+        }
     }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
@@ -365,6 +388,10 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
         },
         onRefreshProtection = { protectionStatus = ProtectionControl.lastResult(activity) },
         hasScanReport = hasScanReport,
+        canImportSignedFeed = trustedFeed.configured(),
+        signedFeedStatus = feedStatus,
+        onImportSignedFeed = { if (!busy && trustedFeed.configured())
+            feedPicker.launch(arrayOf("application/zip", "application/octet-stream")) },
         onShareReport = {
             if (hasScanReport && !busy) runCatching {
                 val share = Intent(Intent.ACTION_SEND).apply {
