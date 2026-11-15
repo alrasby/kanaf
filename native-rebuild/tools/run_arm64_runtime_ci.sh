@@ -19,7 +19,24 @@ report_worker_diagnostics() {
 }
 trap report_worker_diagnostics EXIT
 
-gradle --no-daemon :app:connectedDebugAndroidTest \
-  -PkanafArm64Runtime=true \
-  -Pandroid.testInstrumentationRunnerArguments.class=com.kanaf.alrasby.NativeArm64EngineRuntimeTest \
-  --stacktrace
+# Retry only external dependency rate limiting, never detection or test failures.
+# Keep the same emulator and worktree; Gradle caches successfully fetched modules.
+# Each attempt has its own log so an older 429 cannot hide a real later failure.
+for attempt in 1 2 3; do
+  log="/tmp/kanaf-arm64-gradle-attempt-${attempt}.log"
+  if gradle --no-daemon :app:connectedDebugAndroidTest \
+    -PkanafArm64Runtime=true \
+    -Pandroid.testInstrumentationRunnerArguments.class=com.kanaf.alrasby.NativeArm64EngineRuntimeTest \
+    --stacktrace 2>&1 | tee "$log"; then
+    exit 0
+  fi
+  if [[ "$attempt" -ge 3 ]] ||
+      ! grep -Eq 'Received status code 429|Too Many Requests' "$log"; then
+    echo "::error::Android ARM64 runtime build/test failed for a non-rate-limit reason, or retry budget exhausted"
+    exit 1
+  fi
+  delay=$((attempt * 25))
+  echo "::warning::Transient Maven/Gradle HTTP 429; one bounded retry after ${delay}s (attempt ${attempt}/3)"
+  sleep "$delay"
+done
+exit 1
