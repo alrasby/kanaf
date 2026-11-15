@@ -66,7 +66,7 @@ jobs:
             # grant through ADB; the app itself cannot grant this permission.
             gradle --no-daemon :app:installDebug --stacktrace
             adb shell pm grant com.kanaf.alrasby android.permission.WRITE_SECURE_SETTINGS
-            gradle --no-daemon :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.kanaf.alrasby.NativeScannerProcessIntegrationTest,com.kanaf.alrasby.VaultAndroidKeyStoreTest,com.kanaf.alrasby.InstalledAppInventoryTest,com.kanaf.alrasby.ProtectionOptInAndroidTest,com.kanaf.alrasby.TrustedSignatureRepositoryAndroidTest,com.kanaf.alrasby.KanafUiPreferencesAndroidTest,com.kanaf.alrasby.KanafUiNavigationTest,com.kanaf.alrasby.DnsFilterAndroidTest,com.kanaf.alrasby.PrivateDnsToggleAndroidTest --stacktrace
+            gradle --no-daemon :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.kanaf.alrasby.NativeScannerProcessIntegrationTest,com.kanaf.alrasby.VaultAndroidKeyStoreTest,com.kanaf.alrasby.InstalledAppInventoryTest,com.kanaf.alrasby.ProtectionOptInAndroidTest,com.kanaf.alrasby.TrustedSignatureRepositoryAndroidTest,com.kanaf.alrasby.KanafUiPreferencesAndroidTest,com.kanaf.alrasby.KanafUiNavigationTest,com.kanaf.alrasby.DnsFilterAndroidTest,com.kanaf.alrasby.PrivateDnsToggleAndroidTest,com.kanaf.alrasby.AutomaticDeviceScanAndroidTest --stacktrace
       - name: Upload emulator test reports
         if: always()
         uses: actions/upload-artifact@v4

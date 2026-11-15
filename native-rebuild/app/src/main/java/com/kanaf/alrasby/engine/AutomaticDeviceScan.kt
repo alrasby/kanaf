@@ -43,15 +43,33 @@ class AutomaticDeviceScan {
         } else true // Android <= 10: request READ_EXTERNAL_STORAGE in the UI.
     }
 
+    /** Injectable limits for emulator QA; never exceed production ceilings. */
+    data class Limits(
+        val apkFiles: Int = MAX_APK_FILES,
+        val sharedFiles: Int = MAX_SHARED_FILES,
+        val nativeChecks: Int = MAX_NATIVE_CHECKS,
+        val durationMs: Long = MAX_RUNTIME_MS,
+        val hashBytes: Long = MAX_HASH_BYTES
+    ) {
+        init {
+            require(apkFiles in 1..MAX_APK_FILES)
+            require(sharedFiles in 1..MAX_SHARED_FILES)
+            require(nativeChecks in 0..MAX_NATIVE_CHECKS)
+            require(durationMs in 1..MAX_RUNTIME_MS)
+            require(hashBytes in 1..MAX_HASH_BYTES)
+        }
+    }
+
     fun run(
         context: Context,
         includeSharedStorage: Boolean,
         cancelled: () -> Boolean = { false },
-        progress: (Progress) -> Unit = {}
+        progress: (Progress) -> Unit = {},
+        limits: Limits = Limits()
     ): Report {
         val start = SystemClock.elapsedRealtime()
         fun stopped() = cancelled() || Thread.currentThread().isInterrupted ||
-            SystemClock.elapsedRealtime() - start > MAX_RUNTIME_MS
+            SystemClock.elapsedRealtime() - start > limits.durationMs
 
         val signatures = runCatching { SignatureRepository(context).load() }.getOrNull()
         val packageManager = context.packageManager
@@ -86,7 +104,7 @@ class AutomaticDeviceScan {
         fun record(file: File, display: String, apk: Boolean) {
             if (stopped()) { truncated = true; return }
             if (!file.isFile || !file.canRead() || file.length() <= 0 ||
-                file.length() > MAX_HASH_BYTES) {
+                file.length() > limits.hashBytes) {
                 incomplete++
                 return
             }
@@ -96,7 +114,7 @@ class AutomaticDeviceScan {
             // silently treating two different versions as one malicious file.
             val hashVerdict = HashSignatureEngine(
                 signatures,
-                StreamScanner(maxBytes = MAX_HASH_BYTES,
+                StreamScanner(maxBytes = limits.hashBytes,
                     maxDurationNanos = 25_000_000_000L,
                     signatures = signatures ?: emptyMap())
             ).scan({ file.inputStream() }, ::stopped)
@@ -105,7 +123,7 @@ class AutomaticDeviceScan {
                 hashed++ // Number of successfully computed SHA-256 hashes.
             }
             val canNativeScan = file.length() <= MAX_NATIVE_BYTES &&
-                nativeChecked < MAX_NATIVE_CHECKS && !stopped()
+                nativeChecked < limits.nativeChecks && !stopped()
             val native = if (canNativeScan) {
                 nativeChecked++
                 runCatching { NativeScannerBridge.scan(context, Uri.fromFile(file)) }.getOrNull()
@@ -151,7 +169,7 @@ class AutomaticDeviceScan {
         }
 
         for (app in packages) {
-            if (stopped() || apkAttempted >= MAX_APK_FILES) {
+            if (stopped() || apkAttempted >= limits.apkFiles) {
                 truncated = true
                 break
             }
@@ -162,7 +180,7 @@ class AutomaticDeviceScan {
                 continue
             }
             for (path in apkPaths) {
-                if (stopped() || apkAttempted >= MAX_APK_FILES) {
+                if (stopped() || apkAttempted >= limits.apkFiles) {
                     truncated = true
                     break
                 }
@@ -184,7 +202,7 @@ class AutomaticDeviceScan {
                 queue.add(root to 0)
                 var dirs = 0
                 while (queue.isNotEmpty()) {
-                    if (stopped() || sharedAttempted >= MAX_SHARED_FILES ||
+                    if (stopped() || sharedAttempted >= limits.sharedFiles ||
                         dirs >= MAX_DIRECTORIES) {
                         truncated = true
                         break
@@ -197,7 +215,7 @@ class AutomaticDeviceScan {
                         continue
                     }
                     for (entry in entries) {
-                        if (stopped() || sharedAttempted >= MAX_SHARED_FILES) {
+                        if (stopped() || sharedAttempted >= limits.sharedFiles) {
                             truncated = true
                             break
                         }
