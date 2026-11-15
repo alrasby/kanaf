@@ -1,0 +1,49 @@
+package com.kanaf.alrasby.engine
+
+import android.app.PendingIntent
+import android.content.Intent
+import android.graphics.drawable.Icon
+import android.os.Build
+import android.service.quicksettings.Tile
+import android.service.quicksettings.TileService
+import com.kanaf.alrasby.R
+
+/**
+ * User-added Quick Settings tile. Opens Android DNS settings, it never changes
+ * privileged DNS settings or starts the optional VPN without explicit consent.
+ */
+class KanafDnsTileService : TileService() {
+    override fun onStartListening() {
+        super.onStartListening()
+        val snapshot = PrivateDnsCompatibility.read(this)
+        qsTile?.apply {
+            label = "Kanaf DNS"
+            subtitle = when (snapshot.mode) {
+                PrivateDnsCompatibility.Mode.OFF -> "DNS off"
+                PrivateDnsCompatibility.Mode.AUTOMATIC -> "DNS auto"
+                PrivateDnsCompatibility.Mode.PROVIDER -> "Private DNS"
+                PrivateDnsCompatibility.Mode.UNKNOWN -> "Open settings"
+            }
+            state = if (snapshot.mode == PrivateDnsCompatibility.Mode.PROVIDER)
+                Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
+            icon = Icon.createWithResource(
+                this@KanafDnsTileService, R.drawable.kanaf_launcher_monochrome)
+            contentDescription = "Open Android Private DNS settings"
+            updateTile()
+        }
+    }
+
+    override fun onClick() {
+        super.onClick()
+        val intent = Intent(this, DnsSettingsShortcutActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        if (Build.VERSION.SDK_INT >= 34) {
+            val pending = PendingIntent.getActivity(this, 417, intent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+            startActivityAndCollapse(pending)
+        } else {
+            @Suppress("DEPRECATION")
+            startActivityAndCollapse(intent)
+        }
+    }
+}

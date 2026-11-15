@@ -43,6 +43,20 @@
             <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="User-initiated limited DNS ad and tracking domain filtering"/>
         </service>
+        <!-- User-addable Quick Settings shortcut, reads system Private DNS state only.
+             Does not hold WRITE_SECURE_SETTINGS or silently change OS DNS. -->
+        <service android:name=".engine.KanafDnsTileService"
+            android:exported="true"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE"
+            android:icon="@drawable/kanaf_launcher_monochrome"
+            android:label="Kanaf DNS">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE"/>
+            </intent-filter>
+        </service>
+        <activity android:name=".engine.DnsSettingsShortcutActivity"
+            android:exported="false"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
         <!-- Crash containment only: separate process, same app UID. Not an isolated UID. -->
         <service android:name=".engine.NativeScannerService"
             android:process=":scanner" android:exported="false" />

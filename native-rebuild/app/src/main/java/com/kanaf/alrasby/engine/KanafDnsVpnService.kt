@@ -12,6 +12,10 @@ import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.VpnService
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
+import android.database.ContentObserver
+import android.provider.Settings
 import android.os.ParcelFileDescriptor
 import android.os.SystemClock
 import com.kanaf.alrasby.MainActivity
@@ -47,6 +51,25 @@ class KanafDnsVpnService : VpnService() {
     }
 
     private var tun: ParcelFileDescriptor? = null
+    private val privateDnsObserver = object : ContentObserver(Handler(Looper.getMainLooper())) {
+        override fun onChange(selfChange: Boolean) {
+            // The user selected Android Private DNS. Do not keep a competing
+            // DNS-only VPN route alive when strict/automatic DNS becomes active.
+            if (active && !PrivateDnsCompatibility.read(this@KanafDnsVpnService).allowsLocalVpn) {
+                stopSelf()
+            }
+        }
+    }
+
+    override fun onCreate() {
+        super.onCreate()
+        for (name in listOf(
+            "private_dns_mode", "private_dns_default_mode", "private_dns_specifier"
+        )) {
+            contentResolver.registerContentObserver(
+                Settings.Global.getUriFor(name), false, privateDnsObserver)
+        }
+    }
     private var reader: Thread? = null
     private val lock = Any()
     private val threads = ThreadPoolExecutor(
@@ -70,6 +93,11 @@ class KanafDnsVpnService : VpnService() {
             if (Build.VERSION.SDK_INT >= 34) {
                 startForeground(15041, notify, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
             } else startForeground(15041, notify)
+            // Android Private DNS is always preferred. A competing route can
+            // cause "Private DNS server cannot be accessed" and internet loss.
+            check(PrivateDnsCompatibility.read(this).allowsLocalVpn) {
+                "android-private-dns-has-priority"
+            }
             // Never activate a DNS-only VPN with no usable resolver; otherwise
             // regular browsing would fail even though no ad blocking is possible.
             check(upstreams().isNotEmpty()) { "underlying-dns-unavailable" }
@@ -99,7 +127,7 @@ class KanafDnsVpnService : VpnService() {
             Intent(this, KanafDnsVpnService::class.java).setAction(ACTION_STOP),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         return Notification.Builder(this, CHANNEL_ID)
-            .setSmallIcon(R.drawable.kanaf_launcher_legacy)
+            .setSmallIcon(R.drawable.kanaf_launcher_monochrome)
             .setContentTitle("Kanaf: DNS ad filter")
             .setContentText("Limited host blocking is active. Tap Stop to disconnect.")
             .setContentIntent(open).setOngoing(true)
@@ -199,6 +227,7 @@ class KanafDnsVpnService : VpnService() {
     override fun onRevoke() { stopSelf() }
 
     override fun onDestroy() {
+        runCatching { contentResolver.unregisterContentObserver(privateDnsObserver) }
         active = false
         try { tun?.close() } catch (_: IOException) {}
         tun = null
