@@ -5,6 +5,10 @@ on:
     paths: ['.github/workflows/kanaf-package-native-engines.yml', 'native-rebuild/app/**', 'native-rebuild/build.gradle.kts', 'native-rebuild/settings.gradle.kts', 'native-rebuild/gradle.properties', 'native-rebuild/tools/verify_arm64_elf.py']
   workflow_dispatch:
   workflow_call:
+# Avoid parallel old-commit APKs consuming runner time during UI iterations.
+concurrency:
+  group: kanaf-native-apk-${{ github.ref_name }}
+  cancel-in-progress: true
 permissions:
   contents: read
   actions: read
