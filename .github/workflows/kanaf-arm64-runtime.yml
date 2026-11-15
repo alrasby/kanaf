@@ -37,8 +37,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          CLAM_RUN=43685480979
-          YARA_RUN=43576728366
+          CLAM_RUN=43745138794
+          YARA_RUN=43745138817
           for run in "$CLAM_RUN" "$YARA_RUN"; do
             test "$(gh run view "$run" --repo "$GITHUB_REPOSITORY" --json conclusion --jq .conclusion)" = success
           done
@@ -51,7 +51,7 @@ jobs:
           cp /tmp/kanaf-clam/arm64-output/libclammspack.so "$dest/"
           cp /tmp/kanaf-yara/libyara_x_capi.so "$dest/"
           for so in "$dest"/*.so; do
-            python3 native-rebuild/tools/verify_arm64_elf.py "$so"
+            python3 native-rebuild/tools/verify_arm64_elf.py --require-16kb "$so"
           done
       - name: Enable KVM access
         shell: bash

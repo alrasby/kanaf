@@ -32,8 +32,8 @@ jobs:
         run: |
           set -euo pipefail
           # Pinned successful upstream compilation runs, not latest unverified builds.
-          CLAM_RUN=43685480979
-          YARA_RUN=43576728366
+          CLAM_RUN=43745138794
+          YARA_RUN=43745138817
           for run in "$CLAM_RUN" "$YARA_RUN"; do
             test "$(gh run view "$run" --repo "$GITHUB_REPOSITORY" --json conclusion --jq .conclusion)" = success
           done
@@ -47,7 +47,7 @@ jobs:
           cp /tmp/kanaf-clam/arm64-output/libclammspack.so "$target/"
           cp /tmp/kanaf-yara/libyara_x_capi.so "$target/"
           for lib in "$target"/*.so; do
-            python3 native-rebuild/tools/verify_arm64_elf.py "$lib"
+            python3 native-rebuild/tools/verify_arm64_elf.py --require-16kb "$lib"
             file "$lib"
           done
           python3 - <<'PY'
@@ -88,7 +88,22 @@ jobs:
           python3 native-rebuild/tools/verify_arm64_elf.py /tmp/kanaf-scan-verified.so
           readelf -Ws /tmp/kanaf-scan-verified.so | grep Java_com_kanaf_alrasby_engine_NativeScannerBridge_clamScanNative
           readelf -Ws /tmp/kanaf-scan-verified.so | grep Java_com_kanaf_alrasby_engine_NativeScannerBridge_yaraScanNative
-          echo "Packaging verified. Native scanner readiness gate remains CLOSED until JNI, rules and self-tests are implemented."
+          # Check every packaged ARM64 ELF, not only the JNI bridge. Android
+          # 15/16 devices may use 16 KiB memory pages; 4 KiB ELF PT_LOAD fails.
+          mkdir -p /tmp/kanaf-16k-elf
+          while IFS= read -r library; do
+            filename="${library##*/}"
+            unzip -p "$apk" "$library" > "/tmp/kanaf-16k-elf/$filename"
+            python3 native-rebuild/tools/verify_arm64_elf.py --require-16kb "/tmp/kanaf-16k-elf/$filename"
+          done < <(unzip -Z1 "$apk" | grep -E '^lib/arm64-v8a/[^/]+\.so
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kanaf-native-engines-packaging-prototype
+          path: native-rebuild/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+)
+          "$ANDROID_HOME/build-tools/35.0.0/zipalign" -c -P 16 -v 4 "$apk"
+          echo "Packaging verified: native ELF PT_LOAD and APK ZIP entries are 16 KiB compatible."
       - uses: actions/upload-artifact@v4
         with:
           name: kanaf-native-engines-packaging-prototype
