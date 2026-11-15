@@ -185,9 +185,8 @@ fun KanafGlassHome(
         ) {
             Column(
                 Modifier.widthIn(max = 680.dp).fillMaxWidth().fillMaxHeight()
-                    .verticalScroll(scrollState)
                     .padding(horizontal = 16.dp, vertical = 18.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text("⬡", color = if (dark) Aqua else Teal,
@@ -253,6 +252,13 @@ fun KanafGlassHome(
                             }
                     }
                 }
+                // Keep header and navigation reachable while lengthy cards scroll.
+                Column(
+                    Modifier.fillMaxWidth().weight(1f)
+                        .verticalScroll(scrollState)
+                        .padding(bottom = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
                 if (page == 0) {
                 GlassPanel(card, stroke) {
                     Text(tr("مركز الحماية", "Protection center"), color = secondary, style = MaterialTheme.typography.titleMedium)
@@ -842,7 +848,8 @@ fun KanafGlassHome(
                     textAlign = TextAlign.Center
                 )
                 }
-            }
+                } // scrollable page content
+            } // persistent header/navigation column
         }
     }
     }
