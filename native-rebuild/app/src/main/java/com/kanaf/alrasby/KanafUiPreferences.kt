@@ -68,3 +68,21 @@ class KanafUiPreferences(context: Context) {
         }
     }
 }
+
+/** Keep both translations for in-session status updates and scan history.
+ * Switching language is therefore instant even for results already shown. */
+data class KanafMessage(val ar: String, val en: String) {
+    fun displayed(language: KanafLanguage): String =
+        if (language.isArabic()) ar else en
+
+    fun append(suffix: String): KanafMessage =
+        KanafMessage(ar + suffix, en + suffix)
+
+    companion object {
+        val EMPTY = KanafMessage("", "")
+        fun combine(lines: List<KanafMessage>): KanafMessage = KanafMessage(
+            lines.map { it.ar }.filter { it.isNotBlank() }.joinToString("\n"),
+            lines.map { it.en }.filter { it.isNotBlank() }.joinToString("\n")
+        )
+    }
+}
