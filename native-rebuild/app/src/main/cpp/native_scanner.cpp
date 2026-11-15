@@ -94,6 +94,24 @@ std::string clamScan(const char* file, const char* database) {
             // This result is NEVER returned as the verdict or a readiness gate.
             if (verdict == 0 && file &&
                 std::strstr(file, "/kanaf-eicar-") != nullptr) {
+                // ClamAV's raw matcher invokes MD5/SHA-1/SHA-256 through
+                // OpenSSL. Missing digest providers can suppress matching.
+                // Probe only the app-generated harmless EICAR vector; never
+                // log user content or treat this as a scan verdict.
+                auto hashInit = symbol<void* (*)(const char*)>(lib, "cl_hash_init");
+                auto hashDestroy = symbol<void (*)(void*)>(lib, "cl_hash_destroy");
+                if (hashInit && hashDestroy) {
+                    for (const char* algorithm : {"md5", "sha1", "sha256"}) {
+                        void* hashContext = hashInit(algorithm);
+                        __android_log_print(ANDROID_LOG_INFO, "KanafClamNative",
+                            "Built-in EICAR crypto %s available=%d",
+                            algorithm, hashContext != nullptr ? 1 : 0);
+                        if (hashContext) hashDestroy(hashContext);
+                    }
+                } else {
+                    __android_log_print(ANDROID_LOG_INFO, "KanafClamNative",
+                        "Built-in EICAR crypto APIs unavailable");
+                }
                 ClScanOptions rawOptions{};
                 const char* rawName = nullptr;
                 unsigned long rawScanned = 0;
