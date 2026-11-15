@@ -7,6 +7,8 @@ on:
     paths:
       - '.github/workflows/kanaf-android-integration.yml'
       - 'native-rebuild/app/src/androidTest/**'
+      - 'native-rebuild/app/src/main/java/com/kanaf/alrasby/engine/VaultCipher.kt'
+      - 'native-rebuild/app/src/main/java/com/kanaf/alrasby/engine/EncryptedVault.kt'
       - 'native-rebuild/app/src/main/AndroidManifest.xml'
       - 'native-rebuild/app/src/main/java/com/kanaf/alrasby/engine/NativeScannerService.kt'
       - 'native-rebuild/app/src/main/java/com/kanaf/alrasby/engine/NativeScanProcessClient.kt'
@@ -49,7 +51,7 @@ jobs:
           emulator-boot-timeout: 900
           working-directory: native-rebuild
           # Only x86-compatible IPC tests. Strict ARM64 JNI tests run in kanaf-arm64-runtime.yml.
-          script: gradle --no-daemon :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.kanaf.alrasby.NativeScannerProcessIntegrationTest --stacktrace
+          script: gradle --no-daemon :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.kanaf.alrasby.NativeScannerProcessIntegrationTest,com.kanaf.alrasby.VaultAndroidKeyStoreTest --stacktrace
       - name: Upload emulator test reports
         if: always()
         uses: actions/upload-artifact@v4
