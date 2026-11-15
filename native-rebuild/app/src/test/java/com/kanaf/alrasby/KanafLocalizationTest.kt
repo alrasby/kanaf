@@ -45,7 +45,8 @@ class KanafLocalizationTest {
         val arabic = ProtectionAlerts.localizedEvent(12004, true,
             "App review", "Review after installation")
         assertTrue(english.second.contains("Review"))
-        assertTrue(arabic.second.contains("مراجعة"))
+        assertTrue(arabic.first.contains("مراجعة"))
+        assertTrue(arabic.second.contains("كنف"))
         assertFalse(arabic.second.contains("package:"))
     }
 }
