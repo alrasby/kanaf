@@ -31,3 +31,9 @@ Limitations: other VPNs cannot coexist, HTTPS/DoH from individual apps
 is not intercepted, IPv6 DNS can bypass the IPv4-only route, and same-domain
 or first-party advertising is outside the blocklist. This is not global
 system-wide ad blocking and does not decrypt HTTPS.
+
+## Ordinary-user setup (no ADB)
+- Leave Android **Private DNS = Automatic** (or Off); choose one of the three presets in Kanaf, then switch the filter ON after Android's standard VPN consent. The two Off/Automatic buttons open Android's Settings directly; they never write privileged global settings.
+- On Android 13+, **Add Kanaf DNS to Quick Settings** requests native system tile installation. Older versions provide a manual Quick Settings Edit instruction.
+- The consumer manifest does not request `WRITE_SECURE_SETTINGS`, root, Accessibility, or ADB. Unknown/strict OS private DNS remains a deliberate closed gate.
+- Leaving the app wipes the in-memory recent scan report; in-flight automatic scans are canceled. The signed detection engines remain under the Settings page, not the Home page.

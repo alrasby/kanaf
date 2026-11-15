@@ -451,7 +451,7 @@ fun KanafGlassHome(
                             Text(dnsQuickTileStatus, color = secondary,
                                 style = MaterialTheme.typography.bodySmall)
                         }
-                        if (!privateDnsCompatible && !privateDnsCanAutoSwitch) {
+                        if (!privateDnsCompatible) {
                             Text(tr(
                                 "المزوّد الصارم في إعدادات الهاتف يمنع تشغيل المرشح؛ اختر «تلقائي» من إعدادات Android.",
                                 "A strict Android Private DNS provider blocks Kanaf; choose Automatic in phone settings."
