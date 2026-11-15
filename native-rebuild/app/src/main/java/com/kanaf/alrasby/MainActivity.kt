@@ -155,6 +155,10 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
     val autoScanSession = remember { AtomicLong(0) }
     val manualScanSession = remember { AtomicLong(0) }
     val scopedScanSession = remember { AtomicLong(0) }
+    val selfTestSession = remember { AtomicLong(0) }
+    var manualScanActive by remember { mutableStateOf(false) }
+    var scopedScanActive by remember { mutableStateOf(false) }
+    var engineSelfTestActive by remember { mutableStateOf(false) }
     val scanHistoryArabic = remember { mutableStateListOf<String>() }
     val scanHistoryEnglish = remember { mutableStateListOf<String>() }
     var askFilesBeforeScan by rememberSaveable { mutableStateOf(false) }
@@ -180,6 +184,7 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
                         cancelled = { automaticScanCancellation.get() },
                         progress = { tick ->
                             activity.runOnUiThread {
+                                if (autoScanSession.get() != session) return@runOnUiThread
                                 autoScanProgress = when (tick.phase) {
                                     "apps" -> "APK: " + tick.attempted
                                     "files" -> "Files: " + tick.attempted
@@ -282,6 +287,7 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
     ) { tree ->
         if (tree != null && !busy) {
             val session = scopedScanSession.incrementAndGet()
+            scopedScanActive = true
             busy = true
             deviceScanStatus = KanafMessage(
                 "جارٍ فحص الملفات التي أذنت بالوصول إليها، ومراجعة التطبيقات الظاهرة…",
@@ -296,6 +302,7 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
                     }
                 }
                 if (scopedScanSession.get() != session) return@launch
+                scopedScanActive = false
                 deviceScanStatus = attempted.fold(
                     onSuccess = { (files, apps) ->
                         val findingsAr = files.findings.joinToString("\n") { finding ->
@@ -399,6 +406,13 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
                 }
                 manualScanSession.incrementAndGet()
                 scopedScanSession.incrementAndGet()
+                selfTestSession.incrementAndGet()
+                if (manualScanActive || scopedScanActive || engineSelfTestActive) {
+                    manualScanActive = false
+                    scopedScanActive = false
+                    engineSelfTestActive = false
+                    busy = false
+                }
                 hasScanReport = false
                 status = KanafMessage(
                     "استخدم زر الفحص لمراجعة الجهاز", "Tap Scan to inspect your device"
@@ -649,6 +663,7 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null && !busy) {
             val session = manualScanSession.incrementAndGet()
+            manualScanActive = true
             busy = true
             hasScanReport = false
             status = KanafMessage("جارٍ الفحص...", "Scanning…")
@@ -860,6 +875,7 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
                     }
                 }
                 if (manualScanSession.get() != session) return@launch
+                manualScanActive = false
                 status = completed
                 hasScanReport = true
                 // Only a bounded, non-persistent summary; never retain file names or contents.
@@ -1099,9 +1115,11 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
         aiModelStatus = aiModelStatus.displayed(uiLanguage),
         onTestEngines = {
             if (!busy) {
+                val session = selfTestSession.incrementAndGet()
+                engineSelfTestActive = true
                 busy = true
                 scope.launch {
-                    selfTestStatus = withContext(Dispatchers.IO) {
+                    val completed = withContext(Dispatchers.IO) {
                         val testResult = NativeScannerBridge.selfTest(activity)
                         fun label(name: String, verdict: AntivirusEngine.Verdict,
                                   arabic: Boolean): String =
@@ -1133,6 +1151,9 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
                             ).joinToString("\n")
                         )
                     }
+                    if (selfTestSession.get() != session) return@launch
+                    engineSelfTestActive = false
+                    selfTestStatus = completed
                     busy = false
                 }
             }
