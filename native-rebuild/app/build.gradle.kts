@@ -27,6 +27,13 @@ android {
         require(publicKey.matches(Regex("[A-Za-z0-9+/=]*"))) {
             "Invalid Base64 public-key configuration"
         }
+        val minFeedVersion = providers.gradleProperty("kanafSignatureMinVersion")
+            .orNull?.toLong() ?: 0L
+        require(minFeedVersion >= 0L) { "Negative production signature feed floor" }
+        require(publicKey.isBlank() || minFeedVersion > 0L) {
+            "A production signing key requires a positive app-pinned minimum feed version"
+        }
+        buildConfigField("long", "KANAF_SIGNATURE_MIN_VERSION", "${minFeedVersion}L")
         buildConfigField("String", "KANAF_SIGNATURE_PUBLIC_KEY_BASE64", "\"$publicKey\"")
         val modelKey = providers.gradleProperty("kanafModelPublicKeyBase64")
             .orNull.orEmpty()

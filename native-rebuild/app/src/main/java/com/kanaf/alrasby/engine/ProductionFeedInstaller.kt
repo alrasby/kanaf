@@ -21,6 +21,9 @@ class ProductionFeedInstaller {
         val file = context.contentResolver.openInputStream(uri)
             ?: throw IOException("feed-unavailable")
         val parsed = file.use { SignedFeedPackage.parse(it) }
+        if (parsed.manifest.version < BuildConfig.KANAF_SIGNATURE_MIN_VERSION) {
+            throw IOException("signed-feed-below-app-minimum-version")
+        }
         SignatureRepository(context).installVerified(parsed.bytes, parsed.manifest, publicKey)
         return parsed.manifest.version
     }

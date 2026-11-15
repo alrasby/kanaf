@@ -128,3 +128,8 @@ The ClamAV 1.4.3 source places simple NDB signatures in Boyer–Moore by default
 ## ClamAV 1.4.6 security migration (candidate, NOT certified)
 
 The 1.4.3 Android engine is superseded by a cross-build target for **ClamAV 1.4.6 LTS**, following upstream security patches. The app now requires exactly **1.4.6**, and rejects the old native library as `INCOMPLETE:clamav-version-mismatch`. The independent native APK packaging and translated-ARM64 runtime workflows were temporarily switched to manual invocation during this upgrade to avoid publishing an APK with the outdated 1.4.3 engine. Once a new 1.4.6 engine build succeeds, re-pin its successful artifact run ID and restore automatic triggers. Only a successful native ARM64 EICAR positive and benign negative test, followed by genuine-device QA, can open the detection gate. Production threat signatures, dataset validation and trusted signing keys remain independent release prerequisites.
+
+
+### Minimum signed database version after app reinstall
+
+A production build that pins `kanafSignaturePublicKeyBase64` now **must also pin** a positive `-PkanafSignatureMinVersion=<VERSION>`. The offline importer rejects properly signed database releases with a version below this immutable app-binary floor, including after application data is cleared. Within an installation, `VerifiedSignatureBundle.requireNewer` additionally enforces strictly increasing versions. The publisher must raise the minimum supported version in future app releases as needed and keep the private RSA key outside the repository and build artifacts.
