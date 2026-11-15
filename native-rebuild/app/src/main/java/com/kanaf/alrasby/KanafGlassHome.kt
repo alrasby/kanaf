@@ -82,7 +82,9 @@ fun KanafGlassHome(
     privateDnsStatus: String,
     privateDnsAvailable: Boolean,
     privateDnsCompatible: Boolean,
+    privateDnsCanAutoSwitch: Boolean,
     privateDnsActionStatus: String,
+    onCopyDnsGrant: () -> Unit,
     onOpenPrivateDnsSettings: () -> Unit,
     onChoosePrivateDns: (String?) -> Unit,
     onOpenSystemApps: () -> Unit,
@@ -175,8 +177,8 @@ fun KanafGlassHome(
             onDismissRequest = { confirmVpn = false },
             title = { Text(tr("تفعيل مرشح إعلانات DNS", "Enable DNS ad filter")) },
             text = { Text(tr(
-                "يتطلب أندرويد موافقة VPN وضبط Private DNS على «إيقاف» من النظام أولًا. لن يغيّر كنف إعدادات النظام ولا يمكنه العمل مع VPN آخر. الحجب محدود لنطاقات DNS المعروفة فقط. هل تتابع؟",
-                "Android VPN approval and system Private DNS set to Off are required. Kanaf will never change system DNS and cannot share another VPN. Only known DNS ad hosts are filtered. Continue?"
+                "يتطلب أندرويد موافقة VPN. عند توفر إذن ADB الاختياري سيضبط كنف Private DNS على «إيقاف» أثناء تشغيله، ثم «تلقائي» عند تعطيله؛ أي مزود سابق لن يُستعاد تلقائيًا. لا يمكنه العمل مع VPN آخر. هل توافق؟",
+                "Android VPN permission is required. With the optional ADB grant, Kanaf switches system Private DNS Off while active and back to Automatic on stop; an old custom provider will not be automatically restored. It cannot share another VPN. Continue?"
             )) },
             confirmButton = {
                 TextButton(onClick = { confirmVpn = false; onVpnToggle(true) }) {
@@ -455,25 +457,41 @@ fun KanafGlassHome(
                         color = ink, style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold)
                     Text(tr(
-                        "مرشح VPN اختياري وتجريبي. لا يعمل إلا إذا كان Private DNS في النظام «متوقفًا»؛ ويظل النظام صاحب الأولوية حتى لا ينقطع الاتصال. لا يتداخل مع الرسائل أو يحذف ملفات.",
-                        "Experimental opt-in DNS VPN works only while Android Private DNS is Off, avoiding conflicts that could break internet access. It never reads messages or deletes files."
+                        "مرشح VPN اختياري. مع صلاحية ADB الخاصة يمكن إيقاف Private DNS عند التشغيل وإعادته إلى Auto عند الإيقاف. من دون الصلاحية يلزم تعطيله يدويًا. الحجب محدود ولا يمس ملفاتك.",
+                        "Opt-in DNS VPN: with an external ADB secure-settings grant it can switch system Private DNS Off on activation and back to Auto on stop. Without the grant, select Off manually. Filtering remains limited."
                     ), color = secondary, style = MaterialTheme.typography.bodySmall)
                     Spacer(Modifier.height(8.dp))
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         Text(tr("طلب تفعيل حجب DNS", "Request DNS filtering"),
                             modifier = Modifier.weight(1f), color = ink)
                         Switch(checked = vpnRequested,
-                            enabled = vpnRequested || privateDnsCompatible,
+                            enabled = vpnRequested || privateDnsCompatible || privateDnsCanAutoSwitch,
                             onCheckedChange = { enabled ->
                                 if (enabled) confirmVpn = true else onVpnToggle(false)
                             },
                             modifier = Modifier.testTag("dns_filter_switch"))
                     }
-                    if (!privateDnsCompatible && !vpnRequested) {
+                    if (!privateDnsCompatible && !privateDnsCanAutoSwitch && !vpnRequested) {
                         Text(tr(
-                            "VPN المحلي متوقف لحماية الاتصال: اختر DNS متوقف من إعدادات الهاتف إن أردت استخدامه.",
-                            "Local VPN is disabled to protect connectivity. To use it, first turn Private DNS Off in Android Settings."
+                            "لا يمكن التبديل التلقائي حاليًا. اختر DNS متوقف في الهاتف، أو امنح كنف صلاحية ADB الاختيارية مرة واحدة.",
+                            "Automatic switching is unavailable. Set Private DNS Off in Android settings, or grant the optional ADB permission once."
                         ), color = secondary, style = MaterialTheme.typography.bodySmall)
+                    }
+                    if (privateDnsAvailable) {
+                        Text(
+                            if (privateDnsCanAutoSwitch)
+                                tr("تبديل DNS التلقائي متاح بإذن ADB", "Automatic DNS switching enabled by ADB")
+                            else tr("إذن التبديل التلقائي غير مُنح", "Automatic switching permission not granted"),
+                            color = secondary, style = MaterialTheme.typography.bodySmall
+                        )
+                        if (!privateDnsCanAutoSwitch) {
+                            OutlinedButton(
+                                onClick = onCopyDnsGrant,
+                                modifier = Modifier.fillMaxWidth().testTag("copy_dns_adb_grant")
+                            ) {
+                                Text(tr("نسخ أمر منح الصلاحية عبر ADB", "Copy optional ADB grant command"))
+                            }
+                        }
                     }
                     OutlinedButton(onClick = onVpnRefresh, modifier = Modifier.fillMaxWidth()) {
                         Text(tr("التحقق من حالة المرشح", "Refresh filter status"))

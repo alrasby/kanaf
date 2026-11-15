@@ -13,6 +13,7 @@ import com.kanaf.alrasby.engine.PrivateDnsSettingsNavigator
 import android.net.Uri
 import android.net.VpnService
 import com.kanaf.alrasby.engine.KanafDnsVpnService
+import com.kanaf.alrasby.engine.PrivateDnsToggle
 import android.Manifest
 import android.os.Build
 import android.content.pm.PackageManager
@@ -53,6 +54,7 @@ import com.kanaf.alrasby.engine.ProductionFeedInstaller
 import com.kanaf.alrasby.engine.InstalledAppAudit
 import com.kanaf.alrasby.engine.InstalledAppInventory
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -68,6 +70,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         incomingSharedText = extractSharedText(intent)
+        PrivateDnsToggle.recoverIfStopped(this)
         setContent { MaterialTheme { KanafScreen(this, incomingSharedText) } }
     }
 
@@ -203,6 +206,7 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
         "DNS filter is opt-in and requires VPN permission; it cannot run with another VPN."
     )) }
     var systemDns by remember { mutableStateOf(PrivateDnsCompatibility.read(activity)) }
+    var dnsGrant by remember { mutableStateOf(PrivateDnsToggle.granted(activity)) }
     var privateDnsActionStatus by remember { mutableStateOf(KanafMessage.EMPTY) }
 
     // Android Settings may be changed outside Kanaf; refresh immediately on return.
@@ -211,6 +215,7 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
         val listener = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
                 systemDns = PrivateDnsCompatibility.read(activity)
+                dnsGrant = PrivateDnsToggle.granted(activity)
                 vpnRequested = KanafDnsVpnService.isRunning()
             }
         }
@@ -220,11 +225,13 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
 
     fun startDnsFilter() {
         systemDns = PrivateDnsCompatibility.read(activity)
-        if (!systemDns.allowsLocalVpn) {
+        dnsGrant = PrivateDnsToggle.granted(activity)
+        if (PrivateDnsToggle.decision(systemDns, dnsGrant) ==
+            PrivateDnsToggle.Decision.MANUAL_REQUIRED) {
             vpnRequested = false
             vpnStatus = KanafMessage(
-                "أولوية Private DNS للنظام: اختر «إيقاف» من إعدادات DNS الخاصة في أندرويد قبل استخدام VPN المحلي، أو استخدم مزوّد DNS الخاص دون VPN.",
-                "Android Private DNS has priority. Select Off in Android's Private DNS settings before using local VPN, or use system Private DNS without VPN."
+                "يلزم ضبط Private DNS على إيقاف يدويًا أو منح صلاحية ADB الاختيارية أولًا؛ لم يُغيّر كنف اتصالك.",
+                "Set Private DNS Off manually or grant optional ADB permission first. Kanaf did not modify your connection."
             )
             return
         }
@@ -233,11 +240,27 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
                 .setAction(KanafDnsVpnService.ACTION_START)
             activity.startForegroundService(start)
         }.onSuccess {
-            vpnRequested = true
+            vpnRequested = KanafDnsVpnService.isRunning()
             vpnStatus = KanafMessage(
-                "طُلب بدء حجب DNS. تحقق من حالة VPN في النظام؛ الحجب محدود.",
-                "DNS filtering requested. Check Android VPN status; coverage is limited."
+                "طُلب بدء حجب DNS. إن توفرت الصلاحية، سيُوقف Private DNS ويعود تلقائيًا عند تعطيل كنف.",
+                "DNS filter requested. With an ADB grant, Private DNS switches Off and returns to Auto when Kanaf stops."
             )
+            scope.launch {
+                repeat(12) {
+                    delay(400)
+                    if (KanafDnsVpnService.isRunning()) {
+                        vpnRequested = true
+                        systemDns = PrivateDnsCompatibility.read(activity)
+                        return@launch
+                    }
+                }
+                vpnRequested = false
+                systemDns = PrivateDnsCompatibility.read(activity)
+                vpnStatus = KanafMessage(
+                    "لم يكتمل تشغيل VPN. تحقق من إذن الشبكة وDNS الخاص؛ لن يواصل كنف التشغيل عند تعارض الاتصال.",
+                    "VPN did not become active. Check VPN permission and system DNS; Kanaf will not continue on a conflicting connection."
+                )
+            }
         }.onFailure {
             vpnRequested = false
             vpnStatus = KanafMessage("تعذر بدء مرشح DNS: ", "Could not start DNS filter: ")
@@ -844,7 +867,22 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
                 localized("تعذر معرفة وضع DNS الخاص من النظام", "Android Private DNS status unavailable")
         },
         privateDnsCompatible = systemDns.allowsLocalVpn,
+        privateDnsCanAutoSwitch = dnsGrant,
         privateDnsActionStatus = privateDnsActionStatus.displayed(uiLanguage),
+        onCopyDnsGrant = {
+            val success = runCatching {
+                val clipboard = activity.getSystemService(Context.CLIPBOARD_SERVICE)
+                    as ClipboardManager
+                clipboard.setPrimaryClip(ClipData.newPlainText(
+                    "Kanaf DNS ADB grant", PrivateDnsToggle.GRANT_COMMAND))
+            }.isSuccess
+            privateDnsActionStatus = if (success)
+                KanafMessage(
+                    "نُسخ أمر منح الصلاحية الاختيارية. يتطلب تنفيذه بواسطة ADB من جهاز تثق به مرة واحدة. لا يستطيع كنف تنفيذه ذاتيًا.",
+                    "Optional permission command copied. Run it once from trusted ADB. Kanaf cannot execute it on your behalf."
+                )
+            else KanafMessage("تعذر نسخ الأمر", "Could not copy command")
+        },
         onOpenPrivateDnsSettings = {
             if (!PrivateDnsSettingsNavigator.open(activity)) {
                 privateDnsActionStatus = KanafMessage(
@@ -896,11 +934,13 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
                 vpnStatus = KanafMessage("أُرسل طلب إيقاف مرشح DNS.", "DNS filter stop requested.")
             } else {
                 systemDns = PrivateDnsCompatibility.read(activity)
-                if (!systemDns.allowsLocalVpn) {
+                dnsGrant = PrivateDnsToggle.granted(activity)
+                if (PrivateDnsToggle.decision(systemDns, dnsGrant) ==
+                    PrivateDnsToggle.Decision.MANUAL_REQUIRED) {
                     vpnRequested = false
                     vpnStatus = KanafMessage(
-                        "Private DNS مفعّل في النظام أو وضعه غير معروف. لا يمكن تشغيل VPN المحلي دون المخاطرة بالاتصال. استخدم إعدادات النظام.",
-                        "Private DNS is enabled or unknown. Kanaf local VPN is blocked to protect connectivity. Use Android DNS settings."
+                        "مطلوب إذن ADB اختياري لتبديل Private DNS تلقائيًا؛ أو عطله يدويًا في النظام.",
+                        "Optional external ADB grant required for automatic Private DNS switching; or turn it Off in system settings."
                     )
                 } else {
                     val approval = VpnService.prepare(activity)
@@ -909,7 +949,9 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
             }
         },
         onVpnRefresh = {
+            PrivateDnsToggle.recoverIfStopped(activity)
             systemDns = PrivateDnsCompatibility.read(activity)
+            dnsGrant = PrivateDnsToggle.granted(activity)
             vpnRequested = KanafDnsVpnService.isRunning()
             vpnStatus = if (vpnRequested) KanafMessage(
                 "مرشح DNS المحلي يعمل (تغطية محدودة).",
