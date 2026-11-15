@@ -7,6 +7,7 @@ on:
     paths:
       - '.github/workflows/kanaf-android-integration.yml'
       - 'native-rebuild/app/src/androidTest/**'
+      - 'native-rebuild/app/build.gradle.kts'
       - 'native-rebuild/app/src/main/java/com/kanaf/alrasby/engine/VaultCipher.kt'
       - 'native-rebuild/app/src/main/java/com/kanaf/alrasby/engine/EncryptedVault.kt'
       - 'native-rebuild/app/src/main/java/com/kanaf/alrasby/engine/InstalledAppInventory.kt'
