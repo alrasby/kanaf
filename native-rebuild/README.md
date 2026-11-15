@@ -73,3 +73,7 @@ certification or a consumer release**.
 ## Experimental ARM64 runtime CI
 
 The scoped `kanaf-arm64-runtime.yml` workflow tries to execute the **real ARM64** ClamAV and YARA-X libraries on an Android 35 Google APIs x86_64 emulator that explicitly advertises ARM64 translation. A special `-PkanafArm64Runtime=true` test build restricts its bundled ABI to ARM64; ordinary APK builds are unchanged. The workflow downloads pinned successful engine artifacts, runs the real `:scanner` IPC EICAR positive and benign negative checks, and **fails**, rather than skipping, when the emulator cannot execute ARM64 or an engine returns incomplete. The result is experimental translated ARM64 runtime evidence only, **not** a physical device test, real malware detection, or release certification.
+
+## ClamAV ARM64 cache-bypass experiment
+
+The translated ARM64 runtime test observed one successfully loaded NDB signature but `CL_CLEAN` on EICAR for both regular and raw scans. In ClamAV 1.4.3 `cli_magic_scan`, failure to compute the fmap MD5 hash or a clean-cache hit may return `CL_CLEAN` before raw matching. Native setup now disables ClamAV's clean cache via pinned `CL_ENGINE_DISABLE_CACHE` enum 25; a failed setting still aborts engine setup. C++ tests cover all six required settings and a cache-setting failure. This is a controlled diagnostic change, not verified evidence of a root-cause fix until the strict EICAR/benign ARM64 test passes.

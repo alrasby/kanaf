@@ -12,19 +12,21 @@ static int setNumber(FakeEngine* engine, int, long long) {
 }
 
 int main() {
-    static_assert(kanaf::kClamLimits.size() == 5);
+    static_assert(kanaf::kClamLimits.size() == 6);
     static_assert(kanaf::kClamLimits[0].field == 0);
     static_assert(kanaf::kClamLimits[1].field == 1);
     static_assert(kanaf::kClamLimits[2].field == 2);
     static_assert(kanaf::kClamLimits[3].field == 3);
     static_assert(kanaf::kClamLimits[4].field == 31);
+    static_assert(kanaf::kClamLimits[5].field == 25);
+    static_assert(kanaf::kClamLimits[5].value == 1);
     FakeEngine ready;
     assert(kanaf::configureClamLimits(&ready, &setNumber));
-    assert(ready.calls == 5);
+    assert(ready.calls == 6);
     FakeEngine fails;
-    fails.failAt = 3;
+    fails.failAt = 6;
     assert(!kanaf::configureClamLimits(&fails, &setNumber));
-    assert(fails.calls == 3);
+    assert(fails.calls == 6);
     assert(!kanaf::configureClamLimits<FakeEngine>(nullptr, &setNumber));
     assert(!kanaf::configureClamLimits<FakeEngine>(&ready, nullptr));
     assert(kanaf::isIncompleteLimitAlert("Heuristics.Limits.Exceeded"));
