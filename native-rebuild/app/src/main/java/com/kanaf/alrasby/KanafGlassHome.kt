@@ -95,6 +95,10 @@ fun KanafGlassHome(
     onCopyDnsGrant: () -> Unit,
     onOpenPrivateDnsSettings: () -> Unit,
     onChoosePrivateDns: (String?) -> Unit,
+    selectedDnsProvider: String,
+    onSelectDnsProvider: (String) -> Unit,
+    onAddDnsQuickTile: () -> Unit,
+    dnsQuickTileStatus: String,
     onOpenSystemApps: () -> Unit,
     onOpenWebsite: () -> Unit
 ) {
@@ -188,8 +192,8 @@ fun KanafGlassHome(
             onDismissRequest = { confirmVpn = false },
             title = { Text(tr("تفعيل مرشح إعلانات DNS", "Enable DNS ad filter")) },
             text = { Text(tr(
-                "يتطلب أندرويد موافقة VPN. عند توفر إذن ADB الاختياري سيضبط كنف Private DNS على «إيقاف» أثناء تشغيله، ثم «تلقائي» عند تعطيله؛ أي مزود سابق لن يُستعاد تلقائيًا. لا يمكنه العمل مع VPN آخر. هل توافق؟",
-                "Android VPN permission is required. With the optional ADB grant, Kanaf switches system Private DNS Off while active and back to Automatic on stop; an old custom provider will not be automatically restored. It cannot share another VPN. Continue?"
+                "يعمل مرشح كنف مع DNS الخاص «متوقف» أو «تلقائي»، ويستخدم HTTPS مشفرًا للمزوّد المحدد. يحتاج إلى موافقتك على VPN ولا يمكن تشغيل VPN آخر معه. عند استخدام مزوّد DNS صارم في النظام افتح إعدادات أندرويد أولًا. هل توافق؟",
+                "Kanaf works with Android Private DNS Off or Automatic and sends DNS requests over encrypted HTTPS to the selected provider. VPN permission is required, and another VPN cannot be active. Strict Android Private DNS requires changing system settings first. Continue?"
             )) },
             confirmButton = {
                 TextButton(onClick = { confirmVpn = false; onVpnToggle(true) }) {
@@ -393,17 +397,6 @@ fun KanafGlassHome(
                                 maxLines = 2, textAlign = TextAlign.Center)
                         }
                     }
-                    GlassPanel(card, stroke) {
-                        Text(tr("محركات الفحص", "Detection engines"), color = ink,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold)
-                        Text("ClamAV 1.4.6   •   YARA-X 0.13.0",
-                            color = if (dark) Aqua else Teal)
-                        Text(tr(
-                            "قواعد التهديدات الحالية اختبارية فقط؛ عدم العثور على تطابق لا يعني أن الجهاز خالٍ من الفيروسات.",
-                            "Threat rules remain test-only; no match does not mean the device is malware-free."
-                        ), color = secondary, style = MaterialTheme.typography.bodySmall)
-                    }
                     TextButton(onClick = { sectionsOpen = !sectionsOpen },
                         modifier = Modifier.fillMaxWidth().testTag("more_features")) {
                         Text(if (sectionsOpen) tr("إخفاء الأقسام", "Hide sections")
@@ -412,125 +405,193 @@ fun KanafGlassHome(
                 }
                 if (page == 9) {
                     GlassPanel(card, stroke) {
-                        Text(tr("إعدادات DNS", "DNS settings"), color = ink,
+                        Text(tr("Kanaf DNS", "Kanaf DNS"), color = ink,
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold)
                         Text(tr(
-                            "هذه الإعدادات مستقلة عن فحص الفيروسات. يمكنك استخدام DNS الخاص في الهاتف أو VPN كنف المحلي، وليس كليهما في الوقت نفسه.",
-                            "DNS controls are separate from antivirus scanning. Choose Android Private DNS or Kanaf local VPN, not both simultaneously."
+                            "مرشح محلي للإعلانات والتتبع، مع DNS مشفر واختيار مزوّد واحد.",
+                            "Local ad/tracker blocking with encrypted DNS and one selected provider."
                         ), color = secondary, style = MaterialTheme.typography.bodySmall)
-                    }
-                if (privateDnsAvailable) GlassPanel(card, stroke) {
-                    Text(tr("Private DNS للنظام", "Android Private DNS"),
-                        color = ink, style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold)
-                    Text(privateDnsStatus, color = if (dark) Aqua else Teal,
-                        style = MaterialTheme.typography.bodyMedium)
-                    Text(tr(
-                        "الأوضاع التالية اختصارات لإعدادات Android فقط؛ لا يمكن لتطبيق عادي تغيير Private DNS تلقائيًا. مزوّدو DNS يحجبون الإعلانات بحسب سياسة كل مزوّد، وليس بمحرك كنف المحلي.",
-                        "These controls open Android Settings only; ordinary apps cannot change Private DNS automatically. Provider-side filtering depends on each provider's policy, not Kanaf's local engine."
-                    ), color = secondary, style = MaterialTheme.typography.bodySmall)
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        OutlinedButton(onClick = { onChoosePrivateDns(null) },
-                            modifier = Modifier.testTag("dns_system_off")) {
-                            Text(tr("DNS متوقف", "DNS Off"))
+                        Row(
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 60.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    if (vpnRequested) tr("الحماية مفعّلة", "Filtering active")
+                                    else tr("الحماية متوقفة", "Filtering off"),
+                                    color = ink, style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    if (vpnRequested)
+                                        tr("الاتصال عبر المزوّد المختار", "Using selected provider")
+                                    else tr("فعّل بعد اختيار المزوّد", "Choose a provider, then enable"),
+                                    color = secondary, style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                            Switch(
+                                checked = vpnRequested,
+                                enabled = vpnRequested || privateDnsCompatible ||
+                                    privateDnsCanAutoSwitch,
+                                onCheckedChange = { enabled ->
+                                    if (enabled) confirmVpn = true else onVpnToggle(false)
+                                },
+                                modifier = Modifier.testTag("dns_filter_switch")
+                            )
                         }
-                        OutlinedButton(onClick = { onChoosePrivateDns(null) },
-                            modifier = Modifier.testTag("dns_system_auto")) {
-                            Text(tr("DNS تلقائي", "DNS Auto"))
+                        OutlinedButton(
+                            onClick = onAddDnsQuickTile,
+                            modifier = Modifier.fillMaxWidth()
+                                .heightIn(min = 48.dp).testTag("dns_add_quick_tile"),
+                            shape = RoundedCornerShape(16.dp)
+                        ) {
+                            Text(tr("إضافة مفتاح Kanaf DNS للإعدادات السريعة",
+                                "Add Kanaf DNS to Quick Settings"))
+                        }
+                        if (dnsQuickTileStatus.isNotBlank()) {
+                            Text(dnsQuickTileStatus, color = secondary,
+                                style = MaterialTheme.typography.bodySmall)
+                        }
+                        if (!privateDnsCompatible && !privateDnsCanAutoSwitch) {
+                            Text(tr(
+                                "المزوّد الصارم في إعدادات الهاتف يمنع تشغيل المرشح؛ اختر «تلقائي» من إعدادات Android.",
+                                "A strict Android Private DNS provider blocks Kanaf; choose Automatic in phone settings."
+                            ), color = secondary, style = MaterialTheme.typography.bodySmall)
                         }
                     }
-                    for (host in listOf(
-                        "dns.adguard.com", "dns.adguard-dns.com", "family.adguard-dns.com"
-                    )) {
-                        OutlinedButton(onClick = { onChoosePrivateDns(host) },
-                            modifier = Modifier.fillMaxWidth()) {
-                            Text(host, maxLines = 2)
-                        }
-                    }
-                    OutlinedTextField(
-                        value = customPrivateDns,
-                        onValueChange = { customPrivateDns = it.take(253) },
-                        modifier = Modifier.fillMaxWidth().testTag("dns_custom_provider"),
-                        label = { Text(tr("مزود DNS خاص", "Custom DNS provider")) },
-                        singleLine = true
-                    )
-                    OutlinedButton(onClick = { onChoosePrivateDns(customPrivateDns.trim()) },
-                        enabled = customPrivateDns.isNotBlank(),
-                        modifier = Modifier.fillMaxWidth().testTag("dns_add_provider")) {
-                        Text(tr("نسخ المزود وفتح إعدادات Android", "Copy provider and open Android Settings"))
-                    }
-                    TextButton(onClick = onOpenPrivateDnsSettings,
-                        modifier = Modifier.fillMaxWidth().testTag("open_android_private_dns")) {
-                        Text(tr("فتح إعدادات DNS في الهاتف", "Open phone DNS settings"))
-                    }
-                    Text(tr(
-                        "للوصول السريع: أضف مربع Kanaf DNS من تحرير لوحة الإعدادات السريعة. إذا كان Private DNS تلقائيًا أو بمزوّد، فلن يشغل كنف VPN المحلي.",
-                        "Add the Kanaf DNS tile from Android Quick Settings edit. With Private DNS Automatic or a provider configured, Kanaf's local VPN stays disabled."
-                    ), color = secondary, style = MaterialTheme.typography.bodySmall)
-                    if (privateDnsActionStatus.isNotBlank()) {
-                        Text(privateDnsActionStatus, color = secondary,
-                            style = MaterialTheme.typography.bodySmall)
-                    }
-                }
-                GlassPanel(card, stroke) {
-                    Text(tr("كاشف الإعلانات ومرشح DNS", "Ad and tracker DNS filter"),
-                        color = ink, style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold)
-                    Text(tr(
-                        "مرشح VPN محلي اختياري يحجب بعض نطاقات الإعلانات. للمستخدم العادي: اضبط DNS الخاص في الهاتف على «إيقاف» أولًا، دون الحاجة إلى ADB.",
-                        "Optional local VPN blocks a limited list of ad domains. No ADB needed: turn Android Private DNS Off in system settings first."
-                    ), color = secondary, style = MaterialTheme.typography.bodySmall)
-                    Spacer(Modifier.height(8.dp))
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        Text(tr("طلب تفعيل حجب DNS", "Request DNS filtering"),
-                            modifier = Modifier.weight(1f), color = ink)
-                        Switch(checked = vpnRequested,
-                            enabled = vpnRequested || privateDnsCompatible || privateDnsCanAutoSwitch,
-                            onCheckedChange = { enabled ->
-                                if (enabled) confirmVpn = true else onVpnToggle(false)
-                            },
-                            modifier = Modifier.testTag("dns_filter_switch"))
-                    }
-                    if (!privateDnsCompatible && !privateDnsCanAutoSwitch && !vpnRequested) {
+
+                    GlassPanel(card, stroke) {
+                        Text(tr("اختر مزوّد DNS", "Choose DNS provider"),
+                            color = ink, style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold)
                         Text(tr(
-                            "لفتح مرشح كنف اختر «DNS متوقف» من إعدادات الهاتف أولًا. لا تحتاج إعدادات المطور.",
-                            "To enable Kanaf's filter, select Private DNS Off in phone settings. Developer tools are not needed."
+                            "يمكن تفعيل مزوّد واحد فقط. اختيار مزوّد جديد يلغي السابق تلقائيًا. أوقف كنف لتغيير المزوّد.",
+                            "One provider at a time. Selecting another deactivates the previous one. Stop Kanaf to change providers."
+                        ), color = secondary, style = MaterialTheme.typography.bodySmall)
+                        for (host in listOf(
+                            "dns.adguard.com", "dns.adguard-dns.com",
+                            "family.adguard-dns.com"
+                        )) {
+                            val subtitle = when (host) {
+                                "dns.adguard.com" ->
+                                    tr("اسم قديم يُحوّل إلى خادم AdGuard الرسمي",
+                                        "Legacy name uses the current official AdGuard server")
+                                "family.adguard-dns.com" ->
+                                    tr("حجب الإعلانات والتتبع والمحتوى العائلي",
+                                        "Ads, tracking and family protection")
+                                else ->
+                                    tr("حجب الإعلانات والتتبع", "Ads and tracking")
+                            }
+                            Row(
+                                modifier = Modifier.fillMaxWidth()
+                                    .heightIn(min = 64.dp)
+                                    .clickable(enabled = !vpnRequested) {
+                                        onSelectDnsProvider(host)
+                                    }
+                                    .testTag("dns_provider_" + host.replace('.', '_')),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(host, color = ink,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = if (selectedDnsProvider == host)
+                                            FontWeight.Bold else FontWeight.Medium)
+                                    Text(subtitle, color = secondary,
+                                        style = MaterialTheme.typography.labelSmall)
+                                }
+                                RadioButton(
+                                    selected = selectedDnsProvider == host,
+                                    enabled = !vpnRequested,
+                                    onClick = { onSelectDnsProvider(host) }
+                                )
+                            }
+                        }
+                        if (vpnStatus.isNotBlank())
+                            Text(vpnStatus, color = secondary,
+                                style = MaterialTheme.typography.bodySmall,
+                                maxLines = 4)
+                    }
+
+                    if (privateDnsAvailable) GlassPanel(card, stroke) {
+                        Text(tr("DNS الخاص بالنظام", "Android Private DNS"),
+                            color = ink, style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold)
+                        Text(privateDnsStatus, color = secondary,
+                            style = MaterialTheme.typography.bodySmall)
+                        Row(Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            OutlinedButton(
+                                onClick = onOpenPrivateDnsSettings,
+                                modifier = Modifier.weight(1f).heightIn(min = 48.dp)
+                                    .testTag("dns_system_off")
+                            ) { Text(tr("متوقف", "Off")) }
+                            OutlinedButton(
+                                onClick = onOpenPrivateDnsSettings,
+                                modifier = Modifier.weight(1f).heightIn(min = 48.dp)
+                                    .testTag("dns_system_auto")
+                            ) { Text(tr("تلقائي", "Automatic")) }
+                        }
+                        Text(tr(
+                            "الزران يفتحان إعدادات Android مباشرة؛ لا يستطيع كنف تغيير وضع النظام دون صلاحية خاصة. وضع «تلقائي» متوافق مع مرشح كنف المشفّر.",
+                            "Both buttons open Android settings directly. Kanaf cannot change the system mode without special permission. Automatic works with encrypted Kanaf DNS."
                         ), color = secondary, style = MaterialTheme.typography.bodySmall)
                     }
+
                     TextButton(
                         onClick = { dnsAdvanced = !dnsAdvanced },
                         modifier = Modifier.fillMaxWidth().testTag("dns_advanced_options")
                     ) {
-                        Text(tr("خيارات متقدمة اختيارية", "Optional advanced options"))
+                        Text(if (dnsAdvanced)
+                            tr("إخفاء الخيارات المتقدمة", "Hide advanced options")
+                            else tr("خيارات إضافية", "More options"))
                     }
                     if (dnsAdvanced) {
-                    if (privateDnsAvailable) {
-                        Text(
-                            if (privateDnsCanAutoSwitch)
-                                tr("تبديل DNS التلقائي متاح بإذن ADB", "Automatic DNS switching enabled by ADB")
-                            else tr("إذن التبديل التلقائي غير مُنح", "Automatic switching permission not granted"),
-                            color = secondary, style = MaterialTheme.typography.bodySmall
-                        )
-                        if (!privateDnsCanAutoSwitch) {
+                        GlassPanel(card, stroke) {
+                            Text(tr("مزوّد خاص في إعدادات Android",
+                                "Custom Android Private DNS provider"),
+                                color = ink, style = MaterialTheme.typography.titleMedium)
+                            OutlinedTextField(
+                                value = customPrivateDns,
+                                onValueChange = { customPrivateDns = it.take(253) },
+                                modifier = Modifier.fillMaxWidth()
+                                    .testTag("dns_custom_provider"),
+                                singleLine = true,
+                                label = { Text(tr("اسم المزوّد", "Provider hostname")) }
+                            )
                             OutlinedButton(
-                                onClick = onCopyDnsGrant,
-                                modifier = Modifier.fillMaxWidth().testTag("copy_dns_adb_grant")
+                                onClick = { onChoosePrivateDns(customPrivateDns.trim()) },
+                                enabled = customPrivateDns.isNotBlank(),
+                                modifier = Modifier.fillMaxWidth()
+                                    .testTag("dns_add_provider")
                             ) {
-                                Text(tr("نسخ أمر منح الصلاحية عبر ADB", "Copy optional ADB grant command"))
+                                Text(tr("نسخ الاسم وفتح إعدادات Android",
+                                    "Copy hostname & open Android settings"))
+                            }
+                            OutlinedButton(onClick = onVpnRefresh,
+                                modifier = Modifier.fillMaxWidth()) {
+                                Text(tr("تحديث حالة Kanaf DNS", "Refresh Kanaf DNS status"))
+                            }
+                            if (privateDnsAvailable && !privateDnsCanAutoSwitch) {
+                                Text(tr(
+                                    "تبديل إعدادات النظام تلقائيًا عبر ADB خيار للمطورين فقط وليس مطلوبًا للمستخدم العادي.",
+                                    "ADB-based system DNS switching is an advanced developer option, not required for everyday use."
+                                ), color = secondary, style = MaterialTheme.typography.bodySmall)
+                                TextButton(onClick = onCopyDnsGrant,
+                                    modifier = Modifier.fillMaxWidth()
+                                        .testTag("copy_dns_adb_grant")) {
+                                    Text(tr("نسخ أمر ADB (متقدم)",
+                                        "Copy ADB command (advanced)"))
+                                }
+                            }
+                            if (privateDnsActionStatus.isNotBlank()) {
+                                Text(privateDnsActionStatus, color = secondary,
+                                    style = MaterialTheme.typography.bodySmall)
                             }
                         }
                     }
-                    }
-                    OutlinedButton(onClick = onVpnRefresh, modifier = Modifier.fillMaxWidth()) {
-                        Text(tr("التحقق من حالة المرشح", "Refresh filter status"))
-                    }
-                    if (vpnStatus.isNotBlank())
-                        Text(vpnStatus, color = secondary, style = MaterialTheme.typography.bodySmall)
-                }
                 }
                 if (page == 10) {
                     GlassPanel(card, stroke) {

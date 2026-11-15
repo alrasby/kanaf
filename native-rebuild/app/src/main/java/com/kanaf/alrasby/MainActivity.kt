@@ -5,6 +5,7 @@ import android.content.Intent
 import android.os.Environment
 import android.provider.Settings
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 import com.kanaf.alrasby.engine.AutomaticDeviceScan
 import com.kanaf.alrasby.engine.ThreatRuleUpdater
 import android.content.ClipData
@@ -19,6 +20,11 @@ import android.net.Uri
 import android.net.VpnService
 import com.kanaf.alrasby.engine.KanafDnsVpnService
 import com.kanaf.alrasby.engine.PrivateDnsToggle
+import com.kanaf.alrasby.engine.DnsProviderStore
+import com.kanaf.alrasby.engine.KanafDnsTileService
+import android.app.StatusBarManager
+import android.content.ComponentName
+import android.graphics.drawable.Icon
 import android.Manifest
 import android.os.Build
 import android.content.pm.PackageManager
@@ -144,11 +150,13 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
             PackageManager.PERMISSION_GRANTED)
     }
     val automaticScanCancellation = remember { AtomicBoolean(false) }
+    val autoScanSession = remember { AtomicLong(0) }
     var askFilesBeforeScan by rememberSaveable { mutableStateOf(false) }
     var scanOnFilesPermissionReturn by remember { mutableStateOf(false) }
     fun startAutomaticDeviceScan() {
         if (busy) return
         automaticScanCancellation.set(false)
+        val session = autoScanSession.incrementAndGet()
         busy = true
         autoScanProgress = "…"
         deviceScanStatus = KanafMessage(
@@ -175,6 +183,9 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
                     )
                 }
             }
+            // Results from an Activity that was sent to the background must
+            // never re-appear after the user returns to a fresh Home screen.
+            if (autoScanSession.get() != session) return@launch
             autoScanProgress = ""
             deviceScanStatus = result.fold(
                 onSuccess = { scan ->
@@ -337,11 +348,23 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
     var systemDns by remember { mutableStateOf(PrivateDnsCompatibility.read(activity)) }
     var dnsGrant by remember { mutableStateOf(PrivateDnsToggle.granted(activity)) }
     var privateDnsActionStatus by remember { mutableStateOf(KanafMessage.EMPTY) }
+    var selectedDnsProvider by remember {
+        mutableStateOf(DnsProviderStore.selected(activity))
+    }
+    var dnsQuickTileStatus by remember { mutableStateOf(KanafMessage.EMPTY) }
 
     // Android Settings may be changed outside Kanaf; refresh immediately on return.
     DisposableEffect(activity) {
         val owner = activity as? LifecycleOwner
         val listener = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP) {
+                // Private scan reports are in-memory and cleared when leaving.
+                automaticScanCancellation.set(true)
+                autoScanSession.incrementAndGet()
+                deviceScanStatus = KanafMessage.EMPTY
+                autoScanProgress = ""
+                busy = false
+            }
             if (event == Lifecycle.Event.ON_RESUME) {
                 systemDns = PrivateDnsCompatibility.read(activity)
                 dnsGrant = PrivateDnsToggle.granted(activity)
@@ -359,8 +382,8 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
             PrivateDnsToggle.Decision.MANUAL_REQUIRED) {
             vpnRequested = false
             vpnStatus = KanafMessage(
-                "يلزم ضبط Private DNS على إيقاف يدويًا أو منح صلاحية ADB الاختيارية أولًا؛ لم يُغيّر كنف اتصالك.",
-                "Set Private DNS Off manually or grant optional ADB permission first. Kanaf did not modify your connection."
+                "DNS الخاص على مزوّد صارم. اختر «تلقائي» في إعدادات Android لتفعيل كنف دون ADB.",
+                "Strict Android Private DNS is active. Select Automatic in Android settings to use Kanaf without ADB."
             )
             return
         }
@@ -371,8 +394,8 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
         }.onSuccess {
             vpnRequested = KanafDnsVpnService.isRunning()
             vpnStatus = KanafMessage(
-                "طُلب بدء حجب DNS. إن توفرت الصلاحية، سيُوقف Private DNS ويعود تلقائيًا عند تعطيل كنف.",
-                "DNS filter requested. With an ADB grant, Private DNS switches Off and returns to Auto when Kanaf stops."
+                "جارٍ اختبار الاتصال المشفر بالمزوّد قبل تشغيل مرشح DNS…",
+                "Checking encrypted DNS provider connectivity before activating filtering…"
             )
             scope.launch {
                 repeat(12) {
@@ -386,8 +409,8 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
                 vpnRequested = false
                 systemDns = PrivateDnsCompatibility.read(activity)
                 vpnStatus = KanafMessage(
-                    "لم يكتمل تشغيل VPN. تحقق من إذن الشبكة وDNS الخاص؛ لن يواصل كنف التشغيل عند تعارض الاتصال.",
-                    "VPN did not become active. Check VPN permission and system DNS; Kanaf will not continue on a conflicting connection."
+                    "لم يبدأ مرشح DNS: المزوّد المحدد غير متاح أو يتعارض وضع DNS في النظام. لم يُفعّل VPN.",
+                    "DNS filtering could not start: selected provider is unreachable or Android DNS settings conflict. VPN was not enabled."
                 )
             }
         }.onFailure {
@@ -1094,6 +1117,62 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
         privateDnsCompatible = systemDns.allowsLocalVpn,
         privateDnsCanAutoSwitch = dnsGrant,
         privateDnsActionStatus = privateDnsActionStatus.displayed(uiLanguage),
+        selectedDnsProvider = selectedDnsProvider,
+        onSelectDnsProvider = { provider ->
+            if (KanafDnsVpnService.isRunning()) {
+                privateDnsActionStatus = KanafMessage(
+                    "أوقف مرشح كنف قبل تغيير المزوّد.",
+                    "Stop Kanaf DNS before changing the provider."
+                )
+            } else if (DnsProviderStore.choose(activity, provider)) {
+                selectedDnsProvider = provider
+                privateDnsActionStatus = KanafMessage(
+                    "تم اختيار المزوّد. سيُستخدم عند تشغيل Kanaf DNS.",
+                    "Provider selected. It will be used when Kanaf DNS starts."
+                )
+            } else {
+                privateDnsActionStatus = KanafMessage(
+                    "تعذر حفظ المزوّد.", "Could not save DNS provider."
+                )
+            }
+        },
+        dnsQuickTileStatus = dnsQuickTileStatus.displayed(uiLanguage),
+        onAddDnsQuickTile = {
+            if (Build.VERSION.SDK_INT >= 33) {
+                runCatching {
+                    val manager = activity.getSystemService(StatusBarManager::class.java)
+                    manager.requestAddTileService(
+                        ComponentName(activity, KanafDnsTileService::class.java),
+                        "Kanaf DNS",
+                        Icon.createWithResource(activity, R.drawable.kanaf_status_icon),
+                        activity.mainExecutor
+                    ) { code ->
+                        dnsQuickTileStatus = when (code) {
+                            StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_ADDED ->
+                                KanafMessage("تمت إضافة مربع Kanaf DNS.",
+                                    "Kanaf DNS tile added.")
+                            StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_ALREADY_ADDED ->
+                                KanafMessage("مربع Kanaf DNS موجود مسبقًا.",
+                                    "Kanaf DNS tile already exists.")
+                            else -> KanafMessage(
+                                "لم تتم إضافة المربع. استخدم تحرير الإعدادات السريعة لإضافته يدويًا.",
+                                "Tile was not added. Use Quick Settings edit to add it manually."
+                            )
+                        }
+                    }
+                }.onFailure {
+                    dnsQuickTileStatus = KanafMessage(
+                        "أضف Kanaf DNS يدويًا من تحرير الإعدادات السريعة.",
+                        "Add Kanaf DNS manually from Quick Settings edit."
+                    )
+                }
+            } else {
+                dnsQuickTileStatus = KanafMessage(
+                    "افتح لوحة الإعدادات السريعة واضغط تحرير، ثم أضف مربع Kanaf DNS.",
+                    "Open Quick Settings, choose Edit and add the Kanaf DNS tile."
+                )
+            }
+        },
         onCopyDnsGrant = {
             val success = runCatching {
                 val clipboard = activity.getSystemService(Context.CLIPBOARD_SERVICE)
@@ -1164,8 +1243,8 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
                     PrivateDnsToggle.Decision.MANUAL_REQUIRED) {
                     vpnRequested = false
                     vpnStatus = KanafMessage(
-                        "مطلوب إذن ADB اختياري لتبديل Private DNS تلقائيًا؛ أو عطله يدويًا في النظام.",
-                        "Optional external ADB grant required for automatic Private DNS switching; or turn it Off in system settings."
+                        "DNS الخاص يستخدم مزوّدًا صارمًا. اختر «تلقائي» في إعدادات الهاتف دون ADB.",
+                        "Private DNS is set to a strict provider. Choose Automatic in phone settings; no ADB required."
                     )
                 } else {
                     val approval = VpnService.prepare(activity)
