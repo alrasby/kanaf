@@ -95,6 +95,10 @@ fun KanafGlassHome(
     onChoosePrivateDns: (String?) -> Unit,
     selectedDnsProvider: String,
     onSelectDnsProvider: (String) -> Unit,
+    dnsSessionStats: String,
+    dnsCoverageStatus: String,
+    onRefreshDnsStats: () -> Unit,
+    onCheckDnsCoverage: () -> Unit,
     onAddDnsQuickTile: () -> Unit,
     dnsQuickTileStatus: String,
     onOpenSystemApps: () -> Unit,
@@ -464,8 +468,8 @@ fun KanafGlassHome(
                             color = ink, style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold)
                         Text(tr(
-                            "فعّل نطاقًا واحدًا. إيقاف مفتاحه يوقف مرشح كنف؛ لتغييره أثناء التشغيل أوقف المرشح أولًا.",
-                            "Enable one provider. Turning its switch off stops filtering; stop Kanaf before switching providers."
+                            "فعّل نطاقًا واحدًا. يمكنك التبديل بين المزوّدين أثناء التشغيل بعد التحقق من الاتصال المشفّر.",
+                            "Enable one provider. Switch securely while filtering after the new provider is verified."
                         ), color = secondary, style = MaterialTheme.typography.bodySmall)
                         for (host in listOf(
                             "dns.adguard.com", "dns.adguard-dns.com",
@@ -473,7 +477,7 @@ fun KanafGlassHome(
                         )) {
                             val chosen = selectedDnsProvider == host
                             val providerActive = chosen && vpnRequested
-                            val canToggle = providerActive || (!vpnRequested && privateDnsCompatible)
+                            val canToggle = providerActive || privateDnsCompatible
                             val subtitle = when (host) {
                                 "dns.adguard.com" ->
                                     tr("اسم قديم لنفس خادم AdGuard القياسي",
@@ -484,9 +488,9 @@ fun KanafGlassHome(
                                     tr("إعلانات وتتبع", "Ads and tracking")
                             }
                             fun requestActivation() {
-                                if (!vpnRequested && privateDnsCompatible) {
+                                if (privateDnsCompatible) {
                                     onSelectDnsProvider(host)
-                                    confirmVpn = true
+                                    if (!vpnRequested) confirmVpn = true
                                 }
                             }
                             Row(
@@ -528,6 +532,39 @@ fun KanafGlassHome(
                             Text(vpnStatus, color = secondary,
                                 style = MaterialTheme.typography.bodySmall,
                                 maxLines = 4)
+                    }
+
+                    GlassPanel(card, stroke) {
+                        Text(tr("اتصال DNS والتغطية", "DNS connection & coverage"),
+                            color = ink, style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold)
+                        Text(tr(
+                            "عدادات محلية لهذه الجلسة فقط، بلا حفظ للنطاقات. فحص IPv6 يكشف احتمال تجاوز المرشح، ولا يثبت منع كل تسرب DNS.",
+                            "Local session-only counters without domain history. IPv6 checks identify potential bypass, not proof of leak prevention."
+                        ), color = secondary, style = MaterialTheme.typography.bodySmall)
+                        Text(dnsSessionStats, color = ink,
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.testTag("dns_session_stats"))
+                        Row(Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedButton(
+                                onClick = onRefreshDnsStats,
+                                modifier = Modifier.weight(1f).heightIn(min = 48.dp)
+                                    .testTag("dns_refresh_stats")
+                            ) { Text(tr("تحديث العدادات", "Refresh counts"),
+                                style = MaterialTheme.typography.labelMedium) }
+                            OutlinedButton(
+                                onClick = onCheckDnsCoverage,
+                                modifier = Modifier.weight(1f).heightIn(min = 48.dp)
+                                    .testTag("dns_check_coverage")
+                            ) { Text(tr("فحص الاتصال", "Check connection"),
+                                style = MaterialTheme.typography.labelMedium) }
+                        }
+                        if (dnsCoverageStatus.isNotBlank()) {
+                            Text(dnsCoverageStatus, color = secondary,
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.testTag("dns_coverage_status"))
+                        }
                     }
 
                     if (privateDnsAvailable) GlassPanel(card, stroke) {
