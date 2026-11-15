@@ -30,6 +30,18 @@ inline bool validClamThreatName(const char* name) {
 // ClamAV 1.4.6: CL_ENGINE_AC_ONLY=10. Configure before cl_load because
 // cli_initroots builds the matcher while the database is being loaded.
 inline constexpr int kClamAcOnlyField = 10;
+// Verified against the pinned ClamAV 1.4.6 clamav.h enum.
+inline constexpr int kClamTmpDirField = 13;
+
+/** Force a caller-owned writable temporary directory before cl_load/compile.
+ * On Android, a default /tmp may not exist or be accessible. */
+template <typename Engine>
+bool configureClamTempDirectory(
+    Engine* engine, int (*setString)(Engine*, int, const char*), const char* directory) {
+    return engine && setString && directory && directory[0] == '/' &&
+        directory[1] != '\0' && setString(engine, kClamTmpDirField, directory) == 0;
+}
+
 inline constexpr int kClamDisableCacheField = 25;
 // A fresh engine on each scan does not need the internal clean-cache. Keep it
 // disabled to rule out stale or ARM64-translator cache false negatives.

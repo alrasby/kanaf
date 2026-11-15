@@ -18,6 +18,21 @@ int main() {
     static_assert(kanaf::kClamLimits[2].field == 2);
     static_assert(kanaf::kClamLimits[3].field == 3);
     static_assert(kanaf::kClamLimits[4].field == 31);
+    static_assert(kanaf::kClamTmpDirField == 13);
+    FakeEngine tmpEngine;
+    auto setString = +[](FakeEngine* engine, int field, const char*) -> int {
+        assert(field == 13);
+        ++engine->calls;
+        return 0;
+    };
+    assert(kanaf::configureClamTempDirectory(&tmpEngine, setString, "/data/user/0/cache"));
+    assert(tmpEngine.calls == 1);
+    assert(!kanaf::configureClamTempDirectory(&tmpEngine, setString, "relative/path"));
+    assert(!kanaf::configureClamTempDirectory<FakeEngine>(nullptr, setString, "/data/cache"));
+    assert(!kanaf::configureClamTempDirectory<FakeEngine>(&tmpEngine, nullptr, "/data/cache"));
+    assert(!kanaf::configureClamTempDirectory(&tmpEngine, setString, nullptr));
+    auto badString = +[](FakeEngine*, int, const char*) -> int { return -1; };
+    assert(!kanaf::configureClamTempDirectory(&tmpEngine, badString, "/data/cache"));
     FakeEngine matcher;
     static_assert(kanaf::kClamAcOnlyField == 10);
     assert(kanaf::configureClamAcOnly(&matcher, &setNumber));

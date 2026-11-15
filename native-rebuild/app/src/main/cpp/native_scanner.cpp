@@ -62,14 +62,35 @@ std::string clamScan(const char* file, const char* database, bool useDefaultMatc
     auto load = symbol<int (*)(const char*, ClEngine*, unsigned int*, unsigned int)>(lib, "cl_load");
     auto compile = symbol<int (*)(ClEngine*)>(lib, "cl_engine_compile");
     auto setNum = symbol<int (*)(ClEngine*, int, long long)>(lib, "cl_engine_set_num");
+    auto setString = symbol<int (*)(ClEngine*, int, const char*)>(
+        lib, "cl_engine_set_str");
     auto scan = symbol<int (*)(const char*, const char**, unsigned long*, const ClEngine*, ClScanOptions*)>(lib, "cl_scanfile");
-    if (!init || !create || !freeEngine || !load || !compile || !setNum || !scan) {
+    if (!init || !create || !freeEngine || !load || !compile ||
+        !setNum || !setString || !scan) {
         dlclose(lib);
         return incomplete("clamav-api-unavailable");
     }
     std::string answer = incomplete("clamav-init-failed");
     ClEngine* engine = nullptr;
     if (init(0) == 0 && (engine = create()) != nullptr) {
+        // The bundled .ndb is staged in the app-private cache directory.
+        // Use that existing directory for ClamAV temporary extraction rather
+        // than Android's potentially absent or inaccessible global /tmp.
+        const std::string databasePath(database);
+        const auto slash = databasePath.find_last_of('/');
+        const std::string privateTemp = slash == std::string::npos ?
+            std::string() : databasePath.substr(0, slash);
+        struct stat tempInfo {};
+        if (privateTemp.empty() ||
+            lstat(privateTemp.c_str(), &tempInfo) != 0 ||
+            !S_ISDIR(tempInfo.st_mode) ||
+            access(privateTemp.c_str(), W_OK | X_OK) != 0 ||
+            !kanaf::configureClamTempDirectory(
+                engine, setString, privateTemp.c_str())) {
+            freeEngine(engine);
+            dlclose(lib);
+            return incomplete("clamav-private-tempdir-unavailable");
+        }
         // Use supported Aho–Corasick path for the tiny prototype signature
         // database. This must happen before cl_load initializes root matchers.
         // Reject scans if matcher configuration fails; do not pretend clean.
