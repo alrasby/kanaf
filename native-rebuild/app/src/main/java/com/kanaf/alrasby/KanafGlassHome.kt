@@ -72,6 +72,8 @@ fun KanafGlassHome(
     selfTestStatus: String,
     onTestEngines: () -> Unit,
     onPickFile: () -> Unit,
+    deviceScanStatus: String,
+    onDeviceScan: () -> Unit,
     onOpenSystemApps: () -> Unit,
     onOpenWebsite: () -> Unit
 ) {
@@ -288,9 +290,31 @@ fun KanafGlassHome(
                     ) {
                         Text(if (busy) tr("جارٍ الفحص…", "Scanning…") else tr("اختيار ملف للفحص", "Choose file to scan"), fontWeight = FontWeight.Bold)
                     }
+                    Spacer(Modifier.height(10.dp))
+                    OutlinedButton(
+                        onClick = onDeviceScan, enabled = !busy,
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp)
+                            .testTag("device_scan_button"),
+                        shape = RoundedCornerShape(18.dp)
+                    ) {
+                        Text(tr("فحص الجهاز (بإذنك)", "Scan device (with your permission)"),
+                            fontWeight = FontWeight.Bold)
+                    }
+                    Text(tr(
+                        "اختر مجلدًا يسمح أندرويد بقراءته. يفحص كنف ملفاته الفرعية ضمن حدود الوقت والحجم، ويراجع APK للتطبيقات الظاهرة فقط. لا يقرأ ملفات التطبيقات الخاصة، ولا يحذف شيئًا.",
+                        "Choose an Android-accessible folder. Kanaf checks its files and subfolders within resource limits and audits visible APKs only. Private app files remain inaccessible; nothing is deleted."
+                    ), color = secondary, style = MaterialTheme.typography.bodySmall)
                     if (busy) {
                         Spacer(Modifier.height(12.dp))
                         LinearProgressIndicator(Modifier.fillMaxWidth(), color = Aqua)
+                    }
+                }
+                if (deviceScanStatus.isNotBlank()) {
+                    GlassPanel(card, stroke) {
+                        Text(tr("تقرير فحص الجهاز المحدود", "Scoped device scan report"),
+                            color = ink, style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold)
+                        Text(deviceScanStatus, color = secondary, style = MaterialTheme.typography.bodySmall)
                     }
                 }
                 GlassPanel(card, stroke) {

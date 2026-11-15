@@ -37,6 +37,7 @@ import com.kanaf.alrasby.engine.LinkInspector
 import com.kanaf.alrasby.engine.EncryptedVault
 import com.kanaf.alrasby.engine.ProtectionControl
 import com.kanaf.alrasby.engine.ScopedFileCheckWorker
+import com.kanaf.alrasby.engine.ScopedDeviceScan
 import com.kanaf.alrasby.engine.SafQuarantine
 import com.kanaf.alrasby.engine.ProductionFeedInstaller
 import com.kanaf.alrasby.engine.InstalledAppAudit
@@ -110,6 +111,67 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
                 protectionStatus = KanafMessage(
                     "تعذر الوصول للمجلد: ", "Folder access unavailable: "
                 ).append(it.javaClass.simpleName)
+            }
+        }
+    }
+    var deviceScanStatus by remember { mutableStateOf(KanafMessage.EMPTY) }
+    // A one-shot SAF grant, not a device-wide storage permission. No automatic deletion.
+    val deviceScanPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocumentTree()
+    ) { tree ->
+        if (tree != null && !busy) {
+            busy = true
+            deviceScanStatus = KanafMessage(
+                "جارٍ فحص الملفات التي أذنت بالوصول إليها، ومراجعة التطبيقات الظاهرة…",
+                "Scanning the permitted folder and auditing visible installed apps…"
+            )
+            scope.launch {
+                val attempted = withContext(Dispatchers.IO) {
+                    runCatching {
+                        val files = ScopedDeviceScan().scan(activity, tree)
+                        val apps = InstalledAppAudit().run(activity)
+                        files to apps
+                    }
+                }
+                deviceScanStatus = attempted.fold(
+                    onSuccess = { (files, apps) ->
+                        val findingsAr = files.findings.joinToString("\n") { finding ->
+                            finding.name + " — " + finding.label + " (" +
+                                com.kanaf.alrasby.engine.ThreatFamily.label(finding.label, true) + ")"
+                        }
+                        val findingsEn = files.findings.joinToString("\n") { finding ->
+                            finding.name + " — " + finding.label + " (" +
+                                com.kanaf.alrasby.engine.ThreatFamily.label(finding.label, false) + ")"
+                        }
+                        KanafMessage(
+                            "فحص ضمن نطاق إذن المجلد، وليس فحصًا شاملًا للجهاز. ملفات فُحصت=" +
+                                files.scanned + "، تطابقات توقيع=" + files.matched +
+                                "، غير مكتمل=" + files.incomplete +
+                                "، مؤشرات بنيوية=" + files.structuralWarnings +
+                                "، حد الفحص=" + files.truncated + ".\n" +
+                                "تطبيقات ظاهرة=${apps.candidates}، APK مفحوص=${apps.hashed}، " +
+                                "تطابق=${apps.matched}، غير مكتمل=${apps.incomplete}، " +
+                                "تجاوز الحد=${apps.truncated}.\n" +
+                                findingsAr.take(2500) +
+                                "\nلا يُحذف أي ملف. عدم التطابق لا يعني السلامة، والفحص غير المكتمل لا يُعد نظيفًا.",
+                            "User-authorized folder only; not a full-device scan. Files checked=" +
+                                files.scanned + ", signature matches=" + files.matched +
+                                ", incomplete=" + files.incomplete +
+                                ", structural flags=" + files.structuralWarnings +
+                                ", limits reached=" + files.truncated + ".\n" +
+                                "Visible apps=${apps.candidates}, APKs hashed=${apps.hashed}, " +
+                                "matches=${apps.matched}, incomplete=${apps.incomplete}, " +
+                                "truncated=${apps.truncated}.\n" +
+                                findingsEn.take(2500) +
+                                "\nNo files were removed. No match is not proof of safety; incomplete is not clean."
+                        )
+                    },
+                    onFailure = { failure -> KanafMessage(
+                        "تعذر إكمال فحص الجهاز المسموح: " + failure.javaClass.simpleName,
+                        "Permitted device scan incomplete: " + failure.javaClass.simpleName
+                    ) }
+                )
+                busy = false
             }
         }
     }
@@ -687,6 +749,8 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
         },
         status = status.displayed(uiLanguage),
         onPickFile = { picker.launch(arrayOf("*/*")) },
+        deviceScanStatus = deviceScanStatus.displayed(uiLanguage),
+        onDeviceScan = { if (!busy) deviceScanPicker.launch(null) },
         onOpenSystemApps = {
             runCatching {
                 activity.startActivity(Intent(android.provider.Settings.ACTION_APPLICATION_SETTINGS))
