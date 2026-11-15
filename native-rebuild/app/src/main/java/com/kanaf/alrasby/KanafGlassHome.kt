@@ -195,7 +195,7 @@ fun KanafGlassHome(
                             color = secondary, style = MaterialTheme.typography.labelSmall)
                     }
                     OutlinedButton(
-                        onClick = { page = 5 },
+                        onClick = { page = if (page == 5) 0 else 5 },
                         modifier = Modifier.testTag("settings_button"),
                         shape = RoundedCornerShape(16.dp),
                         colors = ButtonDefaults.outlinedButtonColors(
@@ -204,9 +204,12 @@ fun KanafGlassHome(
                         ),
                         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
                     ) {
-                        Text("⚙", style = MaterialTheme.typography.titleMedium)
+                        Text(if (page == 5) "⌂" else "⚙",
+                            style = MaterialTheme.typography.titleMedium)
                         Spacer(Modifier.width(5.dp))
-                        Text(tr("الإعدادات", "Settings"), style = MaterialTheme.typography.labelMedium)
+                        Text(if (page == 5) tr("الرئيسية", "Home")
+                            else tr("الإعدادات", "Settings"),
+                            style = MaterialTheme.typography.labelMedium)
                     }
                 }
                 if (page != 5) {
