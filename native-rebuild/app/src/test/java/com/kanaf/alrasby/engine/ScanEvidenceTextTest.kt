@@ -31,8 +31,8 @@ class ScanEvidenceTextTest {
     }
     @Test fun backdoorCategoryRequiresActualSignatureMatch() {
         val found = AntivirusEngine.Verdict.Detected("Backdoor.Android.Agent", sha)
-        assertTrue(ScanEvidenceText.hashLabel(found, 1, false).contains("Backdoor"))
-        assertTrue(ScanEvidenceText.hashLabel(found, 1, true).contains("باب خلفي"))
+        assertTrue(ScanEvidenceText.hashLabel(found, 1, false, false).contains("Backdoor"))
+        assertTrue(ScanEvidenceText.hashLabel(found, 1, false, true).contains("باب خلفي"))
         assertTrue(ScanEvidenceText.nativeLabel("YARA-X", found, false, false)
             .contains("Signature match"))
         val sample = AntivirusEngine.Verdict.Detected("Kanaf_EICAR_Test", sha)
