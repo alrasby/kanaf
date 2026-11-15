@@ -18,6 +18,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.platform.LocalLayoutDirection
 import com.kanaf.alrasby.engine.LinkInspector
 import com.kanaf.alrasby.engine.EncryptedVault
 import com.kanaf.alrasby.engine.InstalledAppInventory
@@ -26,10 +28,15 @@ private val Teal = Color(0xFF146C70)
 private val Aqua = Color(0xFF3DDFB0)
 private val Night = Color(0xFF0A1729)
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun KanafGlassHome(
     busy: Boolean,
     sharedText: String?,
+    uiLanguage: KanafLanguage,
+    hiddenSections: Set<String>,
+    onLanguageChange: (KanafLanguage) -> Unit,
+    onSectionVisibilityChanged: (KanafSection, Boolean) -> Unit,
     scanHistory: List<String>,
     watchNewApps: Boolean,
     periodicChecks: Boolean,
@@ -82,7 +89,7 @@ fun KanafGlassHome(
     }
     val scrollState = rememberScrollState()
     LaunchedEffect(page) { scrollState.scrollTo(0) }
-    val arabic = java.util.Locale.getDefault().language == "ar"
+    val arabic = uiLanguage.isArabic()
     fun tr(ar: String, en: String) = if (arabic) ar else en
     if (confirmQuarantine) {
         AlertDialog(
@@ -160,6 +167,7 @@ fun KanafGlassHome(
     val card = if (dark) Color(0xFF1D3447).copy(alpha = 0.85f) else Color.White.copy(alpha = 0.84f)
     val stroke = if (dark) Aqua.copy(alpha = 0.24f) else Color.White.copy(alpha = 0.95f)
 
+    CompositionLocalProvider(LocalLayoutDirection provides if (arabic) LayoutDirection.Rtl else LayoutDirection.Ltr) {
     MaterialTheme(colorScheme = if (dark) darkColorScheme(primary = Aqua, surface = Night, onSurface = ink)
         else lightColorScheme(primary = Teal, surface = background, onSurface = ink)) {
         Box(
@@ -172,47 +180,66 @@ fun KanafGlassHome(
         ) {
             Column(
                 Modifier.fillMaxSize().verticalScroll(scrollState)
-                    .padding(horizontal = 20.dp, vertical = 28.dp),
-                verticalArrangement = Arrangement.spacedBy(18.dp)
+                    .padding(horizontal = 16.dp, vertical = 18.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("⬡", color = if (dark) Aqua else Teal, style = MaterialTheme.typography.headlineLarge)
-                    Spacer(Modifier.width(12.dp))
-                    Column {
-                        Text("كنف", color = ink, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-                        Text("KANAF · SECURITY STUDIO", color = secondary, style = MaterialTheme.typography.labelSmall)
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text("⬡", color = if (dark) Aqua else Teal,
+                        style = MaterialTheme.typography.headlineLarge)
+                    Spacer(Modifier.width(10.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(tr("كنف", "Kanaf"), color = ink,
+                            style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                        Text(tr("مركز الأمان والخصوصية", "Security & privacy studio"),
+                            color = secondary, style = MaterialTheme.typography.labelSmall)
+                    }
+                    OutlinedButton(
+                        onClick = { page = 5 },
+                        shape = RoundedCornerShape(16.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            containerColor = if (page == 5) Teal.copy(alpha = 0.14f) else card,
+                            contentColor = if (dark) Aqua else Teal
+                        ),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                    ) {
+                        Text("⚙", style = MaterialTheme.typography.titleMedium)
+                        Spacer(Modifier.width(5.dp))
+                        Text(tr("الإعدادات", "Settings"), style = MaterialTheme.typography.labelMedium)
                     }
                 }
-                Row(
-                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(7.dp)
-                ) {
-                    listOf(
-                        tr("الفحص", "Scan"),
-                        tr("الروابط", "Links"),
-                        tr("السجل", "History"),
-                        tr("المحركات", "Engines"),
-                        tr("حول كنف", "About"),
-                        tr("الإعدادات", "Settings"),
-                        tr("الخزنة", "Vault"),
-                        tr("التطبيقات", "Apps"),
-                        tr("الحماية", "Protection")
-                    ).forEachIndexed { index, title ->
-                        if (page == index) {
-                            Button(
-                                onClick = { page = index },
-                                modifier = Modifier.widthIn(min = 86.dp),
-                                shape = RoundedCornerShape(14.dp),
-                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 9.dp)
-                            ) { Text(title, style = MaterialTheme.typography.labelMedium) }
-                        } else {
-                            OutlinedButton(
-                                onClick = { page = index },
-                                modifier = Modifier.widthIn(min = 86.dp),
-                                shape = RoundedCornerShape(14.dp),
-                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 9.dp)
-                            ) { Text(title, style = MaterialTheme.typography.labelMedium) }
-                        }
+                if (page != 5) {
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(3.dp)
+                    ) {
+                        KanafSection.entries.filter { it.id !in hiddenSections }
+                            .forEach { section ->
+                                val label = when (section) {
+                                    KanafSection.SCAN -> tr("الفحص", "Scan")
+                                    KanafSection.LINKS -> tr("الروابط", "Links")
+                                    KanafSection.APPS -> tr("التطبيقات", "Apps")
+                                    KanafSection.VAULT -> tr("الخزنة", "Vault")
+                                    KanafSection.PROTECTION -> tr("الحماية", "Protection")
+                                    KanafSection.HISTORY -> tr("السجل", "History")
+                                    KanafSection.ENGINES -> tr("المحركات", "Engines")
+                                }
+                                FilterChip(
+                                    selected = page == section.page,
+                                    onClick = { page = section.page },
+                                    label = {
+                                        Text(label, style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = if (page == section.page)
+                                                FontWeight.Bold else FontWeight.Medium)
+                                    },
+                                    shape = RoundedCornerShape(15.dp),
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = if (dark) Color(0xFF185F65) else Teal,
+                                        selectedLabelColor = Color.White
+                                    ),
+                                    modifier = Modifier.heightIn(min = 42.dp)
+                                )
+                            }
                     }
                 }
                 if (page == 0) {
@@ -404,7 +431,7 @@ fun KanafGlassHome(
                         Text(tr("محركات الكشف", "Detection engines"), color = ink,
                             style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                         Spacer(Modifier.height(10.dp))
-                        Text("ClamAV 1.4.3", color = if (dark) Aqua else Teal,
+                        Text("ClamAV 1.4.6", color = if (dark) Aqua else Teal,
                             style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                         Text(tr(
                             "مكتبة ARM64 أصلية. لا تُعتمد نتائجها حتى تنجح قواعد الاختبار والفحص الذاتي.",
@@ -473,24 +500,6 @@ fun KanafGlassHome(
                         if (signedFeedStatus.isNotBlank()) {
                             Text(signedFeedStatus, color = secondary, style = MaterialTheme.typography.bodySmall)
                         }
-                    }
-                }
-                if (page == 4) {
-                    GlassPanel(card, stroke) {
-                        Text(tr("الخصوصية", "Privacy"), color = ink,
-                            style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                        Text(tr(
-                            "لا يتم رفع الملفات إلى خادم أو حذف الملف الأصلي. تُستخدم نسخة مؤقتة داخل مساحة التطبيق الخاصة أثناء الفحص ثم تُزال.",
-                            "Files are not uploaded or deleted. A temporary copy is made in the app's private cache for scanning, then removed."
-                        ), color = secondary)
-                    }
-                    GlassPanel(card, stroke) {
-                        Text(tr("عن كنف", "About Kanaf"), color = ink,
-                            style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                        Text(tr(
-                            "كنف — استوديو الأمان. هذه نسخة اختبار تقني للمحركات، ولا تعادل حماية جهاز كاملة.",
-                            "Kanaf Security Studio. This is a technical preview of the native engines, not complete device protection."
-                        ), color = secondary)
                     }
                 }
                 if (page == 5) {
@@ -576,8 +585,11 @@ fun KanafGlassHome(
                             Text(tr("المعرّف: ", "ID: ") + entry.id.take(8) +
                                 " · " + (entry.storedBytes / 1024) + " KiB",
                                 color = secondary, style = MaterialTheme.typography.bodySmall)
-                            Text(java.text.DateFormat.getDateTimeInstance()
-                                .format(java.util.Date(entry.savedAtMillis)),
+                            Text(java.text.DateFormat.getDateTimeInstance(
+                                java.text.DateFormat.MEDIUM,
+                                java.text.DateFormat.SHORT,
+                                uiLanguage.resolvedLocale()
+                            ).format(java.util.Date(entry.savedAtMillis)),
                                 color = secondary, style = MaterialTheme.typography.bodySmall)
                             Spacer(Modifier.height(8.dp))
                             Row(Modifier.fillMaxWidth(),
@@ -715,6 +727,7 @@ fun KanafGlassHome(
                         ), color = secondary, style = MaterialTheme.typography.bodyMedium)
                     }
                 }
+                if (page == 5) {
                 Text(
                     "Made with ❤️ By NabdhServ.Net",
                     modifier = Modifier.fillMaxWidth()
@@ -733,8 +746,10 @@ fun KanafGlassHome(
                     color = secondary, style = MaterialTheme.typography.labelSmall,
                     textAlign = TextAlign.Center
                 )
+                }
             }
         }
+    }
     }
 }
 
@@ -746,8 +761,8 @@ private fun GlassPanel(
 ) {
     Column(
         Modifier.fillMaxWidth()
-            .border(1.dp, outline, RoundedCornerShape(26.dp))
-            .background(fill, RoundedCornerShape(26.dp))
+            .border(1.dp, outline, RoundedCornerShape(22.dp))
+            .background(fill, RoundedCornerShape(22.dp))
             .padding(20.dp),
         content = content
     )
