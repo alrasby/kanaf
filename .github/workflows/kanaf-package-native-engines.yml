@@ -34,9 +34,10 @@ jobs:
           # Pinned successful upstream compilation runs, not latest unverified builds.
           CLAM_RUN=43745138794
           YARA_RUN=43745138817
-          for run in "$CLAM_RUN" "$YARA_RUN"; do
-            test "$(gh run view "$run" --repo "$GITHUB_REPOSITORY" --json conclusion --jq .conclusion)" = success
-          done
+          # The ClamAV compilation job may finish before its independent
+          # APK smoke-test job. Only the successful compiler artifact is used.
+          test "$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$CLAM_RUN/jobs" --jq '.jobs[] | select(.name == "clamav") | .conclusion')" = success
+          test "$(gh run view "$YARA_RUN" --repo "$GITHUB_REPOSITORY" --json conclusion --jq .conclusion)" = success
           mkdir -p /tmp/kanaf-clam /tmp/kanaf-yara
           gh run download "$CLAM_RUN" --repo "$GITHUB_REPOSITORY" -n kanaf-clamav-arm64-diagnostics -D /tmp/kanaf-clam
           test "$(tr -d '\n' < /tmp/kanaf-clam/revision.txt)" = "5853e1396777bae4d909cd3dd44f58352e7cf9b3"
