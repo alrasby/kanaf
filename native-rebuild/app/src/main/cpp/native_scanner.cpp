@@ -61,6 +61,14 @@ std::string clamScan(const char* file, const char* database) {
     std::string answer = incomplete("clamav-init-failed");
     ClEngine* engine = nullptr;
     if (init(0) == 0 && (engine = create()) != nullptr) {
+        // Use supported Aho–Corasick path for the tiny prototype signature
+        // database. This must happen before cl_load initializes root matchers.
+        // Reject scans if matcher configuration fails; do not pretend clean.
+        if (!kanaf::configureClamAcOnly(engine, setNum)) {
+            freeEngine(engine);
+            dlclose(lib);
+            return incomplete("clamav-matcher-config-failed");
+        }
         unsigned int count = 0;
         int loading = load(database, engine, &count, 0);
 #ifndef NDEBUG

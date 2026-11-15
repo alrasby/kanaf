@@ -7,6 +7,13 @@
 // ClamAV 1.4.3 (clamav-1.4.3/libclamav/clamav.h) ABI ordinal values.
 // Do NOT reuse with a different ClamAV version without rechecking the header.
 namespace kanaf {
+// ClamAV 1.4.3: CL_ENGINE_AC_ONLY=10. Configure before cl_load because
+// cli_initroots builds the matcher while the database is being loaded.
+inline constexpr int kClamAcOnlyField = 10;
+template <typename Engine>
+bool configureClamAcOnly(Engine* engine, int (*setNum)(Engine*, int, long long)) {
+    return engine && setNum && setNum(engine, kClamAcOnlyField, 1) == 0;
+}
 struct ClamLimit {
     int field;
     long long value;

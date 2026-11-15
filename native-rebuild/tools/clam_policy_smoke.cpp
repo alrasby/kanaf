@@ -18,6 +18,15 @@ int main() {
     static_assert(kanaf::kClamLimits[2].field == 2);
     static_assert(kanaf::kClamLimits[3].field == 3);
     static_assert(kanaf::kClamLimits[4].field == 31);
+    FakeEngine matcher;
+    static_assert(kanaf::kClamAcOnlyField == 10);
+    assert(kanaf::configureClamAcOnly(&matcher, &setNumber));
+    assert(matcher.calls == 1);
+    FakeEngine invalidMatcher;
+    invalidMatcher.failAt = 1;
+    assert(!kanaf::configureClamAcOnly(&invalidMatcher, &setNumber));
+    assert(!kanaf::configureClamAcOnly<FakeEngine>(nullptr, &setNumber));
+    assert(!kanaf::configureClamAcOnly<FakeEngine>(&matcher, nullptr));
     FakeEngine ready;
     assert(kanaf::configureClamLimits(&ready, &setNumber));
     assert(ready.calls == 5);

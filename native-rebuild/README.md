@@ -77,3 +77,7 @@ The scoped `kanaf-arm64-runtime.yml` workflow tries to execute the **real ARM64*
 ## ClamAV ARM64 memory-map diagnostic
 
 ARM64 probe #7 verified that disabling ClamAV's clean cache **did not** resolve the native EICAR `NO_MATCH`; therefore that experimental option was reverted. The debug-only native self-test now compares the same harmless built-in EICAR bytes via ClamAV's `cl_scanfile` and `cl_fmap_open_memory` + `cl_scanmap_callback`. Both comparisons use the same compiled signature database and **neither changes any verdict or readiness gate**. A memory-only detection would indicate a disk/file-map path issue; two no-matches point to signature-matcher/library integration. This test must not be used to claim production antivirus coverage.
+
+## ClamAV Android matcher controlled experiment (15 Nov 2026)
+
+The ClamAV 1.4.3 source places simple NDB signatures in Boyer–Moore by default; `CL_ENGINE_AC_ONLY` switches to a supported Aho–Corasick matcher. For Kanaf's EICAR-only prototype, the bridge now enables the AC-only option (ABI ordinal 10) **before `cl_load` initializes the matcher roots**, rejecting a failed option rather than continuing insecurely. Host C++ regression cases cover the setting and failure handling. This remains an experiment until strict ARM64 EICAR-positive/benign-negative checks pass, and performance must be re-evaluated before any full production database.
