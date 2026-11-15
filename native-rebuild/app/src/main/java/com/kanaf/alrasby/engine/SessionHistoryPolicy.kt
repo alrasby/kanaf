@@ -5,6 +5,10 @@ package com.kanaf.alrasby.engine
  * The caller must never supply file names, URIs or raw file content.
  */
 internal object SessionHistoryPolicy {
+    fun onEnabledChanged(history: MutableList<String>, enabled: Boolean) {
+        if (!enabled) history.clear()
+    }
+
     fun record(history: MutableList<String>, result: String, enabled: Boolean) {
         if (!enabled) return
         history.add(0, result.lineSequence().take(3).joinToString("\n").take(600))
