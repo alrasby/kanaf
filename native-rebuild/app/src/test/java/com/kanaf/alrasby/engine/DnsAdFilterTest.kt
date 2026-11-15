@@ -47,6 +47,23 @@ class DnsAdFilterTest {
         assertNull(DnsPacketCodec.parseUdp(byteArrayOf(0x45)))
     }
 
+    @Test fun upstreamResponseMustMatchOriginalQuestion() {
+        val question = query("example.com")
+        val answer = question.copyOf().also {
+            it[2] = 0x81.toByte()
+            it[3] = 0x80.toByte()
+        }
+        assertTrue(DnsPacketCodec.matchesResponse(question, answer))
+        val alteredId = answer.copyOf().also { it[1] = 0x35 }
+        assertFalse(DnsPacketCodec.matchesResponse(question, alteredId))
+        val alteredName = answer.copyOf().also { it[13] = 'x'.code.toByte() }
+        assertFalse(DnsPacketCodec.matchesResponse(question, alteredName))
+        val alteredType = answer.copyOf().also { it[it.size - 4] = 0x1c }
+        assertFalse(DnsPacketCodec.matchesResponse(question, alteredType))
+        val notAResponse = question.copyOf()
+        assertFalse(DnsPacketCodec.matchesResponse(question, notAResponse))
+    }
+
     @Test fun malformedOrCompressedQuestionIsNotClassified() {
         val q = query("example.com")
         q[12] = 0xc0.toByte()

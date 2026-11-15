@@ -26,6 +26,8 @@ object NativeScannerBridge {
     )
 
     private external fun clamScanNative(path: String, database: String): String
+    // Only a debug-only comparison on the generated EICAR fixture; never a verdict.
+    private external fun clamDefaultMatcherDiagnosticNative(path: String, database: String): String
     private external fun yaraScanNative(path: String, rules: String): String
 
     // These are the official non-executable EICAR test bytes, used only for an engine self-test.
@@ -127,6 +129,14 @@ object NativeScannerBridge {
                     // This distinguishes "ClamAV cannot match any signatures"
                     // from "Android ARM64 AC/BM matching is broken".
                     if (libraries.clamavLoaded && clamRulesOK && !clamPositiveExpected) {
+                        val defaultResult = runCatching {
+                            clamDefaultMatcherDiagnosticNative(
+                                testFile.absolutePath, rulesFile.absolutePath
+                            )
+                        }.getOrDefault("INCOMPLETE:diagnostic-unavailable")
+                        Log.i("KanafNativeSelfTest",
+                            "ClamAV default matcher EICAR=" + defaultResult.take(100) +
+                                " (diagnostic only; readiness unchanged)")
                         val hashDb = stagedFile(context, "kanaf-hashdiag-", ".hdb",
                             ("44d88612fea8a8f36de82e1278abb02f:68:" +
                                 "Kanaf.EICAR.MD5.Diagnostic\\n")

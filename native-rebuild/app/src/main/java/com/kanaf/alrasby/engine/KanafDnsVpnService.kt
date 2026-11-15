@@ -8,6 +8,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.net.ConnectivityManager
+import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.VpnService
 import android.os.Build
@@ -51,7 +52,9 @@ class KanafDnsVpnService : VpnService() {
         2, 4, 20, TimeUnit.SECONDS, ArrayBlockingQueue(32),
         ThreadPoolExecutor.CallerRunsPolicy()
     )
-    @Volatile private var cachedDns = emptyList<InetAddress>()
+    // Keep the DNS server paired with the network that advertised it.
+    private data class Upstream(val network: Network, val address: InetAddress)
+    @Volatile private var cachedDns = emptyList<Upstream>()
     @Volatile private var dnsFetchedAt = 0L
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -136,40 +139,43 @@ class KanafDnsVpnService : VpnService() {
     }
 
     private fun forward(request: ByteArray): ByteArray? {
-        for (server in upstreams().take(2)) {
+        for (upstream in upstreams().take(4)) {
             try {
                 DatagramSocket().use { socket ->
-                    if (!protect(socket)) return null // Prevent recursive VPN routing.
+                    // A protected socket avoids recursion; bind it to the exact
+                    // underlying network whose DNS server was advertised.
+                    if (!protect(socket)) return null
+                    upstream.network.bindSocket(socket)
                     socket.soTimeout = 2500
-                    socket.connect(InetSocketAddress(server, 53))
+                    socket.connect(InetSocketAddress(upstream.address, 53))
                     socket.send(DatagramPacket(request, request.size))
                     val data = ByteArray(4096)
                     val packet = DatagramPacket(data, data.size)
                     socket.receive(packet)
                     val response = data.copyOf(packet.length)
-                    if (response.size >= 12 && request.size >= 12 &&
-                        response[0] == request[0] && response[1] == request[1] &&
-                        (response[2].toInt() and 0x80) != 0) return response
+                    if (DnsPacketCodec.matchesResponse(request, response)) return response
                 }
             } catch (_: IOException) {
-                // Try the next underlying resolver; never invent an answer.
+                // Underlying network may have changed; try another resolver.
             }
         }
         return null
     }
 
     /** Underlying network DNS only: never silently send to a custom third party. */
-    private fun upstreams(): List<InetAddress> {
+    private fun upstreams(): List<Upstream> {
         val now = SystemClock.elapsedRealtime()
         if (now - dnsFetchedAt < 15_000L) return cachedDns
         val manager = getSystemService(ConnectivityManager::class.java)
-        val found = LinkedHashSet<InetAddress>()
+        val found = LinkedHashSet<Upstream>()
         for (network in manager.allNetworks) {
             val caps = manager.getNetworkCapabilities(network) ?: continue
             if (caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN) ||
                 !caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)) continue
             manager.getLinkProperties(network)?.dnsServers?.forEach { server ->
-                if (!server.isLoopbackAddress && server.hostAddress != DNS_IP) found.add(server)
+                if (!server.isLoopbackAddress && server.hostAddress != DNS_IP) {
+                    found.add(Upstream(network, server))
+                }
             }
         }
         cachedDns = found.toList()

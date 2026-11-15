@@ -35,7 +35,7 @@ object DnsPacketCodec {
 
     private fun questionEnd(dns: ByteArray): Int? {
         if (dns.size < 17 || u16(dns, 4) != 1 ||
-            (u8(dns[2]) and 0xf8) != 0) return null
+            (u8(dns[2]) and 0x78) != 0) return null
         var at = 12
         var chars = 0
         while (true) {
@@ -76,6 +76,33 @@ object DnsPacketCodec {
         out[3] = (0x80 or code).toByte() // RA + RCODE
         for (i in 6 until 12) out[i] = 0 // no answers, auth, additional
         return out
+    }
+
+    /**
+     * A connected UDP socket is not sufficient to accept a DNS response.
+     * Require the same transaction, question, QTYPE and QCLASS, without
+     * accepting answer packets with changed or compressed question names.
+     */
+    fun matchesResponse(query: ByteArray, response: ByteArray): Boolean {
+        if (query.size !in 17..4096 || response.size !in 17..4096) return false
+        val queryEnd = questionEnd(query) ?: return false
+        val responseEnd = questionEnd(response) ?: return false
+        if (queryEnd != responseEnd ||
+            u16(query, 0) != u16(response, 0) ||
+            (u8(response[2]) and 0x80) == 0 ||
+            (u8(response[2]) and 0x78) != 0) return false
+        for (i in 12 until queryEnd) {
+            val left = u8(query[i])
+            val right = u8(response[i])
+            // QTYPE/QCLASS must be byte-identical; question text is case-insensitive.
+            if (i >= queryEnd - 4) {
+                if (left != right) return false
+            } else {
+                fun fold(b: Int) = if (b in 65..90) b + 32 else b
+                if (fold(left) != fold(right)) return false
+            }
+        }
+        return true
     }
 
     fun nxdomain(query: ByteArray) = errorResponse(query, 3)

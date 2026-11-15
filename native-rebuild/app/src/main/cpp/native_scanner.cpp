@@ -42,14 +42,16 @@ private:
     const char* chars_;
 };
 
-std::string clamScan(const char* file, const char* database) {
+// Diagnostic mode is only invoked on the app-generated harmless EICAR fixture.
+// Production scans still use the previously pinned configuration and fail closed.
+std::string clamScan(const char* file, const char* database, bool useDefaultMatcher = false) {
     if (!file || !database) return incomplete("missing-path");
     void* lib = dlopen("libclamav.so", RTLD_NOW | RTLD_LOCAL);
     if (!lib) return incomplete("clamav-load-failed");
 
     auto getVersion = symbol<const char* (*)()>(lib, "cl_retver");
     // The ClamAV function-pointer ABI, scan flags and field ordinals below
-    // are pinned to 1.4.3. Refuse another runtime even if its .so loads.
+    // are pinned to 1.4.6. Refuse another runtime even if its .so loads.
     if (!getVersion || !kanaf::isPinnedClamRuntime(getVersion())) {
         dlclose(lib);
         return incomplete("clamav-version-mismatch");
@@ -71,8 +73,9 @@ std::string clamScan(const char* file, const char* database) {
         // Use supported Aho–Corasick path for the tiny prototype signature
         // database. This must happen before cl_load initializes root matchers.
         // Reject scans if matcher configuration fails; do not pretend clean.
-        if (!kanaf::configureClamAcOnly(engine, setNum) ||
-            !kanaf::disableClamCleanCache(engine, setNum)) {
+        if (!useDefaultMatcher &&
+            (!kanaf::configureClamAcOnly(engine, setNum) ||
+                !kanaf::disableClamCleanCache(engine, setNum))) {
             freeEngine(engine);
             dlclose(lib);
             return incomplete("clamav-matcher-or-cache-config-failed");
@@ -254,4 +257,16 @@ Java_com_kanaf_alrasby_engine_NativeScannerBridge_yaraScanNative(
     UtfChars file(env, filePath);
     UtfChars rules(env, ruleSource);
     return result(env, yaraScan(file.get(), rules.get()));
+}
+
+/**
+ * Debug-only EICAR comparison. Caller enforces FLAG_DEBUGGABLE and always ignores
+ * this result for antivirus readiness. It does NOT disable or replace self-tests.
+ */
+extern "C" JNIEXPORT jstring JNICALL
+Java_com_kanaf_alrasby_engine_NativeScannerBridge_clamDefaultMatcherDiagnosticNative(
+    JNIEnv* env, jobject, jstring filePath, jstring databasePath) {
+    UtfChars file(env, filePath);
+    UtfChars database(env, databasePath);
+    return result(env, clamScan(file.get(), database.get(), true));
 }
