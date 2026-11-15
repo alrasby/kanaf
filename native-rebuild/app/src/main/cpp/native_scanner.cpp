@@ -47,6 +47,13 @@ std::string clamScan(const char* file, const char* database) {
     void* lib = dlopen("libclamav.so", RTLD_NOW | RTLD_LOCAL);
     if (!lib) return incomplete("clamav-load-failed");
 
+    auto getVersion = symbol<const char* (*)()>(lib, "cl_retver");
+    // The ClamAV function-pointer ABI, scan flags and field ordinals below
+    // are pinned to 1.4.3. Refuse another runtime even if its .so loads.
+    if (!getVersion || !kanaf::isPinnedClamRuntime(getVersion())) {
+        dlclose(lib);
+        return incomplete("clamav-version-mismatch");
+    }
     auto init = symbol<int (*)(unsigned int)>(lib, "cl_init");
     auto create = symbol<ClEngine* (*)()>(lib, "cl_engine_new");
     auto freeEngine = symbol<int (*)(ClEngine*)>(lib, "cl_engine_free");
@@ -160,14 +167,7 @@ std::string clamScan(const char* file, const char* database) {
                 }
             }
 #endif
-            if (verdict == 1 && kanaf::isIncompleteLimitAlert(name)) {
-                answer = incomplete("clamav-resource-limit");
-            } else if (verdict == 1) {
-                answer = std::string("DETECTED:") + (name ? name : "ClamAV.Rule");
-            } else if (verdict == 0) {
-                answer = "NO_MATCH";
-            }
-            else answer = incomplete("clamav-scan-failed");
+            answer = kanaf::classifyClamScan(verdict, name);
         }
         freeEngine(engine);
     }
