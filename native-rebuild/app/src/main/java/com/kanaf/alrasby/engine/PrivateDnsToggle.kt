@@ -45,8 +45,8 @@ object PrivateDnsToggle {
         if (!preferences(context).edit().putBoolean(PENDING, true).commit()) return false
         return try {
             val written = Settings.Global.putString(context.contentResolver, MODE_KEY, "off")
-            if (written && PrivateDnsCompatibility.read(context).mode ==
-                PrivateDnsCompatibility.Mode.OFF) true
+            if (written &&
+                Settings.Global.getString(context.contentResolver, MODE_KEY) == "off") true
             else {
                 restoreAuto(context)
                 false
@@ -64,17 +64,22 @@ object PrivateDnsToggle {
     fun restoreAuto(context: Context): Boolean {
         if (Build.VERSION.SDK_INT < 28) return true
         val prefs = preferences(context)
-        val current = PrivateDnsCompatibility.read(context)
-        if (current.mode != PrivateDnsCompatibility.Mode.OFF) {
+        // Check the system setting directly. NetworkCapabilities can throw
+        // while mobile data/Wi-Fi changes; that must not lose a recovery marker.
+        val current = runCatching {
+            Settings.Global.getString(context.contentResolver, MODE_KEY)
+        }.getOrNull()
+        if (current == "opportunistic" || current == "hostname") {
             prefs.edit().remove(PENDING).apply()
             return true
         }
+        if (current != "off") return !pending(context)
         if (!granted(context)) return !pending(context)
         return try {
             val written = Settings.Global.putString(
                 context.contentResolver, MODE_KEY, "opportunistic")
-            if (written && PrivateDnsCompatibility.read(context).mode ==
-                PrivateDnsCompatibility.Mode.AUTOMATIC) {
+            if (written &&
+                Settings.Global.getString(context.contentResolver, MODE_KEY) == "opportunistic") {
                 prefs.edit().remove(PENDING).apply()
                 true
             } else false
@@ -83,6 +88,7 @@ object PrivateDnsToggle {
 
     /** Called on next explicit UI entry after an unexpected process kill. */
     fun recoverIfStopped(context: Context) {
-        if (!KanafDnsVpnService.isRunning() && pending(context)) restoreAuto(context)
+        if (!KanafDnsVpnService.isRunning() &&
+            !KanafDnsVpnService.isStarting() && pending(context)) restoreAuto(context)
     }
 }

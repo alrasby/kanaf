@@ -49,7 +49,9 @@ class KanafDnsVpnService : VpnService() {
         private const val DNS_IP = "10.111.222.2"
         private val DNS_BYTES = byteArrayOf(10, 111, 222.toByte(), 2)
         @Volatile private var active = false
+        @Volatile private var initializing = false
         fun isRunning(): Boolean = active
+        fun isStarting(): Boolean = initializing
     }
 
     private var tun: ParcelFileDescriptor? = null
@@ -78,6 +80,7 @@ class KanafDnsVpnService : VpnService() {
     }
     private var reader: Thread? = null
     private var starting = false
+    private var userSession = false
     private val startHandler = Handler(Looper.getMainLooper())
 
     private fun refreshTile() {
@@ -103,7 +106,14 @@ class KanafDnsVpnService : VpnService() {
             stopSelf()
             return START_NOT_STICKY
         }
+        // Only the explicit, user-approved action can start the DNS VPN and
+        // ever affect global DNS settings. Null or unexpected intents fail closed.
+        if (intent?.action != ACTION_START) {
+            stopSelf()
+            return START_NOT_STICKY
+        }
         if (active || starting) return START_NOT_STICKY
+        initializing = true
         try {
             val notify = notification()
             if (Build.VERSION.SDK_INT >= 34) {
@@ -111,6 +121,7 @@ class KanafDnsVpnService : VpnService() {
             } else startForeground(15041, notify)
             // Only an explicit user-initiated VPN start can request this handoff.
             check(PrivateDnsToggle.prepare(this)) { "private-dns-permission-required" }
+            userSession = true
             starting = true
             establishAfterDnsTransition(0)
         } catch (_: Exception) {
@@ -147,6 +158,7 @@ class KanafDnsVpnService : VpnService() {
                 ?: throw IllegalStateException("VPN permission revoked")
             tun = descriptor
             starting = false
+            initializing = false
             active = true
             refreshTile()
             reader = Thread({ runLoop(descriptor) }, "kanaf-dns-reader")
@@ -269,6 +281,7 @@ class KanafDnsVpnService : VpnService() {
     override fun onDestroy() {
         runCatching { contentResolver.unregisterContentObserver(privateDnsObserver) }
         starting = false
+        initializing = false
         startHandler.removeCallbacksAndMessages(null)
         active = false
         try { tun?.close() } catch (_: IOException) {}
@@ -277,7 +290,10 @@ class KanafDnsVpnService : VpnService() {
         reader?.interrupt()
         reader = null
         stopForeground(STOP_FOREGROUND_REMOVE)
-        PrivateDnsToggle.restoreAuto(this)
+        if (userSession || PrivateDnsToggle.pending(this)) {
+            PrivateDnsToggle.restoreAuto(this)
+        }
+        userSession = false
         refreshTile()
         super.onDestroy()
     }
