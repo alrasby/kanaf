@@ -153,6 +153,10 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
     val automaticScanCancellation = remember { AtomicBoolean(false) }
     var automaticScanActive by remember { mutableStateOf(false) }
     val autoScanSession = remember { AtomicLong(0) }
+    val manualScanSession = remember { AtomicLong(0) }
+    val scopedScanSession = remember { AtomicLong(0) }
+    val scanHistoryArabic = remember { mutableStateListOf<String>() }
+    val scanHistoryEnglish = remember { mutableStateListOf<String>() }
     var askFilesBeforeScan by rememberSaveable { mutableStateOf(false) }
     var scanOnFilesPermissionReturn by remember { mutableStateOf(false) }
     fun startAutomaticDeviceScan() {
@@ -277,6 +281,7 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
         ActivityResultContracts.OpenDocumentTree()
     ) { tree ->
         if (tree != null && !busy) {
+            val session = scopedScanSession.incrementAndGet()
             busy = true
             deviceScanStatus = KanafMessage(
                 "جارٍ فحص الملفات التي أذنت بالوصول إليها، ومراجعة التطبيقات الظاهرة…",
@@ -290,6 +295,7 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
                         files to apps
                     }
                 }
+                if (scopedScanSession.get() != session) return@launch
                 deviceScanStatus = attempted.fold(
                     onSuccess = { (files, apps) ->
                         val findingsAr = files.findings.joinToString("\n") { finding ->
@@ -391,7 +397,16 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
                     autoScanProgress = ""
                     busy = false
                 }
+                manualScanSession.incrementAndGet()
+                scopedScanSession.incrementAndGet()
+                hasScanReport = false
+                status = KanafMessage(
+                    "استخدم زر الفحص لمراجعة الجهاز", "Tap Scan to inspect your device"
+                )
+                selfTestStatus = KanafMessage.EMPTY
                 deviceScanStatus = KanafMessage.EMPTY
+                scanHistoryArabic.clear()
+                scanHistoryEnglish.clear()
             }
             if (event == Lifecycle.Event.ON_RESUME) {
                 systemDns = PrivateDnsCompatibility.read(activity)
@@ -558,13 +573,20 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
             }
         }
     }
-    val scanHistoryArabic = remember { mutableStateListOf<String>() }
-    val scanHistoryEnglish = remember { mutableStateListOf<String>() }
     var keepSessionHistory by rememberSaveable { mutableStateOf(true) }
     var signatures by remember {
         mutableStateOf(runCatching { SignatureRepository(activity).load() }.getOrNull())
     }
     val mlModel: ThreatModel = remember { VerifiedLinearThreatModel.load(activity) }
+    val aiModelStatus = if (mlModel is VerifiedLinearThreatModel) KanafMessage(
+        "نموذج محلي موقّع محمّل: " + mlModel.modelVersion +
+            ". النتيجة استشارية، ولا تُثبت سلامة الملفات.",
+        "Signed on-device model loaded: " + mlModel.modelVersion +
+            ". Advisory score only; never proof of safety."
+    ) else KanafMessage(
+        "غير مفعل: هذا الإصدار لا يتضمن نموذجًا مدرّبًا موقّعًا ومدققًا. لا تُرسل الملفات أو الرسائل إلى خدمة ذكاء اصطناعي.",
+        "Unavailable: no signed, independently validated trained model is shipped. No files or messages are uploaded to an AI service."
+    )
     val trustedFeed = remember { ProductionFeedInstaller() }
     var feedStatus by remember { mutableStateOf(KanafMessage.EMPTY) }
     val rulesUpdater = remember { ThreatRuleUpdater() }
@@ -625,7 +647,8 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
         }
     }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) {
+        if (uri != null && !busy) {
+            val session = manualScanSession.incrementAndGet()
             busy = true
             hasScanReport = false
             status = KanafMessage("جارٍ الفحص...", "Scanning…")
@@ -836,6 +859,7 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
                             "Could not complete scan: ${e.javaClass.simpleName}")
                     }
                 }
+                if (manualScanSession.get() != session) return@launch
                 status = completed
                 hasScanReport = true
                 // Only a bounded, non-persistent summary; never retain file names or contents.
@@ -1072,6 +1096,7 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
             scanHistoryEnglish.clear()
         },
         selfTestStatus = selfTestStatus.displayed(uiLanguage),
+        aiModelStatus = aiModelStatus.displayed(uiLanguage),
         onTestEngines = {
             if (!busy) {
                 busy = true

@@ -72,6 +72,7 @@ fun KanafGlassHome(
     onClearHistory: () -> Unit,
     status: String,
     selfTestStatus: String,
+    aiModelStatus: String,
     onTestEngines: () -> Unit,
     onPickFile: () -> Unit,
     deviceScanStatus: String,
@@ -891,6 +892,18 @@ fun KanafGlassHome(
                     }
                 }
                 if (page == 5) {
+                    GlassPanel(card, stroke) {
+                        Text(tr("Kanaf AI — تحليل محلي", "Kanaf AI — on-device analysis"),
+                            color = ink, style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold)
+                        Text(aiModelStatus, color = secondary,
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.testTag("kanaf_ai_status"))
+                        Text(tr(
+                            "التحليل اليدوي لخصائص APK فقط عند توفر نموذج معتمد. لا يصل للرسائل أو المكالمات خفية ولا يحذف الملفات.",
+                            "Only selected APK structural analysis, when a verified model is available. No hidden access to messages or calls, and no file deletion."
+                        ), color = secondary, style = MaterialTheme.typography.bodySmall)
+                    }
                     GlassPanel(card, stroke) {
                         Text(tr("اللغة والعرض", "Language & display"), color = ink,
                             style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)

@@ -48,6 +48,12 @@ android {
             "Invalid machine-learning signing public key"
         }
         buildConfigField("String", "KANAF_MODEL_PUBLIC_KEY_BASE64", "\"$modelKey\"")
+        val modelFile = file("src/main/assets/validated_model.txt")
+        val modelSignature = file("src/main/assets/validated_model.sig")
+        require(if (modelKey.isBlank()) !modelFile.exists() && !modelSignature.exists()
+                else modelFile.isFile && modelSignature.isFile) {
+            "Kanaf AI requires BOTH signed model assets and a build-pinned public key, or NONE."
+        }
         // ARM64-only packaging for the experimental runtime CI. Normal APKs unchanged.
         if (providers.gradleProperty("kanafArm64Runtime").orNull == "true") {
             ndk { abiFilters += "arm64-v8a" }
