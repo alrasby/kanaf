@@ -41,8 +41,13 @@ object ProtectionControl {
         require(context.contentResolver.persistedUriPermissions.any {
             it.uri == tree && it.isReadPermission
         }) { "Tree read permission was not persisted" }
+        val previous = permittedTree(context)
         prefs(context).edit().putString(TREE, tree.toString()).putBoolean(PERIODIC, true).apply()
         schedule(context)
+        if (previous != null && previous != tree) {
+            runCatching { context.contentResolver.releasePersistableUriPermission(
+                previous, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION) }
+        }
     }
 
     fun schedule(context: Context) {
@@ -55,9 +60,13 @@ object ProtectionControl {
 
     fun disableTreeChecks(context: Context) {
         WorkManager.getInstance(context).cancelUniqueWork(SCHEDULE)
+        val previous = permittedTree(context)
         prefs(context).edit().putBoolean(PERIODIC, false).remove(TREE).apply()
-        // Revocation may fail if provider was already removed; never keep an
-        // active scan schedule after the user opts out.
+        if (previous != null) runCatching {
+            context.contentResolver.releasePersistableUriPermission(
+                previous, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        // Android may have already removed the provider; scheduling stays off.
     }
 
     fun saveResult(context: Context, message: String) {
