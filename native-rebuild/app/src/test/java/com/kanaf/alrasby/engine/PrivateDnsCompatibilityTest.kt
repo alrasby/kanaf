@@ -4,15 +4,17 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class PrivateDnsCompatibilityTest {
-    @Test fun offOnlyIsVpnCompatibleWhenNoEncryptedDnsTransport() {
+    @Test fun automaticModeWorksWithEncryptedDohForwardingWhileStrictModeFailsClosed() {
         assertTrue(PrivateDnsCompatibility.interpret("off", null, null).allowsLocalVpn)
         assertFalse(PrivateDnsCompatibility.interpret(
             "off", null, null, encryptedDnsActive = true).allowsLocalVpn)
-        assertFalse(PrivateDnsCompatibility.interpret("opportunistic", null, null).allowsLocalVpn)
+        assertTrue(PrivateDnsCompatibility.interpret("opportunistic", null, null).allowsLocalVpn)
+        assertTrue(PrivateDnsCompatibility.interpret(
+            "opportunistic", null, null, encryptedDnsActive = true).allowsLocalVpn)
         assertFalse(PrivateDnsCompatibility.interpret(
             "hostname", null, "family.adguard-dns.com").allowsLocalVpn)
         assertFalse(PrivateDnsCompatibility.interpret("future", null, null).allowsLocalVpn)
-        assertFalse(PrivateDnsCompatibility.interpret(null, null, null).allowsLocalVpn)
+        assertTrue(PrivateDnsCompatibility.interpret(null, null, null).allowsLocalVpn)
     }
 
     @Test fun providerModeReflectsConfiguredHostWithoutFalsifyingStatus() {

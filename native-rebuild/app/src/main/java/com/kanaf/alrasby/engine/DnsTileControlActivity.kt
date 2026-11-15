@@ -24,9 +24,10 @@ class DnsTileControlActivity : Activity() {
         if (PrivateDnsToggle.decision(state, PrivateDnsToggle.granted(this)) ==
             PrivateDnsToggle.Decision.MANUAL_REQUIRED) {
             AlertDialog.Builder(this).setTitle("Kanaf DNS")
-                .setMessage("Private DNS is active. Automatic switching requires an " +
-                    "external, one-time ADB grant of WRITE_SECURE_SETTINGS. Without it, " +
-                    "choose Off in Android Private DNS settings before using Kanaf.")
+                .setMessage("Android Private DNS uses a strict provider. " +
+                    "Kanaf cannot override your provider without a special system permission. " +
+                    "Choose Automatic in Android Private DNS settings to use Kanaf securely. " +
+                    "No ADB is required.")
                 .setPositiveButton("Android DNS settings") { _, _ ->
                     PrivateDnsSettingsNavigator.open(this)
                     finish()

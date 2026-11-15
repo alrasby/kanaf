@@ -25,10 +25,6 @@ import com.kanaf.alrasby.R
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.IOException
-import java.net.DatagramPacket
-import java.net.DatagramSocket
-import java.net.InetAddress
-import java.net.InetSocketAddress
 import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.ThreadPoolExecutor
@@ -37,8 +33,9 @@ import java.util.concurrent.TimeUnit
 /**
  * Optional local DNS-only VPN. Does not intercept HTTPS, inspect payloads,
  * or collect browsing history. Android allows one VPN at a time.
- * Blocking applies only to DNS questions that actually traverse this tunnel;
- * private DNS, DoH, first-party ads and IPv6 DNS may bypass it.
+ * Only intercepted IPv4 DNS questions are filtered. Requests are sent over
+ * authenticated DNS-over-HTTPS to the selected provider on an underlay network;
+ * apps using independent DoH/DoT, IPv6 DNS or first-party ads can bypass it.
  */
 class KanafDnsVpnService : VpnService() {
     companion object {
@@ -57,8 +54,8 @@ class KanafDnsVpnService : VpnService() {
     private var tun: ParcelFileDescriptor? = null
     private val privateDnsObserver = object : ContentObserver(Handler(Looper.getMainLooper())) {
         override fun onChange(selfChange: Boolean) {
-            // The user selected Android Private DNS. Do not keep a competing
-            // DNS-only VPN route alive when strict/automatic DNS becomes active.
+            // Strict OS Private DNS must take precedence. Automatic is
+            // supported because Kanaf's upstream is encrypted DoH.
             if (active && !PrivateDnsCompatibility.read(this@KanafDnsVpnService).allowsLocalVpn) {
                 stopSelf()
             }
@@ -96,10 +93,7 @@ class KanafDnsVpnService : VpnService() {
         // Never run a timed-out resolver call on the only TUN reader thread.
         ThreadPoolExecutor.AbortPolicy()
     )
-    // Keep the DNS server paired with the network that advertised it.
-    private data class Upstream(val network: Network, val address: InetAddress)
-    @Volatile private var cachedDns = emptyList<Upstream>()
-    @Volatile private var dnsFetchedAt = 0L
+    private var providerAtStart = DnsProviderStore.STANDARD
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) {
@@ -131,41 +125,52 @@ class KanafDnsVpnService : VpnService() {
     }
 
     /**
-     * Wait briefly for Android's DNS-over-TLS state to settle after the
-     * optional system mode change. Never establish VPN while encrypted DNS is
-     * still active; failure rolls back to Auto through onDestroy().
+     * An unreachable upstream must fail BEFORE the DNS-only VPN is created.
+     * HTTPS probing runs off the main thread. No cleartext DNS fallback.
      */
     private fun establishAfterDnsTransition(attempt: Int) {
         if (!starting) return
-        try {
-            val state = PrivateDnsCompatibility.read(this)
-            check(state.mode == PrivateDnsCompatibility.Mode.OFF) {
-                "private-dns-was-changed-externally"
-            }
-            if (!state.allowsLocalVpn) {
-                if (attempt < 6) {
-                    startHandler.postDelayed({ establishAfterDnsTransition(attempt + 1) }, 400)
-                } else stopSelf()
-                return
-            }
-            check(upstreams().isNotEmpty()) { "underlying-dns-unavailable" }
-            val builder = Builder().setSession("Kanaf DNS ad filter")
-                .setMtu(1500).addAddress(TUN_IP, 32)
-                .addDnsServer(DNS_IP).addRoute(DNS_IP, 32).setBlocking(true)
-            try { builder.addDisallowedApplication(packageName) }
-            catch (_: PackageManager.NameNotFoundException) { /* own app exists */ }
-            val descriptor = builder.establish()
-                ?: throw IllegalStateException("VPN permission revoked")
-            tun = descriptor
-            starting = false
-            initializing = false
-            active = true
-            refreshTile()
-            reader = Thread({ runLoop(descriptor) }, "kanaf-dns-reader")
-                .also { it.start() }
-        } catch (_: Exception) {
-            stopSelf()
+        val state = PrivateDnsCompatibility.read(this)
+        if (!state.allowsLocalVpn) {
+            if (state.mode == PrivateDnsCompatibility.Mode.OFF && attempt < 6) {
+                startHandler.postDelayed(
+                    { establishAfterDnsTransition(attempt + 1) }, 400)
+            } else stopSelf()
+            return
         }
+        val selected = DnsProviderStore.selected(this)
+        Thread({
+            val reachable = runCatching {
+                DnsSecureResolver.isReachable(this, selected)
+            }.getOrDefault(false)
+            startHandler.post {
+                if (!starting) return@post
+                if (!reachable || !PrivateDnsCompatibility.read(this).allowsLocalVpn ||
+                    DnsProviderStore.selected(this) != selected) {
+                    stopSelf()
+                    return@post
+                }
+                try {
+                    val builder = Builder().setSession("Kanaf DNS ad filter")
+                        .setMtu(1500).addAddress(TUN_IP, 32)
+                        .addDnsServer(DNS_IP).addRoute(DNS_IP, 32).setBlocking(true)
+                    try { builder.addDisallowedApplication(packageName) }
+                    catch (_: PackageManager.NameNotFoundException) { /* own app */ }
+                    val descriptor = builder.establish()
+                        ?: throw IllegalStateException("VPN permission revoked")
+                    tun = descriptor
+                    providerAtStart = selected
+                    starting = false
+                    initializing = false
+                    active = true
+                    refreshTile()
+                    reader = Thread({ runLoop(descriptor) }, "kanaf-dns-reader")
+                        .also { it.start() }
+                } catch (_: Exception) {
+                    stopSelf()
+                }
+            }
+        }, "kanaf-doh-preflight").start()
     }
 
     private fun notification(): Notification {
@@ -181,7 +186,7 @@ class KanafDnsVpnService : VpnService() {
         return Notification.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.kanaf_status_icon)
             .setContentTitle("Kanaf: DNS ad filter")
-            .setContentText("Limited host blocking is active. Tap Stop to disconnect.")
+            .setContentText("Encrypted DNS filtering is active. Tap Stop to disconnect.")
             .setContentIntent(open).setOngoing(true)
             .addAction(Notification.Action.Builder(null, "Stop", stop).build())
             .build()
@@ -227,54 +232,8 @@ class KanafDnsVpnService : VpnService() {
         }
     }
 
-    private fun forward(request: ByteArray): ByteArray? {
-        for (upstream in upstreams().take(4)) {
-            try {
-                DatagramSocket().use { socket ->
-                    // A protected socket avoids recursion; bind it to the exact
-                    // underlying network whose DNS server was advertised.
-                    if (!protect(socket)) return null
-                    upstream.network.bindSocket(socket)
-                    socket.soTimeout = 2500
-                    socket.connect(InetSocketAddress(upstream.address, 53))
-                    socket.send(DatagramPacket(request, request.size))
-                    val data = ByteArray(4096)
-                    val packet = DatagramPacket(data, data.size)
-                    socket.receive(packet)
-                    val response = data.copyOf(packet.length)
-                    // The central DNS policy verifies the complete DNS
-                    // response before anything is sent back into the VPN.
-                    return response
-                }
-            } catch (_: IOException) {
-                // Underlying network may have changed; try another resolver.
-            } catch (_: SecurityException) {
-                // The selected network may have been revoked while binding.
-            }
-        }
-        return null
-    }
-
-    /** Underlying network DNS only: never silently send to a custom third party. */
-    private fun upstreams(): List<Upstream> {
-        val now = SystemClock.elapsedRealtime()
-        if (now - dnsFetchedAt < 15_000L) return cachedDns
-        val manager = getSystemService(ConnectivityManager::class.java)
-        val found = LinkedHashSet<Upstream>()
-        for (network in manager.allNetworks) {
-            val caps = manager.getNetworkCapabilities(network) ?: continue
-            if (caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN) ||
-                !caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)) continue
-            manager.getLinkProperties(network)?.dnsServers?.forEach { server ->
-                if (!server.isLoopbackAddress && server.hostAddress != DNS_IP) {
-                    found.add(Upstream(network, server))
-                }
-            }
-        }
-        cachedDns = found.toList()
-        dnsFetchedAt = now
-        return cachedDns
-    }
+    private fun forward(request: ByteArray): ByteArray? =
+        DnsSecureResolver.resolve(this, providerAtStart, request)
 
     override fun onRevoke() { stopSelf() }
 

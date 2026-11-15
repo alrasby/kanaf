@@ -8,9 +8,10 @@ import android.provider.Settings
 import java.util.Locale
 
 /**
- * Read-only Android system Private DNS detection. Never writes Global settings.
- * Default and unknown modes are NOT compatible with Kanaf's experimental
- * DNS-only VPN because the OS's encrypted resolver must take precedence.
+ * Reads Android system Private DNS without altering the OS settings.
+ * OFF and Automatic modes can coexist with Kanaf's DNS-only VPN only
+ * because Kanaf forwards requests via authenticated DNS-over-HTTPS.
+ * A strict custom provider is not bypassed by this app.
  */
 object PrivateDnsCompatibility {
     enum class Mode { OFF, AUTOMATIC, PROVIDER, UNKNOWN }
@@ -21,7 +22,8 @@ object PrivateDnsCompatibility {
         val encryptedDnsActive: Boolean = false
     ) {
         val allowsLocalVpn: Boolean
-            get() = mode == Mode.OFF && !encryptedDnsActive
+            get() = mode == Mode.AUTOMATIC ||
+                (mode == Mode.OFF && !encryptedDnsActive)
     }
 
     fun interpret(
