@@ -2,6 +2,11 @@ package com.kanaf.alrasby
 
 import android.app.Activity
 import android.content.Intent
+import android.os.Environment
+import android.provider.Settings
+import java.util.concurrent.atomic.AtomicBoolean
+import com.kanaf.alrasby.engine.AutomaticDeviceScan
+import com.kanaf.alrasby.engine.ThreatRuleUpdater
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -88,7 +93,7 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
     var uiLanguage by remember { mutableStateOf(uiPreferences.language()) }
     var hiddenSections by remember { mutableStateOf(uiPreferences.hiddenSections()) }
     var status by remember {
-        mutableStateOf(KanafMessage("اختر ملفًا لفحصه محليًا", "Choose a file to scan locally"))
+        mutableStateOf(KanafMessage("استخدم زر الفحص لمراجعة الجهاز", "Tap Scan to inspect your device"))
     }
     var busy by remember { mutableStateOf(false) }
     var selfTestStatus by remember { mutableStateOf(KanafMessage.EMPTY) }
@@ -128,6 +133,122 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
         }
     }
     var deviceScanStatus by remember { mutableStateOf(KanafMessage.EMPTY) }
+    var autoScanProgress by remember { mutableStateOf("") }
+    var scanAccessStatus by remember { mutableStateOf(KanafMessage.EMPTY) }
+    var updateRulesStatus by remember { mutableStateOf(KanafMessage.EMPTY) }
+    var sharedStorageAccess by remember {
+        mutableStateOf(if (Build.VERSION.SDK_INT >= 30)
+            Environment.isExternalStorageManager()
+        else activity.checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) ==
+            PackageManager.PERMISSION_GRANTED)
+    }
+    val automaticScanCancellation = remember { AtomicBoolean(false) }
+    fun startAutomaticDeviceScan() {
+        if (busy) return
+        automaticScanCancellation.set(false)
+        busy = true
+        autoScanProgress = "…"
+        deviceScanStatus = KanafMessage(
+            "بدأ فحص التطبيقات المثبتة والملفات المشتركة المتاحة. لا يتم حذف شيء.",
+            "Scanning installed applications and accessible shared files. Nothing will be deleted."
+        )
+        val scanShared = sharedStorageAccess
+        scope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
+                    AutomaticDeviceScan().run(
+                        activity,
+                        includeSharedStorage = scanShared,
+                        cancelled = { automaticScanCancellation.get() },
+                        progress = { tick ->
+                            activity.runOnUiThread {
+                                autoScanProgress = when (tick.phase) {
+                                    "apps" -> "APK: " + tick.attempted
+                                    "files" -> "Files: " + tick.attempted
+                                    else -> ""
+                                }
+                            }
+                        }
+                    )
+                }
+            }
+            autoScanProgress = ""
+            deviceScanStatus = result.fold(
+                onSuccess = { scan ->
+                    val noteAr = if (scan.sharedStorageGranted)
+                        "تمت مراجعة التخزين المشترك المتاح." else
+                        "لم يُمنح الوصول للملفات المشتركة؛ فُحصت حزم التطبيقات فقط."
+                    val noteEn = if (scan.sharedStorageGranted)
+                        "Accessible shared storage was included." else
+                        "Shared files access not granted; only installed app packages were checked."
+                    val evidenceAr = scan.findings.joinToString("\n") {
+                        it.source + " — " + if (it.isSignature)
+                            com.kanaf.alrasby.engine.ThreatFamily.label(it.label, true) +
+                                " (" + it.label + ")" else
+                            "تحذير في بنية الأرشيف؛ ليس إثبات إصابة"
+                    }
+                    val evidenceEn = scan.findings.joinToString("\n") {
+                        it.source + " — " + if (it.isSignature)
+                            com.kanaf.alrasby.engine.ThreatFamily.label(it.label, false) +
+                                " (" + it.label + ")" else
+                            "Archive structure warning; not a malware diagnosis"
+                    }
+                    KanafMessage(
+                        "انتهت المحاولة: تطبيقات=" + scan.installedApps +
+                            "، ملفات APK=" + scan.appApksAttempted +
+                            "، ملفات مشتركة=" + scan.sharedFilesAttempted +
+                            "، بصمات محسوبة=" + scan.hashed +
+                            "، فحوص أصلية=" + scan.nativeChecked +
+                            "، تطابقات=" + scan.matches +
+                            "، فحوص غير مكتملة=" + scan.incomplete +
+                            "، تحذيرات بنيوية=" + scan.structuralWarnings +
+                            "، حدود الفحص=" + scan.truncated + ".\n" +
+                            noteAr + "\n" + evidenceAr.take(2200) +
+                            "\nالقواعد الحالية اختبارية (EICAR)، ولا تثبت خلو الجهاز من الفيروسات. لم يُحذف أي ملف.",
+                        "Attempted: installed apps=" + scan.installedApps +
+                            ", APK files=" + scan.appApksAttempted +
+                            ", shared files=" + scan.sharedFilesAttempted +
+                            ", SHA-256 completed=" + scan.hashed +
+                            ", native checks=" + scan.nativeChecked +
+                            ", signature matches=" + scan.matches +
+                            ", incomplete checks=" + scan.incomplete +
+                            ", archive warnings=" + scan.structuralWarnings +
+                            ", limits reached=" + scan.truncated + ".\n" +
+                            noteEn + "\n" + evidenceEn.take(2200) +
+                            "\nBundled rules are EICAR test-only; no-match is not proof the device is malware-free. Nothing was deleted."
+                    )
+                },
+                onFailure = { error -> KanafMessage(
+                    "تعذر اكتمال فحص الجهاز: " + error.javaClass.simpleName,
+                    "Device scan incomplete: " + error.javaClass.simpleName
+                ) }
+            )
+            busy = false
+        }
+    }
+    val sharedAccessLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) {
+        sharedStorageAccess = if (Build.VERSION.SDK_INT >= 30)
+            Environment.isExternalStorageManager() else
+            activity.checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) ==
+                PackageManager.PERMISSION_GRANTED
+        scanAccessStatus = if (sharedStorageAccess)
+            KanafMessage("تم تفعيل وصول الملفات المشتركة. اضغط «فحص الجهاز».",
+                "Shared files access enabled. Tap Scan device.")
+        else KanafMessage("لم يُمنح الإذن. يمكنك فحص التطبيقات دون وصول الملفات.",
+            "Access was not granted. Installed apps can still be scanned.")
+    }
+    val oldStoragePermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        sharedStorageAccess = granted
+        scanAccessStatus = if (granted)
+            KanafMessage("تم السماح بالوصول إلى الملفات المشتركة.",
+                "Shared files access granted.")
+        else KanafMessage("فحص التطبيقات متاح دون إذن الملفات.",
+                "App scanning is available without file access.")
+    }
     // A one-shot SAF grant, not a device-wide storage permission. No automatic deletion.
     val deviceScanPicker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocumentTree()
@@ -372,6 +493,40 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
     val mlModel: ThreatModel = remember { VerifiedLinearThreatModel.load(activity) }
     val trustedFeed = remember { ProductionFeedInstaller() }
     var feedStatus by remember { mutableStateOf(KanafMessage.EMPTY) }
+    val rulesUpdater = remember { ThreatRuleUpdater() }
+    fun refreshThreatRules() {
+        if (busy) return
+        val availability = rulesUpdater.availability()
+        if (!availability.configured) {
+            updateRulesStatus = KanafMessage(
+                "تحديث قواعد الحماية غير متاح في هذا البناء: لم يُجهز الناشر مفتاح توقيع إنتاجيًا ورابط تحديث موثوقًا. لا تزال القواعد اختبارية.",
+                "Threat-rule updates unavailable: this build has no publisher-signed production key and official HTTPS feed. Rules remain test-only."
+            )
+            return
+        }
+        busy = true
+        updateRulesStatus = KanafMessage("جارٍ التحقق من تحديث قاعدة التوقيعات الموقعة…",
+            "Checking publisher-signed threat-rule update…")
+        scope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching { rulesUpdater.update(activity) }
+            }
+            updateRulesStatus = result.fold(
+                onSuccess = { version ->
+                    signatures = runCatching { SignatureRepository(activity).load() }.getOrNull()
+                    KanafMessage("تم تثبيت تحديث قواعد التوقيعات الموثوق، الإصدار " + version,
+                        "Verified threat-rule update installed, version " + version)
+                },
+                onFailure = { e -> KanafMessage(
+                    "لم يُثبَّت تحديث. تعذّر التحقق أو لا يوجد إصدار أحدث: " +
+                        e.javaClass.simpleName,
+                    "No update installed; unavailable, not newer, or verification failed: " +
+                        e.javaClass.simpleName
+                ) }
+            )
+            busy = false
+        }
+    }
     val feedPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null && !busy) {
             busy = true
@@ -851,7 +1006,27 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
         status = status.displayed(uiLanguage),
         onPickFile = { picker.launch(arrayOf("*/*")) },
         deviceScanStatus = deviceScanStatus.displayed(uiLanguage),
-        onDeviceScan = { if (!busy) deviceScanPicker.launch(null) },
+        onDeviceScan = { startAutomaticDeviceScan() },
+        onScanChosenFolder = { if (!busy) deviceScanPicker.launch(null) },
+        onStopDeviceScan = { automaticScanCancellation.set(true) },
+        autoScanProgress = autoScanProgress,
+        sharedStorageAccess = sharedStorageAccess,
+        scanAccessStatus = scanAccessStatus.displayed(uiLanguage),
+        onRequestSharedStorage = {
+            if (Build.VERSION.SDK_INT >= 30) {
+                val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                    Uri.parse("package:" + activity.packageName))
+                runCatching { sharedAccessLauncher.launch(intent) }
+                    .onFailure {
+                        sharedAccessLauncher.launch(
+                            Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
+                    }
+            } else {
+                oldStoragePermission.launch(Manifest.permission.READ_EXTERNAL_STORAGE)
+            }
+        },
+        rulesUpdateStatus = updateRulesStatus.displayed(uiLanguage),
+        onUpdateThreatRules = { refreshThreatRules() },
         vpnRequested = vpnRequested,
         vpnStatus = vpnStatus.displayed(uiLanguage),
         privateDnsAvailable = Build.VERSION.SDK_INT >= 28,

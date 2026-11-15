@@ -38,7 +38,7 @@ android {
         val feedUrl = providers.gradleProperty("kanafSignatureFeedHttpsUrl")
             .orNull.orEmpty()
         require(feedUrl.isBlank() ||
-            feedUrl.matches(Regex("https://[A-Za-z0-9.-]+(?:\\:443)?/[A-Za-z0-9/_-]+\\.zip"))) {
+            feedUrl.matches(Regex("https://[A-Za-z0-9.-]+(?::443)?/[A-Za-z0-9/_-]+\\.zip"))) {
             "Threat feed URL must be an HTTPS publisher ZIP without credentials or redirects"
         }
         buildConfigField("String", "KANAF_SIGNATURE_FEED_URL", "\"$feedUrl\"")
