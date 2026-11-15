@@ -80,6 +80,7 @@ fun KanafGlassHome(
     onVpnToggle: (Boolean) -> Unit,
     onVpnRefresh: () -> Unit,
     privateDnsStatus: String,
+    privateDnsAvailable: Boolean,
     privateDnsCompatible: Boolean,
     privateDnsActionStatus: String,
     onOpenPrivateDnsSettings: () -> Unit,
@@ -393,7 +394,7 @@ fun KanafGlassHome(
                         color = secondary, style = MaterialTheme.typography.bodySmall
                     )
                 }
-                GlassPanel(card, stroke) {
+                if (privateDnsAvailable) GlassPanel(card, stroke) {
                     Text(tr("Private DNS للنظام", "Android Private DNS"),
                         color = ink, style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold)

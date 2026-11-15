@@ -831,6 +831,7 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
         onDeviceScan = { if (!busy) deviceScanPicker.launch(null) },
         vpnRequested = vpnRequested,
         vpnStatus = vpnStatus.displayed(uiLanguage),
+        privateDnsAvailable = Build.VERSION.SDK_INT >= 28,
         privateDnsStatus = when (systemDns.mode) {
             PrivateDnsCompatibility.Mode.OFF ->
                 localized("DNS الخاص: متوقف في النظام", "Android Private DNS: Off")

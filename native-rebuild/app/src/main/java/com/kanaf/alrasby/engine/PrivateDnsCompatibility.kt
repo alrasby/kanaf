@@ -3,6 +3,7 @@ package com.kanaf.alrasby.engine
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
+import android.os.Build
 import android.provider.Settings
 import java.util.Locale
 
@@ -41,6 +42,9 @@ object PrivateDnsCompatibility {
     }
 
     fun read(context: Context): Snapshot {
+        // Private DNS is introduced in Android 9/API 28. On Android 8,
+        // no system Private DNS can conflict with the local VPN.
+        if (Build.VERSION.SDK_INT < 28) return Snapshot(Mode.OFF)
         return try {
             val resolver = context.contentResolver
             // Android's published settings APIs permit read access, not write

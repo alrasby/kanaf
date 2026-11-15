@@ -63,11 +63,15 @@ class KanafDnsVpnService : VpnService() {
 
     override fun onCreate() {
         super.onCreate()
-        for (name in listOf(
-            "private_dns_mode", "private_dns_default_mode", "private_dns_specifier"
-        )) {
-            contentResolver.registerContentObserver(
-                Settings.Global.getUriFor(name), false, privateDnsObserver)
+        if (Build.VERSION.SDK_INT >= 28) {
+            for (name in listOf(
+                "private_dns_mode", "private_dns_default_mode", "private_dns_specifier"
+            )) {
+                runCatching {
+                    contentResolver.registerContentObserver(
+                        Settings.Global.getUriFor(name), false, privateDnsObserver)
+                }
+            }
         }
     }
     private var reader: Thread? = null
@@ -127,7 +131,7 @@ class KanafDnsVpnService : VpnService() {
             Intent(this, KanafDnsVpnService::class.java).setAction(ACTION_STOP),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         return Notification.Builder(this, CHANNEL_ID)
-            .setSmallIcon(R.drawable.kanaf_launcher_monochrome)
+            .setSmallIcon(R.drawable.kanaf_status_icon)
             .setContentTitle("Kanaf: DNS ad filter")
             .setContentText("Limited host blocking is active. Tap Stop to disconnect.")
             .setContentIntent(open).setOngoing(true)

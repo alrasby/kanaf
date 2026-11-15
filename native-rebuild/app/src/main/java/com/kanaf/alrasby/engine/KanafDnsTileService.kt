@@ -1,5 +1,6 @@
 package com.kanaf.alrasby.engine
 
+import android.annotation.SuppressLint
 import android.app.PendingIntent
 import android.content.Intent
 import android.graphics.drawable.Icon
@@ -29,12 +30,15 @@ class KanafDnsTileService : TileService() {
             state = if (snapshot.mode == PrivateDnsCompatibility.Mode.PROVIDER)
                 Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
             icon = Icon.createWithResource(
-                this@KanafDnsTileService, R.drawable.kanaf_launcher_monochrome)
+                this@KanafDnsTileService, R.drawable.kanaf_status_icon)
             contentDescription = "Open Android Private DNS settings"
             updateTile()
         }
     }
 
+    // Android <= 13 requires Intent; API 34+ requires PendingIntent.
+    // The deprecated overload is called only behind a strict version check.
+    @SuppressLint("StartActivityAndCollapseDeprecated")
     override fun onClick() {
         super.onClick()
         val intent = Intent(this, DnsSettingsShortcutActivity::class.java)
