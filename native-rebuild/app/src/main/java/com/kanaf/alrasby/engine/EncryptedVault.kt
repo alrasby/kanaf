@@ -4,7 +4,10 @@ import android.content.Context
 import android.net.Uri
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
+import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
 import java.io.File
+import java.io.FilterOutputStream
 import java.io.FileOutputStream
 import java.io.IOException
 import java.security.KeyStore
@@ -22,6 +25,8 @@ class EncryptedVault {
     data class Entry(val id: String, val storedBytes: Long, val savedAtMillis: Long)
     private val ids = Regex("[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}")
     private val alias = "kanaf_vault_aes_gcm_v1"
+    private val maxEntries = 32
+    private val maxStoredBytes = 128L * 1024 * 1024
 
     private fun root(context: Context): File =
         File(context.noBackupFilesDir, "encrypted-vault").also {
@@ -59,6 +64,8 @@ class EncryptedVault {
     @Synchronized
     fun store(context: Context, sourceUri: Uri): Entry {
         require(sourceUri.scheme == "content") { "Only SAF content URIs may be stored" }
+        val existing = list(context)
+        if (existing.size >= maxEntries) throw IOException("vault-entry-limit")
         val id = UUID.randomUUID().toString()
         val destination = file(context, id)
         val partial = File(root(context), ".$id.partial")
@@ -67,11 +74,22 @@ class EncryptedVault {
                 ?: throw IOException("vault-source-unavailable")
             input.use { source ->
                 FileOutputStream(partial).use { output ->
-                    VaultCipher.encrypt(source, output, key(), id)
+                    // Close the AEAD stream and sync the completed tag before
+                    // atomically publishing this encrypted file.
+                    val durable = object : FilterOutputStream(output) {
+                        override fun close() {
+                            flush()
+                            output.fd.sync()
+                        }
+                    }
+                    VaultCipher.encrypt(source, durable, key(), id)
                 }
             }
             if (partial.length() !in 32L..VaultCipher.MAX_ENVELOPE_BYTES) {
                 throw IOException("vault-size-invalid")
+            }
+            if (existing.sumOf { it.storedBytes } + partial.length() > maxStoredBytes) {
+                throw IOException("vault-storage-limit")
             }
             if (!partial.renameTo(destination)) throw IOException("vault-commit-failed")
             return Entry(id, destination.length(), destination.lastModified())
@@ -81,9 +99,10 @@ class EncryptedVault {
     }
 
     /**
-     * Decrypt and authenticate in app-private cache BEFORE the first SAF write.
-     * If the destination provider fails while writing, it may retain a partial
-     * document; the caller must tell the user to discard that document.
+     * Decrypt and authenticate in bounded MEMORY before the first SAF write.
+     * No persistent plaintext staging file survives an app crash.
+     * If the destination provider fails, it may retain a partial document;
+     * the caller must tell the user to discard that document.
      */
     @Synchronized
     fun restore(context: Context, id: String, destinationUri: Uri): Long {
@@ -93,18 +112,17 @@ class EncryptedVault {
             encrypted.length() !in 32L..VaultCipher.MAX_ENVELOPE_BYTES) {
             throw IOException("vault-file-unavailable-or-invalid")
         }
-        val staging = File.createTempFile("kanaf-restore-", ".partial", context.cacheDir)
+        val staging = ByteArrayOutputStream()
+        val count = encrypted.inputStream().use { source ->
+            VaultCipher.decrypt(source, staging, key(), id)
+        }
+        val plain = staging.toByteArray()
         try {
-            val count = encrypted.inputStream().use { source ->
-                staging.outputStream().use { output ->
-                    VaultCipher.decrypt(source, output, key(), id)
-                }
-            }
-            if (staging.length() != count) throw IOException("vault-restore-incomplete")
+            if (count != plain.size.toLong()) throw IOException("vault-restore-incomplete")
             val destination = context.contentResolver.openOutputStream(destinationUri, "w")
                 ?: throw IOException("vault-destination-unavailable")
             destination.use { output ->
-                staging.inputStream().use { input ->
+                ByteArrayInputStream(plain).use { input ->
                     when (val copied = BoundedStreamCopier(VaultCipher.MAX_PLAINTEXT_BYTES)
                         .copy(input, output)) {
                         is BoundedStreamCopier.Result.Complete ->
@@ -116,7 +134,7 @@ class EncryptedVault {
             }
             return count
         } finally {
-            staging.delete()
+            plain.fill(0)
         }
     }
 
