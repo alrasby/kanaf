@@ -33,7 +33,8 @@ import java.util.concurrent.TimeUnit
 /**
  * Optional local DNS-only VPN. Does not intercept HTTPS, inspect payloads,
  * or collect browsing history. Android allows one VPN at a time.
- * Only intercepted IPv4 DNS questions are filtered. Requests are sent over
+ * Only IPv4/IPv6 DNS questions sent to Kanaf's dedicated UDP resolver addresses
+ * are filtered. Requests are sent over
  * authenticated DNS-over-HTTPS to the selected provider on an underlay network;
  * apps using independent DoH/DoT, IPv6 DNS or first-party ads can bypass it.
  */
@@ -46,7 +47,13 @@ class KanafDnsVpnService : VpnService() {
         private const val CHANNEL_ID = "kanaf_dns_ad_filter_v1"
         private const val TUN_IP = "10.111.222.1"
         private const val DNS_IP = "10.111.222.2"
+        private const val TUN_V6_IP = "fd11:beef:cafe::1"
+        private const val DNS_V6_IP = "fd11:beef:cafe::2"
         private val DNS_BYTES = byteArrayOf(10, 111, 222.toByte(), 2)
+        private val DNS_V6_BYTES = byteArrayOf(
+            0xfd.toByte(), 0x11, 0xbe.toByte(), 0xef.toByte(), 0xca.toByte(),
+            0xfe.toByte(), 0, 0, 0, 0, 0, 0, 0, 0, 0, 2
+        )
         @Volatile private var active = false
         @Volatile private var initializing = false
         fun isRunning(): Boolean = active
@@ -221,7 +228,11 @@ class KanafDnsVpnService : VpnService() {
                 try {
                     val builder = Builder().setSession("Kanaf DNS ad filter")
                         .setMtu(1500).addAddress(TUN_IP, 32)
-                        .addDnsServer(DNS_IP).addRoute(DNS_IP, 32).setBlocking(true)
+                        .addDnsServer(DNS_IP).addRoute(DNS_IP, 32)
+                        // Route only Kanaf's IPv6 DNS address; never hijack all IPv6 traffic.
+                        .addAddress(TUN_V6_IP, 128)
+                        .addDnsServer(DNS_V6_IP).addRoute(DNS_V6_IP, 128)
+                        .setBlocking(true)
                     try { builder.addDisallowedApplication(packageName) }
                     catch (_: PackageManager.NameNotFoundException) { /* own app */ }
                     val descriptor = builder.establish()
@@ -279,7 +290,7 @@ class KanafDnsVpnService : VpnService() {
                     } catch (_: RejectedExecutionException) {
                         // Saturated bounded queue: provide a quick local SERVFAIL
                         // instead of stalling every new TUN packet behind DNS I/O.
-                        DnsFilterCore.reply(packet, DNS_BYTES, counters) { null }?.let { response ->
+                        DnsFilterCore.reply(packet, DNS_BYTES, counters, DNS_V6_BYTES) { null }?.let { response ->
                             sendReply(output, response)
                         }
                     }
@@ -293,7 +304,7 @@ class KanafDnsVpnService : VpnService() {
     }
 
     private fun handle(packet: ByteArray, output: FileOutputStream) {
-        val reply = DnsFilterCore.reply(packet, DNS_BYTES, counters, ::forward) ?: return
+        val reply = DnsFilterCore.reply(packet, DNS_BYTES, counters, DNS_V6_BYTES, ::forward) ?: return
         sendReply(output, reply)
     }
 
