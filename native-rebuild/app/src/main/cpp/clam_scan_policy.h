@@ -30,6 +30,13 @@ inline bool validClamThreatName(const char* name) {
 // ClamAV 1.4.3: CL_ENGINE_AC_ONLY=10. Configure before cl_load because
 // cli_initroots builds the matcher while the database is being loaded.
 inline constexpr int kClamAcOnlyField = 10;
+inline constexpr int kClamDisableCacheField = 25;
+// A fresh engine on each scan does not need the internal clean-cache. Keep it
+// disabled to rule out stale or ARM64-translator cache false negatives.
+template <typename Engine>
+bool disableClamCleanCache(Engine* engine, int (*setNum)(Engine*, int, long long)) {
+    return engine && setNum && setNum(engine, kClamDisableCacheField, 1) == 0;
+}
 template <typename Engine>
 bool configureClamAcOnly(Engine* engine, int (*setNum)(Engine*, int, long long)) {
     return engine && setNum && setNum(engine, kClamAcOnlyField, 1) == 0;
