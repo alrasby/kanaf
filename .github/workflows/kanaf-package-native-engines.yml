@@ -72,7 +72,7 @@ jobs:
         working-directory: native-rebuild
         run: |
           set -euo pipefail
-          gradle --no-daemon :app:testDebugUnitTest :app:assembleDebug --stacktrace
+          bash tools/gradle_retry_429.sh --no-daemon :app:testDebugUnitTest :app:assembleDebug --stacktrace
       - name: Verify APK contains all native libraries
         shell: bash
         run: |
