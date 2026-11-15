@@ -35,6 +35,13 @@ android {
         }
         buildConfigField("long", "KANAF_SIGNATURE_MIN_VERSION", "${minFeedVersion}L")
         buildConfigField("String", "KANAF_SIGNATURE_PUBLIC_KEY_BASE64", "\"$publicKey\"")
+        val feedUrl = providers.gradleProperty("kanafSignatureFeedHttpsUrl")
+            .orNull.orEmpty()
+        require(feedUrl.isBlank() ||
+            feedUrl.matches(Regex("https://[A-Za-z0-9.-]+(?:\\:443)?/[A-Za-z0-9/_-]+\\.zip"))) {
+            "Threat feed URL must be an HTTPS publisher ZIP without credentials or redirects"
+        }
+        buildConfigField("String", "KANAF_SIGNATURE_FEED_URL", "\"$feedUrl\"")
         val modelKey = providers.gradleProperty("kanafModelPublicKeyBase64")
             .orNull.orEmpty()
         require(modelKey.matches(Regex("[A-Za-z0-9+/=]*"))) {
