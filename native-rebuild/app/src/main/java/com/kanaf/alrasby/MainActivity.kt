@@ -3,6 +3,11 @@ package com.kanaf.alrasby
 import android.app.Activity
 import android.content.Intent
 import android.net.Uri
+import android.Manifest
+import android.os.Build
+import android.content.pm.PackageManager
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -30,6 +35,8 @@ import com.kanaf.alrasby.engine.ApkStructureInspector
 import com.kanaf.alrasby.engine.ZipInspector
 import com.kanaf.alrasby.engine.LinkInspector
 import com.kanaf.alrasby.engine.EncryptedVault
+import com.kanaf.alrasby.engine.ProtectionControl
+import com.kanaf.alrasby.engine.ScopedFileCheckWorker
 import com.kanaf.alrasby.engine.InstalledAppInventory
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -64,6 +71,30 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
     var busy by remember { mutableStateOf(false) }
     var selfTestStatus by remember { mutableStateOf("") }
     var hasScanReport by remember { mutableStateOf(false) }
+    var watchNewApps by remember { mutableStateOf(ProtectionControl.installWatchEnabled(activity)) }
+    var periodicChecks by remember { mutableStateOf(ProtectionControl.periodicEnabled(activity)) }
+    var protectionStatus by remember { mutableStateOf(ProtectionControl.lastResult(activity)) }
+    val notificationPermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (!granted) protectionStatus = "Notifications disabled by Android. Checks still require opt-in."
+    }
+    val folderPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocumentTree()
+    ) { tree ->
+        if (tree != null) {
+            runCatching {
+                activity.contentResolver.takePersistableUriPermission(
+                    tree, Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+                ProtectionControl.enableTreeChecks(activity, tree)
+                periodicChecks = true
+                protectionStatus = "Selected-folder SHA-256 check scheduled approximately every 24 hours."
+            }.onFailure {
+                protectionStatus = "Folder access unavailable: " + it.javaClass.simpleName
+            }
+        }
+    }
     var vaultStatus by remember { mutableStateOf("") }
     var pendingRestoreId by rememberSaveable { mutableStateOf<String?>(null) }
     val inventory = remember { InstalledAppInventory() }
@@ -272,6 +303,42 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
         busy = busy,
         sharedText = sharedText,
         scanHistory = scanHistory,
+        watchNewApps = watchNewApps,
+        periodicChecks = periodicChecks,
+        protectionStatus = protectionStatus,
+        onWatchNewApps = { enabled ->
+            ProtectionControl.setInstallWatch(activity, enabled)
+            watchNewApps = enabled
+            protectionStatus = if (enabled)
+                localized("مراقبة تثبيت التطبيقات مفعلة؛ تنبيه للمراجعة فقط.",
+                    "Install-event review enabled; alert-only, not antivirus scanning.")
+            else localized("تم إيقاف مراقبة التثبيت.", "Install-event review disabled.")
+            if (enabled && Build.VERSION.SDK_INT >= 33 &&
+                activity.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) !=
+                PackageManager.PERMISSION_GRANTED) {
+                notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        },
+        onChangePeriodic = { enabled ->
+            if (enabled) {
+                folderPicker.launch(null)
+            } else {
+                ProtectionControl.disableTreeChecks(activity)
+                periodicChecks = false
+                protectionStatus = localized("أُلغي الفحص الدوري وسُحب اختيار المجلد.",
+                    "Scheduled checks cancelled; selected folder removed.")
+            }
+        },
+        onRunScopedCheck = {
+            if (periodicChecks && !busy) {
+                WorkManager.getInstance(activity).enqueue(
+                    OneTimeWorkRequestBuilder<ScopedFileCheckWorker>().build()
+                )
+                protectionStatus = localized("طُلب فحص للمجلد المحدد، وسيُنفذ عندما يسمح أندرويد.",
+                    "Folder check requested. Android will run it when scheduled.")
+            }
+        },
+        onRefreshProtection = { protectionStatus = ProtectionControl.lastResult(activity) },
         hasScanReport = hasScanReport,
         onShareReport = {
             if (hasScanReport && !busy) runCatching {
