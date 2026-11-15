@@ -122,6 +122,29 @@ object NativeScannerBridge {
                         ", benign=" + clamNegative.take(100) +
                         "; YARA-X EICAR=" + yaraPositive.take(100) +
                         ", benign=" + yaraNegative.take(100))
+                    // Diagnostic only. A hash-based match MUST NEVER stand in
+                    // for a failing NDB content matcher in the readiness gate.
+                    // This distinguishes "ClamAV cannot match any signatures"
+                    // from "Android ARM64 AC/BM matching is broken".
+                    if (libraries.clamavLoaded && clamRulesOK && !clamPositiveExpected) {
+                        val hashDb = stagedFile(context, "kanaf-hashdiag-", ".hdb",
+                            ("44d88612fea8a8f36de82e1278abb02f:68:" +
+                                "Kanaf.EICAR.MD5.Diagnostic\\n")
+                                .replace("\\n", "\n").toByteArray(Charsets.US_ASCII))
+                        val padded = stagedFile(context, "kanaf-paddeddiag-", ".bin",
+                            eicar + ByteArray(4096) { 'x'.code.toByte() })
+                        try {
+                            val md5Outcome = clamScanNative(testFile.absolutePath, hashDb.absolutePath)
+                            val paddedOutcome = clamScanNative(padded.absolutePath, rulesFile.absolutePath)
+                            Log.i("KanafNativeSelfTest",
+                                "ClamAV diagnostic hash=" + md5Outcome.take(100) +
+                                    " padded-ndb=" + paddedOutcome.take(100) +
+                                    " (diagnostic only, never changes readiness)")
+                        } finally {
+                            hashDb.delete()
+                            padded.delete()
+                        }
+                    }
                 }
             } finally {
                 benign.delete()
