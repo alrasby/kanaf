@@ -41,6 +41,28 @@ class VaultCipherTest {
         assertThrows(Exception::class.java) { opened(envelope.copyOf(envelope.size - 1)) }
     }
 
+    @Test fun authenticationFailureNeverReleasesPartialPlaintext() {
+        val original = ByteArray(120_000) { (it % 157).toByte() }
+        val tampered = sealed(original).also {
+            it[it.lastIndex] = (it.last().toInt() xor 1).toByte()
+        }
+        val stage = ByteArrayOutputStream()
+        assertThrows(Exception::class.java) {
+            VaultCipher.decrypt(ByteArrayInputStream(tampered), stage, key, id)
+        }
+        assertEquals("No unauthenticated plaintext may be released", 0, stage.size())
+    }
+
+    @Test fun trailingCiphertextAndMissingTagAreRejectedWithoutOutput() {
+        val valid = sealed("safe".toByteArray())
+        val truncated = valid.copyOf(4 + 12 + 15)
+        val stage = ByteArrayOutputStream()
+        assertThrows(Exception::class.java) {
+            VaultCipher.decrypt(ByteArrayInputStream(truncated), stage, key, id)
+        }
+        assertEquals(0, stage.size())
+    }
+
     @Test fun wrongItemIdCannotDecrypt() {
         assertThrows(Exception::class.java) { opened(sealed("sample".toByteArray()), "different-id") }
     }

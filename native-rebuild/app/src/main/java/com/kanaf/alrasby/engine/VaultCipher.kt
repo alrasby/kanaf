@@ -1,19 +1,20 @@
 package com.kanaf.alrasby.engine
 
 import java.io.DataInputStream
+import java.io.ByteArrayOutputStream
+import java.security.GeneralSecurityException
 import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
 import javax.crypto.Cipher
-import javax.crypto.CipherInputStream
 import javax.crypto.CipherOutputStream
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
 /**
  * Versioned AES-256-GCM envelope for local, explicitly selected files.
- * Never decrypt directly into a SAF provider: decrypt into a PRIVATE temporary
- * file and verify the authentication tag before copying any bytes outside.
+ * Never decrypt directly into a SAF provider: authenticate the entire bounded
+ * GCM envelope before writing plaintext into private in-memory staging.
  */
 internal object VaultCipher {
     private val magic = byteArrayOf('K'.code.toByte(), 'Q'.code.toByte(), '0'.code.toByte(), '1'.code.toByte())
@@ -38,7 +39,7 @@ internal object VaultCipher {
         }
     }
 
-    /** The destination MUST be private staging; incomplete/auth-failed staging is discarded. */
+    /** Never write to staging until the AEAD tag is authenticated by Cipher.doFinal. */
     fun decrypt(input: InputStream, staging: OutputStream, key: SecretKey, itemId: String): Long {
         val source = DataInputStream(input)
         val header = ByteArray(magic.size)
@@ -49,11 +50,42 @@ internal object VaultCipher {
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(TAG_BITS, iv))
         cipher.updateAAD(aad(itemId))
-        return CipherInputStream(source, cipher).use { plaintext ->
-            when (val copied = BoundedStreamCopier(MAX_PLAINTEXT_BYTES).copy(plaintext, staging)) {
-                is BoundedStreamCopier.Result.Complete -> copied.bytesCopied
-                is BoundedStreamCopier.Result.Incomplete -> throw IOException("vault-restore-${copied.reason}")
+        // CipherInputStream is not suitable for authenticated decryption:
+        // providers may suppress AEAD authentication exceptions during close.
+        // Buffer only the already bounded ciphertext, call doFinal (which MUST
+        // authenticate the tag), then write plaintext to private staging.
+        val encrypted = ByteArrayOutputStream()
+        val chunk = ByteArray(16 * 1024)
+        val maxEncrypted = MAX_PLAINTEXT_BYTES + TAG_BITS / 8
+        while (true) {
+            val count = source.read(chunk)
+            if (count < 0) break
+            if (count > maxEncrypted - encrypted.size()) {
+                throw IOException("vault-ciphertext-size-invalid")
             }
+            if (count > 0) encrypted.write(chunk, 0, count)
+        }
+        if (encrypted.size() < TAG_BITS / 8) {
+            throw IOException("vault-authentication-tag-truncated")
+        }
+        val ciphertext = encrypted.toByteArray()
+        try {
+            val plaintext = try {
+                cipher.doFinal(ciphertext)
+            } catch (error: GeneralSecurityException) {
+                throw IOException("vault-authentication-failed", error)
+            }
+            try {
+                if (plaintext.size.toLong() > MAX_PLAINTEXT_BYTES) {
+                    throw IOException("vault-plaintext-size-invalid")
+                }
+                staging.write(plaintext)
+                return plaintext.size.toLong()
+            } finally {
+                plaintext.fill(0)
+            }
+        } finally {
+            ciphertext.fill(0)
         }
     }
 
