@@ -20,12 +20,20 @@ android {
         versionCode = 1
         versionName = "1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        // Supply only a trusted PUBLIC key through an explicit release Gradle
+        // property or CI configuration; no key = authenticated updates disabled.
+        val publicKey = providers.gradleProperty("kanafSignaturePublicKeyBase64")
+            .orNull.orEmpty()
+        require(publicKey.matches(Regex("[A-Za-z0-9+/=]*"))) {
+            "Invalid Base64 public-key configuration"
+        }
+        buildConfigField("String", "KANAF_SIGNATURE_PUBLIC_KEY_BASE64", "\"$publicKey\"")
         // ARM64-only packaging for the experimental runtime CI. Normal APKs unchanged.
         if (providers.gradleProperty("kanafArm64Runtime").orNull == "true") {
             ndk { abiFilters += "arm64-v8a" }
         }
     }
-    buildFeatures { compose = true }
+    buildFeatures { compose = true; buildConfig = true }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
