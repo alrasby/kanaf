@@ -20,6 +20,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.testTag
 import com.kanaf.alrasby.engine.LinkInspector
 import com.kanaf.alrasby.engine.EncryptedVault
 import com.kanaf.alrasby.engine.InstalledAppInventory
@@ -195,6 +196,7 @@ fun KanafGlassHome(
                     }
                     OutlinedButton(
                         onClick = { page = 5 },
+                        modifier = Modifier.testTag("settings_button"),
                         shape = RoundedCornerShape(16.dp),
                         colors = ButtonDefaults.outlinedButtonColors(
                             containerColor = if (page == 5) Teal.copy(alpha = 0.14f) else card,
@@ -227,6 +229,8 @@ fun KanafGlassHome(
                                 FilterChip(
                                     selected = page == section.page,
                                     onClick = { page = section.page },
+                                    modifier = Modifier.testTag("nav_" + section.id)
+                                        .heightIn(min = 42.dp),
                                     label = {
                                         Text(label, style = MaterialTheme.typography.labelMedium,
                                             fontWeight = if (page == section.page)
@@ -237,7 +241,6 @@ fun KanafGlassHome(
                                         selectedContainerColor = if (dark) Color(0xFF185F65) else Teal,
                                         selectedLabelColor = Color.White
                                     ),
-                                    modifier = Modifier.heightIn(min = 42.dp)
                                 )
                             }
                     }
@@ -529,6 +532,7 @@ fun KanafGlassHome(
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     RadioButton(selected = uiLanguage == option,
+                                        modifier = Modifier.testTag("lang_" + option.storedValue),
                                         onClick = { onLanguageChange(option) })
                                     Spacer(Modifier.width(8.dp))
                                     Column(Modifier.weight(1f)) {
@@ -564,6 +568,7 @@ fun KanafGlassHome(
                                     modifier = Modifier.weight(1f))
                                 Spacer(Modifier.width(12.dp))
                                 Switch(
+                                    modifier = Modifier.testTag("nav_switch_" + section.id),
                                     checked = section.id !in hiddenSections,
                                     onCheckedChange = { enabled ->
                                         onSectionVisibilityChanged(section, enabled)
