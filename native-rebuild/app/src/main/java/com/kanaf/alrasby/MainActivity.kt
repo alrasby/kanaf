@@ -73,7 +73,9 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
     val uiPreferences = remember(activity) { KanafUiPreferences(activity) }
     var uiLanguage by remember { mutableStateOf(uiPreferences.language()) }
     var hiddenSections by remember { mutableStateOf(uiPreferences.hiddenSections()) }
-    var status by remember { mutableStateOf("اختر ملفًا لفحص بصمته محليًا") }
+    var status by remember {
+        mutableStateOf(KanafMessage("اختر ملفًا لفحصه محليًا", "Choose a file to scan locally"))
+    }
     var busy by remember { mutableStateOf(false) }
     var selfTestStatus by remember { mutableStateOf("") }
     var hasScanReport by remember { mutableStateOf(false) }
@@ -185,7 +187,8 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
             }
         }
     }
-    val scanHistory = remember { mutableStateListOf<String>() }
+    val scanHistoryArabic = remember { mutableStateListOf<String>() }
+    val scanHistoryEnglish = remember { mutableStateListOf<String>() }
     var keepSessionHistory by rememberSaveable { mutableStateOf(true) }
     var signatures by remember {
         mutableStateOf(runCatching { SignatureRepository(activity).load() }.getOrNull())
@@ -217,7 +220,7 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
         if (uri != null) {
             busy = true
             hasScanReport = false
-            status = "جارٍ الفحص..."
+            status = KanafMessage("جارٍ الفحص...", "Scanning…")
             scope.launch {
                 val completed = withContext(Dispatchers.IO) {
                     try {
@@ -232,34 +235,42 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
                             activity.contentResolver.openInputStream(uri)?.use { stream ->
                                 when (val result = ApkStructureInspector().inspect(stream).also { apkEvidence = it }) {
                                     is ApkStructureInspector.Result.Complete ->
-                                        "APK: DEX=${result.summary.dexFiles}، مكتبات أصلية=${result.summary.nativeLibraries}، مسارات مريبة=${result.summary.unsafePaths}. فحص بنية فقط وليس كشف برمجيات خبيثة."
+                                        KanafMessage(
+                                            "APK: ملفات DEX=${result.summary.dexFiles}، مكتبات أصلية=${result.summary.nativeLibraries}، مسارات غير آمنة=${result.summary.unsafePaths}. تحليل بنية فقط.",
+                                            "APK: DEX files=${result.summary.dexFiles}, native libraries=${result.summary.nativeLibraries}, unsafe paths=${result.summary.unsafePaths}. Structural analysis only; not malware detection."
+                                        )
                                     is ApkStructureInspector.Result.Incomplete ->
-                                        "فحص بنية APK غير مكتمل: ${result.reason}"
+                                        KanafMessage("فحص بنية APK غير مكتمل: ${result.reason}",
+                                            "APK structure inspection incomplete: ${result.reason}")
                                 }
-                            } ?: "تعذر فتح APK"
-                        } else ""
+                            } ?: KanafMessage("تعذر فتح ملف APK", "Could not open APK")
+                        } else KanafMessage.EMPTY
                         var dexEvidence: DexHeaderInspector.Result? = null
                         val dexNote = if (apk) {
                             activity.contentResolver.openInputStream(uri)?.use { stream ->
                                 when (val result = DexHeaderInspector().inspect(stream).also { dexEvidence = it }) {
                                     is DexHeaderInspector.Result.Complete ->
-                                        "DEX: ${result.summary.dexFiles} ملف، رؤوس غير سليمة: ${result.summary.invalidHeaders}. فحص سلامة بنية فقط."
+                                        KanafMessage("DEX: ${result.summary.dexFiles} ملف، رؤوس غير سليمة: ${result.summary.invalidHeaders}. تحليل بنية فقط.",
+                                            "DEX: ${result.summary.dexFiles} files, invalid headers: ${result.summary.invalidHeaders}. Structural check only.")
                                     is DexHeaderInspector.Result.Incomplete ->
-                                        "فحص DEX غير مكتمل: ${result.reason}"
+                                        KanafMessage("فحص DEX غير مكتمل: ${result.reason}", "DEX inspection incomplete: ${result.reason}")
                                 }
-                            } ?: "تعذر فتح APK لفحص DEX"
-                        } else ""
+                            } ?: KanafMessage("تعذر فتح APK لفحص DEX", "Could not open APK for DEX inspection")
+                        } else KanafMessage.EMPTY
                         var zipEvidence: ZipInspector.Result? = null
                         val zipNote = if (archive || apk) {
                             activity.contentResolver.openInputStream(uri)?.use { stream ->
                                 when (val inspected = ZipInspector().inspect(stream).also { zipEvidence = it }) {
                                     is ZipInspector.Result.Complete ->
-                                        "ZIP: ${inspected.summary.entries} مدخل، ${inspected.summary.bytesExpanded} بايت بعد الفك، مسارات خطرة: ${inspected.summary.unsafeNames}. لا يشمل تحليل المحتوى الخبيث."
+                                        KanafMessage(
+                                            "ZIP: ${inspected.summary.entries} مدخل، ${inspected.summary.bytesExpanded} بايت بعد الفك، مسارات غير آمنة: ${inspected.summary.unsafeNames}. تحليل بنية فقط.",
+                                            "ZIP: ${inspected.summary.entries} entries, ${inspected.summary.bytesExpanded} uncompressed bytes, unsafe paths: ${inspected.summary.unsafeNames}. Structural check only."
+                                        )
                                     is ZipInspector.Result.Incomplete ->
-                                        "تحليل الأرشيف غير مكتمل: ${inspected.reason}"
+                                        KanafMessage("تحليل الأرشيف غير مكتمل: ${inspected.reason}", "ZIP inspection incomplete: ${inspected.reason}")
                                 }
-                            } ?: "تعذر فتح الأرشيف"
-                        } else ""
+                            } ?: KanafMessage("تعذر فتح الأرشيف", "Could not open archive")
+                        } else KanafMessage.EMPTY
                         run {
                             val scanResult = HashSignatureEngine(signatures).scan({
                                 activity.contentResolver.openInputStream(uri)
@@ -274,11 +285,18 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
                                 setOf("kanaf-sha256", "clamav", "yara-x")
                             )
                             val snapshotConflict = ScanEvidenceText.hasConflict(consensus)
-                            val nativeNote = listOf(
-                                "فحص أصلي محلي (قاعدة اختبار EICAR فقط؛ ليست حماية شاملة):",
-                                ScanEvidenceText.nativeLabel("ClamAV", native.clamav, snapshotConflict),
-                                ScanEvidenceText.nativeLabel("YARA-X", native.yaraX, snapshotConflict)
-                            ).joinToString("\n")
+                            val nativeNote = KanafMessage(
+                                listOf(
+                                    "فحص أصلي محلي (لا تُثبت قواعد EICAR وحدها الحماية الشاملة):",
+                                    ScanEvidenceText.nativeLabel("ClamAV", native.clamav, snapshotConflict),
+                                    ScanEvidenceText.nativeLabel("YARA-X", native.yaraX, snapshotConflict)
+                                ).joinToString("\n"),
+                                listOf(
+                                    "Local native engine scan (EICAR test rules do not establish comprehensive protection):",
+                                    ScanEvidenceText.nativeLabel("ClamAV", native.clamav, snapshotConflict, arabic = false),
+                                    ScanEvidenceText.nativeLabel("YARA-X", native.yaraX, snapshotConflict, arabic = false)
+                                ).joinToString("\n")
+                            )
                             val eicarOnly = consensus is EngineConsensus.Decision.Threat &&
                                 consensus.detections.all {
                                     (it.verdict as AntivirusEngine.Verdict.Detected)
@@ -286,16 +304,33 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
                                 }
                             val consensusNote = when (consensus) {
                                 is EngineConsensus.Decision.Threat ->
-                                    if (eicarOnly) "نتيجة المحركات: نجاح اكتشاف EICAR التجريبي غير الضار"
-                                    else "نتيجة المحركات: تم اكتشاف تهديد معروف"
+                                    if (eicarOnly) KanafMessage(
+                                        "نتيجة المحركات: نجح كشف عينة EICAR الاختبارية غير الضارة",
+                                        "Engines: detected the harmless EICAR test sample"
+                                    ) else KanafMessage(
+                                        "نتيجة المحركات: رُصد تطابق تهديد معروف",
+                                        "Engines: matched a known threat signature"
+                                    )
                                 is EngineConsensus.Decision.Inconclusive ->
-                                    if (consensus.reason == "file-changed-between-engines") {
-                                        "تحذير: اختلفت بصمات الملف بين المحركات. قد يكون الملف تغيّر أثناء الفحص؛ النتائج غير حاسمة ويجب إعادة الفحص."
-                                    } else "نتيجة المحركات: غير مكتملة"
-                                is EngineConsensus.Decision.NoKnownMatch -> "نتيجة المحركات: لا يوجد تطابق معروف؛ السلامة غير مؤكدة"
+                                    if (consensus.reason == "file-changed-between-engines") KanafMessage(
+                                        "تحذير: تغير الملف بين قراءات المحركات؛ النتائج غير حاسمة ويجب إعادة الفحص.",
+                                        "Warning: the file changed between engine reads. Results are inconclusive; rescan."
+                                    ) else KanafMessage(
+                                        "نتيجة المحركات: الفحص غير مكتمل",
+                                        "Engines: scan incomplete"
+                                    )
+                                is EngineConsensus.Decision.NoKnownMatch -> KanafMessage(
+                                    "نتيجة المحركات: لا تطابق معروف؛ السلامة غير مؤكدة",
+                                    "Engines: no known match; file safety is NOT verified"
+                                )
                             }
-                            val verdict = ScanEvidenceText.hashLabel(
-                                scanResult, signatures?.size ?: 0, snapshotConflict
+                            val verdict = KanafMessage(
+                                ScanEvidenceText.hashLabel(
+                                    scanResult, signatures?.size ?: 0, snapshotConflict
+                                ),
+                                ScanEvidenceText.hashLabel(
+                                    scanResult, signatures?.size ?: 0, snapshotConflict, arabic = false
+                                )
                             )
                             val features = ThreatFeatureVector.from(apkEvidence, dexEvidence, zipEvidence)
                             val modelResult = mlModel.classify(features)
@@ -315,14 +350,34 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
                                 apk = apkEvidence, dex = dexEvidence, zip = zipEvidence
                             )
                             val assessmentNote = if (eicarOnly) {
-                                "عينة EICAR اختبارية آمنة؛ نجاح الكشف لا يثبت القدرة على كشف فيروسات فعلية"
-                            } else if (scanResult is AntivirusEngine.Verdict.Incomplete || signatures == null || structuralIncomplete || consensus is EngineConsensus.Decision.Inconclusive) {
-                                "تقييم الأدلة: الفحص غير مكتمل أو قاعدة التوقيعات غير متاحة"
+                                KanafMessage(
+                                    "عينة EICAR اختبارية غير ضارة؛ نجاح كشفها لا يثبت كشف برمجيات خبيثة حقيقية",
+                                    "EICAR is a harmless test sample. Detecting it does not prove real-world malware coverage."
+                                )
+                            } else if (scanResult is AntivirusEngine.Verdict.Incomplete ||
+                                signatures == null || structuralIncomplete ||
+                                consensus is EngineConsensus.Decision.Inconclusive) {
+                                KanafMessage(
+                                    "تقييم الأدلة: الفحص غير مكتمل أو قاعدة التوقيعات غير متاحة",
+                                    "Evidence assessment: scan incomplete or signatures unavailable"
+                                )
                             } else when (assessment.severity) {
-                                ThreatEvidence.Severity.CONFIRMED -> "تقييم الأدلة: تطابق تهديد معروف"
-                                ThreatEvidence.Severity.SUSPICIOUS -> "تقييم الأدلة: مؤشرات مشبوهة تستدعي المراجعة"
-                                ThreatEvidence.Severity.INCONCLUSIVE -> "تقييم الأدلة: تحليل غير مكتمل"
-                                ThreatEvidence.Severity.NO_KNOWN_MATCH -> "تقييم الأدلة: لا توجد مؤشرات معروفة؛ السلامة غير مؤكدة"
+                                ThreatEvidence.Severity.CONFIRMED -> KanafMessage(
+                                    "تقييم الأدلة: تطابق توقيع معروف",
+                                    "Evidence assessment: known signature matched"
+                                )
+                                ThreatEvidence.Severity.SUSPICIOUS -> KanafMessage(
+                                    "تقييم الأدلة: مؤشرات بنيوية تستدعي المراجعة",
+                                    "Evidence assessment: structural anomalies require review"
+                                )
+                                ThreatEvidence.Severity.INCONCLUSIVE -> KanafMessage(
+                                    "تقييم الأدلة: تحليل غير مكتمل",
+                                    "Evidence assessment: analysis incomplete"
+                                )
+                                ThreatEvidence.Severity.NO_KNOWN_MATCH -> KanafMessage(
+                                    "تقييم الأدلة: لا توجد مؤشرات معروفة؛ السلامة غير مؤكدة",
+                                    "Evidence assessment: no known indicators; safety not verified"
+                                )
                             }
                             val journey = TrustJourney.build(
                                 assessment,
@@ -330,26 +385,58 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
                                 signaturesAvailable = signatures != null
                             )
                             val decisionNote = if (eicarOnly) {
-                                "اختبار EICAR ناجح. اختبر ملفًا آخر أو راجع حدود قواعد الكشف التجريبية."
+                                KanafMessage(
+                                    "اختبار EICAR ناجح؛ راجع حدود قواعد الكشف الحالية.",
+                                    "EICAR test passed; review the current detection-rule limitations."
+                                )
                             } else if (snapshotConflict) {
-                                "خطوتك التالية: أعد فحص الملف بعد التأكد من ثباته؛ لا تعتمد أي حكم كشف أو سلامة من النتائج المتعارضة."
-                            } else "خطوتك التالية: ${journey.title} — ${journey.nextStep}"
-                            val aiNote = when (modelResult) {
-                                is ThreatModel.Prediction.Unavailable -> "التحليل بالذكاء الاصطناعي غير متاح بعد؛ لم يتم تشغيل نموذج مدرّب."
-                                is ThreatModel.Prediction.Scored ->
-                                    "درجة ML استشارية: ${modelResult.riskProbability} (نموذج ${modelResult.modelVersion}). ليست كشفًا مؤكدًا لبرمجية خبيثة."
+                                KanafMessage(
+                                    "خطوتك التالية: أعد فحص الملف بعد التأكد من ثباته؛ لا تعتمد النتائج المتعارضة.",
+                                    "Next step: rescan a stable file; do not trust contradictory evidence."
+                                )
+                            } else {
+                                val englishNext = when (journey.action) {
+                                    TrustJourney.Action.STOP_AND_VERIFY ->
+                                        "Known signature match — do not install; verify the source and seek an additional scan."
+                                    TrustJourney.Action.REVIEW_BEFORE_INSTALLING ->
+                                        "Structural indicators require review — verify the publisher and avoid sensitive permissions."
+                                    TrustJourney.Action.RETRY_SCAN ->
+                                        "Incomplete analysis — address scan errors and retry; no safety claim can be made."
+                                    TrustJourney.Action.VERIFY_SOURCE ->
+                                        "No known match — verify the publisher and digital signature before installing."
+                                }
+                                KanafMessage("خطوتك التالية: ${journey.title} — ${journey.nextStep}",
+                                    "Next step: $englishNext")
                             }
-                            listOf(decisionNote, assessmentNote, consensusNote, nativeNote, aiNote, verdict, apkNote, dexNote, zipNote)
-                                .filter { it.isNotEmpty() }.joinToString("\n")
+                            val aiNote = when (modelResult) {
+                                is ThreatModel.Prediction.Unavailable -> KanafMessage(
+                                    "التحليل بالذكاء الاصطناعي غير متاح؛ لم يُشغَّل نموذج مدرّب ومعتمد.",
+                                    "AI risk analysis unavailable; no trained, validated model was run."
+                                )
+                                is ThreatModel.Prediction.Scored -> KanafMessage(
+                                    "درجة ML استشارية: ${modelResult.riskProbability} (نموذج ${modelResult.modelVersion}). ليست إثباتًا لوجود تهديد.",
+                                    "Advisory ML score: ${modelResult.riskProbability} (model ${modelResult.modelVersion}). Not proof of malware."
+                                )
+                            }
+                            KanafMessage.combine(listOf(
+                                decisionNote, assessmentNote, consensusNote,
+                                nativeNote, aiNote, verdict, apkNote, dexNote, zipNote
+                            ))
                         }
                     } catch (e: Exception) {
-                        "تعذر إكمال الفحص: ${e.javaClass.simpleName}"
+                        KanafMessage("تعذر إكمال الفحص: ${e.javaClass.simpleName}",
+                            "Could not complete scan: ${e.javaClass.simpleName}")
                     }
                 }
                 status = completed
                 hasScanReport = true
                 // Only a bounded, non-persistent summary; never retain file names or contents.
-                com.kanaf.alrasby.engine.SessionHistoryPolicy.record(scanHistory, completed, keepSessionHistory)
+                com.kanaf.alrasby.engine.SessionHistoryPolicy.record(
+                    scanHistoryArabic, completed.ar, keepSessionHistory
+                )
+                com.kanaf.alrasby.engine.SessionHistoryPolicy.record(
+                    scanHistoryEnglish, completed.en, keepSessionHistory
+                )
                 busy = false
             }
         }
@@ -379,7 +466,7 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
                     android.widget.Toast.LENGTH_SHORT).show()
             }
         },
-        scanHistory = scanHistory,
+        scanHistory = if (arabic) scanHistoryArabic else scanHistoryEnglish,
         watchNewApps = watchNewApps,
         periodicChecks = periodicChecks,
         protectionStatus = protectionStatus,
@@ -425,7 +512,7 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
             if (hasScanReport && !busy) runCatching {
                 val share = Intent(Intent.ACTION_SEND).apply {
                     type = "text/plain"
-                    putExtra(Intent.EXTRA_TEXT, status.take(15_000))
+                    putExtra(Intent.EXTRA_TEXT, status.displayed(uiLanguage).take(15_000))
                 }
                 activity.startActivity(Intent.createChooser(
                     share, localized("مشاركة تقرير الفحص", "Share scan report")
@@ -520,9 +607,13 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
         keepSessionHistory = keepSessionHistory,
         onSessionHistoryChanged = { enabled ->
             keepSessionHistory = enabled
-            com.kanaf.alrasby.engine.SessionHistoryPolicy.onEnabledChanged(scanHistory, enabled)
+            com.kanaf.alrasby.engine.SessionHistoryPolicy.onEnabledChanged(scanHistoryArabic, enabled)
+            com.kanaf.alrasby.engine.SessionHistoryPolicy.onEnabledChanged(scanHistoryEnglish, enabled)
         },
-        onClearHistory = { scanHistory.clear() },
+        onClearHistory = {
+            scanHistoryArabic.clear()
+            scanHistoryEnglish.clear()
+        },
         selfTestStatus = selfTestStatus,
         onTestEngines = {
             if (!busy) {
@@ -546,7 +637,7 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
                 }
             }
         },
-        status = status,
+        status = status.displayed(uiLanguage),
         onPickFile = { picker.launch(arrayOf("*/*")) },
         onOpenSystemApps = {
             runCatching {
