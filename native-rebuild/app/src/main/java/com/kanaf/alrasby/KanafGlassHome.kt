@@ -504,6 +504,75 @@ fun KanafGlassHome(
                 }
                 if (page == 5) {
                     GlassPanel(card, stroke) {
+                        Text(tr("اللغة والعرض", "Language & display"), color = ink,
+                            style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        Text(tr(
+                            "تتغير لغة الواجهة واتجاهها فورًا دون إعادة تشغيل. تتوفر العربية والإنجليزية حاليًا؛ اللغات الأخرى تتبع الإنجليزية مؤقتًا حتى تكتمل ترجمتها.",
+                            "Language and layout direction change immediately without a restart. Arabic and English are currently available; other system languages use English until translated."
+                        ), color = secondary, style = MaterialTheme.typography.bodySmall)
+                        Spacer(Modifier.height(10.dp))
+                        listOf(KanafLanguage.SYSTEM, KanafLanguage.ARABIC, KanafLanguage.ENGLISH)
+                            .forEach { option ->
+                                val label = when (option) {
+                                    KanafLanguage.SYSTEM -> tr("اتّباع لغة النظام", "Follow system language")
+                                    KanafLanguage.ARABIC -> tr("العربية", "Arabic")
+                                    KanafLanguage.ENGLISH -> tr("الإنجليزية", "English")
+                                }
+                                val detail = when (option) {
+                                    KanafLanguage.SYSTEM -> tr("تلقائي حسب إعدادات جهازك", "Automatic, based on device settings")
+                                    KanafLanguage.ARABIC -> tr("واجهة عربية واتجاه من اليمين إلى اليسار", "Arabic with right-to-left layout")
+                                    KanafLanguage.ENGLISH -> tr("واجهة إنجليزية واتجاه من اليسار إلى اليمين", "English with left-to-right layout")
+                                }
+                                Row(
+                                    Modifier.fillMaxWidth().clickable { onLanguageChange(option) }
+                                        .heightIn(min = 56.dp).padding(vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    RadioButton(selected = uiLanguage == option,
+                                        onClick = { onLanguageChange(option) })
+                                    Spacer(Modifier.width(8.dp))
+                                    Column(Modifier.weight(1f)) {
+                                        Text(label, color = ink, style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.SemiBold)
+                                        Text(detail, color = secondary,
+                                            style = MaterialTheme.typography.bodySmall)
+                                    }
+                                }
+                            }
+                    }
+                    GlassPanel(card, stroke) {
+                        Text(tr("تخصيص الأقسام العلوية", "Customize top sections"), color = ink,
+                            style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        Text(tr(
+                            "أظهر أو أخفِ الأقسام غير الضرورية لك لتبقى الواجهة بسيطة. الإخفاء لا يعطل الميزة ولا يمسح بياناتها. يظل الفحص وزر الإعدادات متاحين دائمًا.",
+                            "Show or hide optional sections to simplify navigation. Hiding a section does not disable its feature or delete data. Scan and Settings always remain accessible."
+                        ), color = secondary, style = MaterialTheme.typography.bodySmall)
+                        Spacer(Modifier.height(8.dp))
+                        KanafSection.OPTIONAL.forEach { section ->
+                            val label = when (section) {
+                                KanafSection.LINKS -> tr("تحليل الروابط", "Link inspection")
+                                KanafSection.APPS -> tr("مراجعة التطبيقات", "App review")
+                                KanafSection.VAULT -> tr("الخزنة المشفرة", "Encrypted vault")
+                                KanafSection.PROTECTION -> tr("الحماية والمراقبة", "Protection & monitoring")
+                                KanafSection.HISTORY -> tr("سجل الجلسة", "Session history")
+                                KanafSection.ENGINES -> tr("محركات الكشف", "Detection engines")
+                                KanafSection.SCAN -> tr("الفحص", "Scan")
+                            }
+                            Row(Modifier.fillMaxWidth().heightIn(min = 50.dp),
+                                verticalAlignment = Alignment.CenterVertically) {
+                                Text(label, color = ink, style = MaterialTheme.typography.bodyMedium,
+                                    modifier = Modifier.weight(1f))
+                                Spacer(Modifier.width(12.dp))
+                                Switch(
+                                    checked = section.id !in hiddenSections,
+                                    onCheckedChange = { enabled ->
+                                        onSectionVisibilityChanged(section, enabled)
+                                    }
+                                )
+                            }
+                        }
+                    }
+                    GlassPanel(card, stroke) {
                         Text(tr("إعدادات الخصوصية", "Privacy settings"), color = ink,
                             style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                         Spacer(Modifier.height(12.dp))
@@ -513,8 +582,8 @@ fun KanafGlassHome(
                                 Text(tr("سجل فحوصات الجلسة", "Session scan history"),
                                     color = ink, style = MaterialTheme.typography.titleMedium)
                                 Text(tr(
-                                    "احتفظ بآخر عشر نتائج مختصرة في الذاكرة فقط. عند الإيقاف يُمسح السجل فورًا.",
-                                    "Keep up to ten brief results in memory only. Turning this off clears the history immediately."
+                                    "الاحتفاظ بآخر عشر نتائج مختصرة في الذاكرة فقط، دون أسماء الملفات. إيقاف هذا الخيار يمسح السجل فورًا.",
+                                    "Store up to ten brief scan results in memory, without file names. Disabling this option clears the session history immediately."
                                 ), color = secondary, style = MaterialTheme.typography.bodySmall)
                             }
                             Spacer(Modifier.width(12.dp))
@@ -522,22 +591,35 @@ fun KanafGlassHome(
                         }
                     }
                     GlassPanel(card, stroke) {
-                        Text(tr("أذونات ونطاق الحماية", "Permissions and protection scope"),
+                        Text(tr("أذونات ونطاق الحماية", "Permissions & protection scope"),
                             color = ink, style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.SemiBold)
                         Text(tr(
-                            "يُفحص فقط الملف الذي تختاره. لا تُقرأ الرسائل أو التطبيقات الأخرى بصمت، ولا توجد حماية تلقائية في الخلفية أو تحديثات توقيعات عبر الشبكة.",
-                            "Only files you choose are scanned. Messages and other apps are not silently inspected. Background protection and remote signature updates are not enabled."
+                            "يختار المستخدم الملفات للفحص يدويًا. مراقبة تثبيت التطبيقات وفحص مجلد محدد دورياً اختياريان من قسم الحماية. لا يستطيع كنف الوصول إلى جميع ملفات الجهاز أو منع تشغيل التطبيقات تلقائيًا.",
+                            "Files are selected by the user. Optional install-event review and scheduled selected-folder checks are available in Protection. Kanaf cannot inspect every private file or automatically block other apps."
                         ), color = secondary, style = MaterialTheme.typography.bodyMedium)
                         Spacer(Modifier.height(12.dp))
                         OutlinedButton(onClick = onOpenSystemApps,
-                            modifier = Modifier.fillMaxWidth()) {
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
                             Text(tr("إدارة التطبيقات والأذونات عبر أندرويد",
-                                "Manage apps and permissions in Android"))
+                                "Manage apps & permissions in Android"))
                         }
                         Text(tr(
-                            "يفتح إعدادات أندرويد الرسمية لتعديل الأذونات أو إيقاف تطبيق يدويًا؛ لا يقيّد كنف التطبيقات من تلقاء نفسه.",
-                            "Opens Android system settings for manual permissions or app controls; Kanaf does not restrict other apps itself."
+                            "يفتح إعدادات أندرويد الرسمية لإدارة الأذونات يدويًا. لا يغيّر كنف أذونات التطبيقات الأخرى.",
+                            "Opens official Android settings for manual controls. Kanaf does not modify other apps' permissions."
+                        ), color = secondary, style = MaterialTheme.typography.bodySmall)
+                    }
+                    GlassPanel(card, stroke) {
+                        Text(tr("حول كنف", "About Kanaf"), color = ink,
+                            style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        Text(tr(
+                            "كنف — استوديو الأمان والخصوصية. يقدّم فحصًا محليًا وتحليل روابط ومراجعة تطبيقات وخزنة مشفرة. هذه نسخة تطويرية؛ لا تضمن خلو الجهاز من البرمجيات الخبيثة.",
+                            "Kanaf Security & Privacy Studio provides local file and link inspection, app review and an encrypted vault. This is a development build; it does not certify a device is malware-free."
+                        ), color = secondary, style = MaterialTheme.typography.bodyMedium)
+                        Spacer(Modifier.height(8.dp))
+                        Text(tr(
+                            "لا تُرفع ملفات الفحص لخوادم. تُخزن اختيارات الواجهة داخل الجهاز. يبقى الحجر اليدوي وحذف الأصل متاحين فقط عند اختيارك وموافقتك الصريحة.",
+                            "Selected files are not uploaded. Presentation settings stay on-device. Manual document quarantine and original deletion require your explicit selection and consent."
                         ), color = secondary, style = MaterialTheme.typography.bodySmall)
                     }
                 }
