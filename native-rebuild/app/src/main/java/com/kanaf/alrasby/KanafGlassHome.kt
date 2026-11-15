@@ -177,10 +177,12 @@ fun KanafGlassHome(
                     if (dark) listOf(Night, Color(0xFF123C47), Night)
                     else listOf(Color(0xFFE2F5F0), background, Color(0xFFE8EEF8))
                 )
-            )
+            ),
+            contentAlignment = Alignment.TopCenter
         ) {
             Column(
-                Modifier.fillMaxSize().verticalScroll(scrollState)
+                Modifier.widthIn(max = 680.dp).fillMaxWidth().fillMaxHeight()
+                    .verticalScroll(scrollState)
                     .padding(horizontal = 16.dp, vertical = 18.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
