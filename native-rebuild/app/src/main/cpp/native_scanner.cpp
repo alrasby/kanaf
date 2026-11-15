@@ -71,10 +71,11 @@ std::string clamScan(const char* file, const char* database) {
         // Use supported Aho–Corasick path for the tiny prototype signature
         // database. This must happen before cl_load initializes root matchers.
         // Reject scans if matcher configuration fails; do not pretend clean.
-        if (!kanaf::configureClamAcOnly(engine, setNum)) {
+        if (!kanaf::configureClamAcOnly(engine, setNum) ||
+            !kanaf::disableClamCleanCache(engine, setNum)) {
             freeEngine(engine);
             dlclose(lib);
-            return incomplete("clamav-matcher-config-failed");
+            return incomplete("clamav-matcher-or-cache-config-failed");
         }
         unsigned int count = 0;
         int loading = load(database, engine, &count, 0);
