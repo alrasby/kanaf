@@ -76,7 +76,11 @@ class ScopedDeviceScan {
                             truncated = true
                             break
                         }
-                        val id = records.getString(idCol) ?: run { incomplete++; continue }
+                        val id = records.getString(idCol)
+                        if (id.isNullOrBlank()) {
+                            incomplete++
+                            continue
+                        }
                         val mime = records.getString(typeCol).orEmpty()
                         if (mime == DocumentsContract.Document.MIME_TYPE_DIR) {
                             if (depth >= MAX_DEPTH || roots.size >= MAX_DIRECTORIES) {

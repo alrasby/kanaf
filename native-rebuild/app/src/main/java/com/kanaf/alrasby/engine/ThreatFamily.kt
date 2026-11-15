@@ -10,6 +10,7 @@ object ThreatFamily {
         KEYLOGGER, BOTNET, MINER, DROPPER, EXPLOIT, TEST_SAMPLE, UNCLASSIFIED }
 
     fun classify(signature: String): Kind {
+        if (signature.equals("Kanaf_EICAR_Test", ignoreCase = true)) return Kind.TEST_SAMPLE
         val prefix = signature.trim().substringBefore('.').substringBefore(':')
             .substringBefore('-').lowercase(java.util.Locale.ROOT)
         return when (prefix) {
