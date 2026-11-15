@@ -250,6 +250,7 @@ fun KanafGlassHome(
         ) {
             Column(
                 Modifier.widthIn(max = 680.dp).fillMaxWidth().fillMaxHeight()
+                    .windowInsetsPadding(WindowInsets.safeDrawing)
                     .padding(horizontal = 16.dp, vertical = 18.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {

@@ -6,6 +6,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.test.platform.app.InstrumentationRegistry
+import android.os.Build
 import org.junit.After
 import org.junit.Assert.assertFalse
 import org.junit.Rule
@@ -47,8 +48,11 @@ class KanafUiNavigationTest {
         rule.onNodeWithTag("open_dns_page").assertExists()
         rule.onNodeWithTag("dns_filter_switch").assertDoesNotExist()
         rule.onNodeWithTag("open_dns_page").performClick()
-        rule.onNodeWithTag("dns_system_off").assertExists()
-        rule.onNodeWithTag("dns_system_auto").assertExists()
+        // Android 8 has no system Private DNS; it was added in Android 9.
+        if (Build.VERSION.SDK_INT >= 28) {
+            rule.onNodeWithTag("dns_system_off").assertExists()
+            rule.onNodeWithTag("dns_system_auto").assertExists()
+        }
         rule.onNodeWithTag("dns_provider_dns_adguard-dns_com").assertExists()
         rule.onNodeWithTag("dns_provider_family_adguard-dns_com").assertExists()
         rule.onNodeWithTag("dns_provider_switch_dns_adguard_com").assertExists()

@@ -5,7 +5,7 @@ plugins {
 }
 android {
     namespace = "com.kanaf.alrasby"
-    compileSdk = 35
+    compileSdk = 36
     ndkVersion = "27.2.12479018"
     externalNativeBuild {
         cmake {
@@ -16,7 +16,7 @@ android {
     defaultConfig {
         applicationId = "com.kanaf.alrasby"
         minSdk = 26
-        targetSdk = 35
+        targetSdk = 36
         versionCode = 1
         versionName = "1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
