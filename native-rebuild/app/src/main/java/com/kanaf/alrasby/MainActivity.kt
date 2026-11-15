@@ -357,7 +357,10 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
     var dnsQuickTileStatus by remember { mutableStateOf(KanafMessage.EMPTY) }
     var dnsCoverageStatus by remember { mutableStateOf(KanafMessage.EMPTY) }
     var dnsCoverageBusy by remember { mutableStateOf(false) }
-    var dnsSessionStats by remember { mutableStateOf(KanafMessage.EMPTY) }
+    var dnsSessionStats by remember {
+        mutableStateOf(KanafMessage("العدادات متاحة أثناء تشغيل المرشح فقط.",
+            "Counters are available only during an active DNS session."))
+    }
     val dnsOperation = remember { AtomicLong(0) }
 
     fun refreshDnsCounters() {
