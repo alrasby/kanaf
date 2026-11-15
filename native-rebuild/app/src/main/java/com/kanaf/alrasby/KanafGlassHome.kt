@@ -48,6 +48,7 @@ fun KanafGlassHome(
     onLoadApps: () -> Unit,
     onOpenAppDetails: (String) -> Unit,
     onAddToVault: () -> Unit,
+    onQuarantineDocument: () -> Unit,
     onRestoreVault: (String) -> Unit,
     onDeleteVault: (String) -> Unit,
     keepSessionHistory: Boolean,
@@ -64,6 +65,7 @@ fun KanafGlassHome(
     var linkInput by remember { mutableStateOf(sharedText.orEmpty()) }
     var linkReport by remember { mutableStateOf<LinkInspector.Report?>(null) }
     var confirmVaultSave by remember { mutableStateOf(false) }
+    var confirmQuarantine by remember { mutableStateOf(false) }
     var deleteVaultId by remember { mutableStateOf<String?>(null) }
     var appSearch by remember { mutableStateOf("") }
     LaunchedEffect(sharedText) {
@@ -77,6 +79,26 @@ fun KanafGlassHome(
     LaunchedEffect(page) { scrollState.scrollTo(0) }
     val arabic = java.util.Locale.getDefault().language == "ar"
     fun tr(ar: String, en: String) = if (arabic) ar else en
+    if (confirmQuarantine) {
+        AlertDialog(
+            onDismissRequest = { confirmQuarantine = false },
+            title = { Text(tr("حجر مستند مختار", "Quarantine a selected document")) },
+            text = { Text(tr(
+                "تنبيه: بعد حفظ نسخة مشفرة والتحقق منها، سيحاول كنف حذف المستند الأصلي من موفّر أندرويد إذا سمح بذلك. قد يصبح الوصول إلى الملف متعذرًا إلا من الخزنة، وفقدان مفتاح الجهاز يجعل استعادته مستحيلة. لا يمكن حجر ملفات التطبيقات الأخرى أو النظام بهذه الطريقة. هل توافق؟",
+                "Warning: after storing and verifying an encrypted copy, Kanaf will ask Android's document provider to DELETE the selected original if allowed. Losing the device key can make recovery impossible. This does not isolate other apps or system files. Continue?"
+            )) },
+            confirmButton = {
+                TextButton(onClick = { confirmQuarantine = false; onQuarantineDocument() }) {
+                    Text(tr("أوافق وأختار المستند", "Agree and choose document"))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmQuarantine = false }) {
+                    Text(tr("إلغاء", "Cancel"))
+                }
+            }
+        )
+    }
     if (confirmVaultSave) {
         AlertDialog(
             onDismissRequest = { confirmVaultSave = false },
@@ -494,6 +516,13 @@ fun KanafGlassHome(
                             modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
                             shape = RoundedCornerShape(16.dp)) {
                             Text(tr("إضافة ملف إلى الخزنة", "Add file to vault"))
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        OutlinedButton(onClick = { confirmQuarantine = true }, enabled = !busy,
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                            shape = RoundedCornerShape(16.dp)) {
+                            Text(tr("حجر مستند مختار (قد يحذف الأصل)",
+                                "Quarantine selected document (may delete original)"))
                         }
                         Text(tr(
                             "ملفات حتى 16 ميجابايت. يؤدي مسح بيانات التطبيق أو فقدان مفتاح Keystore إلى تعذر استعادة النسخ المشفرة.",
