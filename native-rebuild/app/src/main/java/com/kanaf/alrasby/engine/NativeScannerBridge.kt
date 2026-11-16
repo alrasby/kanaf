@@ -20,6 +20,9 @@ object NativeScannerBridge {
     private const val MAX_FILE_BYTES = 16L * 1024 * 1024
     private const val CLAM_RULE_HASH = "f7a0ea8212c9251375ccf756743c34f59732e4edb29ee9cf58e48397c53c93be"
     private const val YARA_RULE_HASH = "6512c037bf11c594476492bd9e1cef968349a79a3a06f50aafa26e4ef3fc0993"
+    // Scoped to this process lifetime. Never cache per-file detection verdicts,
+    // signature trust, file hashes, or library load failures.
+    private val passedEngineSelfTest = java.util.concurrent.atomic.AtomicBoolean(false)
 
     data class Report(
         val clamav: AntivirusEngine.Verdict,
@@ -126,11 +129,22 @@ object NativeScannerBridge {
             val yaraRules = yaraBytes.toString(Charsets.UTF_8)
             // Positive self-test: the real native engine MUST find the harmless EICAR pattern.
             // Negative self-test prevents a scanner that reports every file as infected.
-            val benign = stagedFile(context, "kanaf-benign-", ".txt", "kanaf-scan-control".toByteArray())
             val clamOK: Boolean
             val yaraOK: Boolean
-            try {
-                val clamPositive = if (libraries.clamavLoaded && clamRulesOK)
+            val cached = !selfTestOnly && passedEngineSelfTest.get() &&
+                libraries.clamavLoaded && libraries.yaraXLoaded &&
+                clamRulesOK && yaraRulesOK
+            if (cached) {
+                // Reuse only a positive AND negative native EICAR diagnostic
+                // already passed in this same scanner process. Every actual
+                // user file still goes through BOTH native engines.
+                clamOK = true
+                yaraOK = true
+            } else {
+                val benign = stagedFile(context, "kanaf-benign-", ".txt",
+                    "kanaf-scan-control".toByteArray())
+                try {
+                    val clamPositive = if (libraries.clamavLoaded && clamRulesOK)
                     clamScanNative(testFile.absolutePath, rulesFile.absolutePath) else "NOT_RUN"
                 val clamPositiveExpected = NativeSelfTestPolicy.expected("clamav", clamPositive)
                 val clamNegative = if (clamPositiveExpected)
@@ -180,8 +194,13 @@ object NativeScannerBridge {
                         }
                     }
                 }
-            } finally {
-                benign.delete()
+                } finally {
+                    benign.delete()
+                }
+                if (clamOK && yaraOK && clamRulesOK && yaraRulesOK &&
+                    libraries.clamavLoaded && libraries.yaraXLoaded) {
+                    passedEngineSelfTest.set(true)
+                }
             }
             // Debug builds use EICAR fixtures for diagnostics. In production
             // regular user files must NEVER be checked only against test rules.
