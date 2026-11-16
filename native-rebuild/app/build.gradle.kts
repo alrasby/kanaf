@@ -28,6 +28,12 @@ android {
         targetSdk = 36
         versionCode = 1
         versionName = "1.0"
+        // Community behavior is unchanged unless the explicit Play flag is passed.
+        val playDns = providers.gradleProperty("kanafPlayDnsSecurityOnly")
+            .orNull?.also { require(it == "true" || it == "false") {
+                "kanafPlayDnsSecurityOnly must be true or false"
+            } } == "true"
+        buildConfigField("boolean", "KANAF_PLAY_DNS_SECURITY_ONLY", "$playDns")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         // Supply only a trusted PUBLIC key through an explicit release Gradle
         // property or CI configuration; no key = authenticated updates disabled.
@@ -274,6 +280,15 @@ val verifyKanafProductionInputs = tasks.register("verifyKanafProductionInputs") 
             block("owner-controlled-release-keystore-unconfigured")
         }
         logger.lifecycle("Kanaf production input cryptographic preflight passed; final signed-artifact + hardware QA gate remains mandatory.")
+    }
+}
+val verifyKanafPlayDnsPolicy = tasks.register("verifyKanafPlayDnsPolicy") {
+    group = "verification"
+    description = "Refuse a Play candidate that has advertising DNS enabled"
+    doLast {
+        check(providers.gradleProperty("kanafPlayDnsSecurityOnly").orNull == "true") {
+            "KANAF_PLAY_DNS_POLICY_BLOCKED: use -PkanafPlayDnsSecurityOnly=true"
+        }
     }
 }
 tasks.matching { it.name == "preReleaseBuild" }.configureEach {

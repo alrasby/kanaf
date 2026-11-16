@@ -2,13 +2,14 @@ package com.kanaf.alrasby.engine
 
 /**
  * Actual DNS-only VPN's packet policy, kept network-free for deterministic tests.
- * Never forwards ad-blocklisted or malformed queries; no telemetry is collected.
+ * Never forwards policy-blocklisted or malformed queries; no telemetry is collected.
  */
 object DnsFilterCore {
     fun reply(
         packet: ByteArray, localDnsAddress: ByteArray,
         counters: DnsSessionCounters? = null,
         localIpv6DnsAddress: ByteArray? = null,
+        policy: DnsDomainPolicy = DnsDomainPolicy.forBuild(),
         resolver: (ByteArray) -> ByteArray?
     ): ByteArray? {
         if (localDnsAddress.size != 4 || packet.isEmpty()) return null
@@ -20,7 +21,7 @@ object DnsFilterCore {
             if (query.destinationPort != 53 || query.sourcePort == 0 ||
                 !query.destinationIp.contentEquals(localIpv6DnsAddress) ||
                 query.dns.size < 12 || (query.dns[2].toInt() and 0x80) != 0) return null
-            val answer = resolveQuestion(query.dns, counters, resolver) ?: return null
+            val answer = resolveQuestion(query.dns, counters, policy, resolver) ?: return null
             return DnsIpv6PacketCodec.buildUdp(
                 localIpv6DnsAddress, query.sourceIp, 53, query.sourcePort, answer
             )
@@ -29,7 +30,7 @@ object DnsFilterCore {
         if (query.destinationPort != 53 || query.sourcePort == 0 ||
             !query.destinationIp.contentEquals(localDnsAddress) ||
             query.dns.size < 12 || (query.dns[2].toInt() and 0x80) != 0) return null
-        val answer = resolveQuestion(query.dns, counters, resolver) ?: return null
+        val answer = resolveQuestion(query.dns, counters, policy, resolver) ?: return null
         return DnsPacketCodec.buildUdp(
             localDnsAddress, query.sourceIp, 53, query.sourcePort, answer
         )
@@ -37,12 +38,12 @@ object DnsFilterCore {
 
     private fun resolveQuestion(
         question: ByteArray, counters: DnsSessionCounters?,
-        resolver: (ByteArray) -> ByteArray?
+        policy: DnsDomainPolicy, resolver: (ByteArray) -> ByteArray?
     ): ByteArray? {
         val host = DnsPacketCodec.questionName(question)
         val answer = when {
             host == null -> { counters?.failed(); DnsPacketCodec.servfail(question) }
-            AdDomainRules.isAdOrTracker(host) -> {
+            policy.classify(host) != DnsRuleCategory.ALLOWED -> {
                 counters?.blocked()
                 DnsPacketCodec.nxdomain(question)
             }
