@@ -100,28 +100,38 @@ def validate(report, *, today=None):
         required(False, "threat-feed-freshness")
 
     release = report.get("release") if isinstance(report.get("release"), dict) else {}
+    distribution = release.get("distribution")
+    required(distribution in ("play", "direct"), "release-distribution-missing")
+    # The app's compiled DNS policy must correspond to the distribution
+    # that independent QA actually tested. Never call ad-filter builds Play.
+    required(type(release.get("dns_security_only")) is bool and
+             release.get("dns_security_only") == (distribution == "play"),
+             "release-dns-policy-distribution-mismatch")
     required(release.get("signed_apk") is True, "apk-release-signing")
     required(release.get("signed_aab") is True, "aab-release-signing")
     required(is_digest(release.get("signed_aab_sha256")), "aab-artifact-digest")
     required(is_digest(release.get("apk_signer_cert_sha256")), "apk-signer-certificate-digest")
     required(type(release.get("target_sdk")) is int and
              release.get("target_sdk", 0) >= 36, "play-target-api36")
-    required(release.get("play_sensitive_permissions_approved") is True,
-             "play-sensitive-permissions-approval")
-    required(release.get("vpn_service_policy_review") is True,
-             "play-vpnservice-policy-review")
-    required(release.get("play_dns_cross_app_ad_policy_resolved") is True,
-             "play-cross-app-ad-blocking-policy")
-    required(release.get("vpn_explicit_disclosure_device_qa") is True,
-             "play-vpn-prominent-disclosure")
-    required(release.get("vpn_stop_and_dns_leak_device_qa") is True,
-             "physical-vpn-disconnect-and-dns-leak-qa")
-    required(release.get("live_privacy_policy_approved") is True,
-             "play-live-app-privacy-policy")
-    required(release.get("play_data_safety_verified") is True,
-             "play-data-safety-attestation")
-    required(release.get("play_fgs_special_use_approved") is True,
-             "play-special-use-fgs-approval")
+    # Direct distribution must not invent Play Store approval. Play permission
+    # checks remain mandatory for a Play release or an unspecified channel.
+    if distribution != "direct":
+            required(release.get("play_sensitive_permissions_approved") is True,
+                 "play-sensitive-permissions-approval")
+        required(release.get("vpn_service_policy_review") is True,
+                 "play-vpnservice-policy-review")
+        required(release.get("play_dns_cross_app_ad_policy_resolved") is True,
+                 "play-cross-app-ad-blocking-policy")
+        required(release.get("vpn_explicit_disclosure_device_qa") is True,
+                 "play-vpn-prominent-disclosure")
+        required(release.get("vpn_stop_and_dns_leak_device_qa") is True,
+                 "physical-vpn-disconnect-and-dns-leak-qa")
+        required(release.get("live_privacy_policy_approved") is True,
+                 "play-live-app-privacy-policy")
+        required(release.get("play_data_safety_verified") is True,
+                 "play-data-safety-attestation")
+        required(release.get("play_fgs_special_use_approved") is True,
+                 "play-special-use-fgs-approval")
     required(release.get("real_device_scan_and_dns_qa") is True,
              "physical-dns-and-scan-acceptance")
     required(is_digest(release.get("signed_apk_sha256")), "release-apk-digest")

@@ -209,6 +209,31 @@ class ReleaseReadinessTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "evidence-signature-invalid"):
                 verify_attestation(report, signature, public, pinned)
 
+    def test_release_distribution_requires_truthful_dns_compilation(self):
+        base = {"release": {
+            "signed_apk": True, "signed_aab": True,
+            "distribution": "play", "dns_security_only": False,
+        }}
+        issues = validate(base, today=dt.date(2026, 11, 16))
+        self.assertIn("release-dns-policy-distribution-mismatch", issues)
+        self.assertIn("play-sensitive-permissions-approval", issues)
+        base["release"]["distribution"] = "direct"
+        base["release"]["dns_security_only"] = False
+        direct_issues = validate(base, today=dt.date(2026, 11, 16))
+        self.assertNotIn("release-dns-policy-distribution-mismatch", direct_issues)
+        self.assertNotIn("play-sensitive-permissions-approval", direct_issues)
+        # Direct releases still need exact signed binaries, physical QA, and
+        # a legally sourced independent malware evaluation.
+        self.assertIn("physical-arm64-device-test", direct_issues)
+        self.assertIn("native-independent-malware-detection", direct_issues)
+        base["release"]["distribution"] = "play"
+        base["release"]["dns_security_only"] = True
+        self.assertNotIn("release-dns-policy-distribution-mismatch",
+                         validate(base, today=dt.date(2026, 11, 16)))
+        base["release"]["distribution"] = "unknown"
+        self.assertIn("release-distribution-missing",
+                      validate(base, today=dt.date(2026, 11, 16)))
+
 
 if __name__ == "__main__":
     unittest.main()
