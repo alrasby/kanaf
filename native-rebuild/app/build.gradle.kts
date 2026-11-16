@@ -34,6 +34,12 @@ android {
                 "kanafPlayDnsSecurityOnly must be true or false"
             } } == "true"
         buildConfigField("boolean", "KANAF_PLAY_DNS_SECURITY_ONLY", "$playDns")
+        // The published FGS specialUse justification MUST match DNS behavior
+        // in the exact compiled distribution, never the community defaults.
+        manifestPlaceholders["kanafDnsServicePurpose"] = if (playDns)
+            "User-initiated DNS-only VPN for malware and phishing protection via encrypted HTTPS"
+        else
+            "User-initiated DNS-only VPN for optional local ad and tracking domain filtering"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         // Supply only a trusted PUBLIC key through an explicit release Gradle
         // property or CI configuration; no key = authenticated updates disabled.
@@ -138,6 +144,16 @@ val verifyKanafProductionInputs = tasks.register("verifyKanafProductionInputs") 
             error("KANAF_PRODUCTION_RELEASE_BLOCKED: $reason")
         fun property(name: String): String =
             providers.gradleProperty(name).orNull.orEmpty().trim()
+        // Explicit release identity prevents accidental Play distribution of
+        // the feature-complete community ad-filtering variant.
+        val distribution = property("kanafReleaseDistribution")
+        if (distribution != "play" && distribution != "direct")
+            block("release-distribution-must-be-explicit-play-or-direct")
+        val playDnsMode = property("kanafPlayDnsSecurityOnly") == "true"
+        if (distribution == "play" && !playDnsMode)
+            block("play-distribution-requires-security-only-dns")
+        if (distribution == "direct" && playDnsMode)
+            block("direct-distribution-must-not-impersonate-play")
         fun sha(bytes: ByteArray): String =
             MessageDigest.getInstance("SHA-256").digest(bytes)
                 .joinToString("") { "%02x".format(it.toInt() and 255) }

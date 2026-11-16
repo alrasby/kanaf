@@ -53,7 +53,7 @@
                 <action android:name="android.net.VpnService"/>
             </intent-filter>
             <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="User-initiated limited DNS ad and tracking domain filtering"/>
+                android:value="${kanafDnsServicePurpose}"/>
         </service>
         <!-- Quick Settings DNS-only VPN toggle, no elevated Android permissions. -->
         <service android:name=".engine.KanafDnsTileService"

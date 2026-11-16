@@ -93,6 +93,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          if gradle --no-daemon -PkanafReleaseDistribution=play :app:verifyKanafProductionInputs > /tmp/kanaf-play-channel-negative.log 2>&1; then
+            echo "::error::Unsafe: Play release accepted community ad-filter DNS"
+            exit 1
+          fi
+          grep -q 'play-distribution-requires-security-only-dns' /tmp/kanaf-play-channel-negative.log ||
+            { tail -n 80 /tmp/kanaf-play-channel-negative.log; exit 1; }
           if gradle --no-daemon :app:verifyKanafProductionInputs > /tmp/kanaf-production-gate.log 2>&1; then
             echo "::error::Unsafe: production preflight accepted missing publisher assets"
             exit 1
