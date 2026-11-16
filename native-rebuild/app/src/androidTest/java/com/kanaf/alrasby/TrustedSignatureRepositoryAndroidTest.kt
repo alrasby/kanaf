@@ -75,19 +75,31 @@ class TrustedSignatureRepositoryAndroidTest {
         val db = payload("Kanaf.Test.Only")
         val rejected = asZip(db, signed(201L, db, attacker))
         assertThrows(Exception::class.java) {
-            repo.installBundledIfAbsent(ByteArrayInputStream(rejected),
+            repo.installBundledIfOutdated(ByteArrayInputStream(rejected),
                 trusted.public.encoded, 200L)
         }
         assertFalse("Untrusted ZIP cannot publish a database",
             directory.resolve("verified.bundle").exists())
         val valid = asZip(db, signed(201L, db, trusted))
-        assertTrue(repo.installBundledIfAbsent(ByteArrayInputStream(valid),
+        assertTrue(repo.installBundledIfOutdated(ByteArrayInputStream(valid),
             trusted.public.encoded, 200L))
         assertEquals("Kanaf.Test.Only", repo.load()["a".repeat(64)])
         assertFalse("Existing signed database cannot be overwritten by bootstrap",
-            repo.installBundledIfAbsent(ByteArrayInputStream(rejected),
+            repo.installBundledIfOutdated(ByteArrayInputStream(rejected),
                 trusted.public.encoded, 200L))
         assertEquals("Kanaf.Test.Only", repo.load()["a".repeat(64)])
+        // An update of the app can raise the pinned minimum feed version.
+        val upgradedDb = payload("Kanaf.New.Version")
+        val upgraded = asZip(upgradedDb, signed(202L, upgradedDb, trusted))
+        assertTrue(repo.installBundledIfOutdated(ByteArrayInputStream(upgraded),
+            trusted.public.encoded, 202L))
+        assertEquals("Kanaf.New.Version", repo.load()["a".repeat(64)])
+        assertThrows(Exception::class.java) {
+            repo.installBundledIfOutdated(
+                ByteArrayInputStream(asZip(upgradedDb, signed(203L, upgradedDb, attacker))),
+                trusted.public.encoded, 203L)
+        }
+        assertEquals("Kanaf.New.Version", repo.load()["a".repeat(64)])
     }
 
     @Test fun verifiedInstallPersistsAndRejectsRollbackWrongKeyOrTampering() {

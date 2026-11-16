@@ -27,16 +27,18 @@ class SignatureRepository(private val context: Context) {
      * against the application-pinned key, then atomically commit it.
      * The built-in debug/test signatures.tsv file is NEVER a production fallback.
      */
-    internal fun installBundledIfAbsent(
+    internal fun installBundledIfOutdated(
         source: InputStream, pinnedPublicKey: ByteArray, minVersion: Long
     ): Boolean = source.use { input ->
         synchronized(bootstrapLock) {
-            if (hasCommittedState(verifiedBundle)) return@synchronized false
-            if (legacyActive.isFile || hasCommittedState(legacyVersion)) {
+            require(minVersion > 0L) { "invalid-production-minimum-version" }
+            val existing = committedVersion()
+            if (existing >= minVersion) return@synchronized false
+            if (legacyActive.isFile && existing == 0L) {
                 error("legacy-signature-db-requires-verified-reinstall")
             }
             val parsed = SignedFeedPackage.parse(input)
-            require(parsed.manifest.version >= minVersion && minVersion > 0L) {
+            require(parsed.manifest.version >= minVersion) {
                 "Bundled database below release minimum"
             }
             installVerified(parsed.bytes, parsed.manifest, pinnedPublicKey)
@@ -55,20 +57,23 @@ class SignatureRepository(private val context: Context) {
     private fun hasCommittedState(file: File): Boolean =
         file.isFile || File(file.path + ".bak").isFile
 
+    /** Authenticated digest on disk is checked before comparing version floors. */
+    private fun committedVersion(): Long = if (hasCommittedState(verifiedBundle)) {
+        AtomicFile(verifiedBundle).openRead().use { VerifiedSignatureBundle.read(it).version }
+    } else 0L
+
     fun load(): Map<String, String> {
-        if (BuildConfig.KANAF_SIGNATURE_MIN_VERSION > 0L &&
-            !hasCommittedState(verifiedBundle)) {
+        val minimum = BuildConfig.KANAF_SIGNATURE_MIN_VERSION
+        if (minimum > 0L) {
             synchronized(bootstrapLock) {
-                if (!hasCommittedState(verifiedBundle) &&
-                    !legacyActive.isFile && !hasCommittedState(legacyVersion)) {
+                if (committedVersion() < minimum) {
+                    // On app upgrade, a newly bundled verified database may
+                    // raise the floor; never silently keep an outdated feed.
                     val encoded = BuildConfig.KANAF_SIGNATURE_PUBLIC_KEY_BASE64
                     check(encoded.isNotBlank()) { "production-feed-key-unavailable" }
                     val pub = Base64.getDecoder().decode(encoded)
-                    // No unsigned fallback if asset is missing, corrupt, or
-                    // signed by the wrong key. Callers report INCOMPLETE.
                     context.assets.open("production_signatures.zip").use { input ->
-                        installBundledIfAbsent(input, pub,
-                            BuildConfig.KANAF_SIGNATURE_MIN_VERSION)
+                        installBundledIfOutdated(input, pub, minimum)
                     }
                 }
             }

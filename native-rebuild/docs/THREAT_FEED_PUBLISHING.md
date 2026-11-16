@@ -52,3 +52,14 @@ self-tests, NOT actual production file scans. For native scanning, the APK
 requires separately hash-pinned `production_clamav.ndb` and
 `production_yara.yar` assets. Their content still needs external licensing,
 provenance, and accuracy audits before it can be designated production-ready.
+
+## Monotonic app-upgrade recovery
+
+The latest app binary can raise `KANAF_SIGNATURE_MIN_VERSION`. On the next
+production scan, the repository checks the installed AtomicFile digest and
+version, and—only when below the build floor—authenticates the newer
+`production_signatures.zip` from the upgraded APK before replacing the
+previous record. Corrupt stored state, untrusted publisher signatures,
+rollback/same-version feeds and legacy unsigned state still fail closed.
+Android instrumentation verifies first install, tamper, idempotence and
+authenticated upgrade using temporary non-production keys.
