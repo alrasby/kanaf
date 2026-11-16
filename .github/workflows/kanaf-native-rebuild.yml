@@ -31,6 +31,14 @@ jobs:
           python3 tools/release_input_inventory.py --distribution play \
             --output app/build/reports/kanaf-release-input-inventory.json
           bash -n tools/build_approved_release.sh
+          bash -n tools/create_owner_signing_key.sh
+          # Prevent key-generation scripts from silently creating publisher keys
+          # on any non-interactive CI runner.
+          if KANAF_SIGNER_PRIVATE_DIR=/tmp/kanaf-test-key bash tools/create_owner_signing_key.sh play-upload > /tmp/kanaf-key-neg.log 2>&1; then
+            echo '::error::Publisher key created without owner interaction'
+            exit 1
+          fi
+          grep -q 'KANAF_KEY_CREATION_BLOCKED' /tmp/kanaf-key-neg.log
           # A public CI runner intentionally has no production assets/keys.
           if bash tools/build_approved_release.sh build > /tmp/kanaf-release-negative.log 2>&1; then
             echo "::error::Unsafe: public CI created a production release without external evidence"
