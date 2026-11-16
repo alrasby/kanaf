@@ -60,6 +60,45 @@ class ReleaseReadinessTest(unittest.TestCase):
         self.assertIn("ml-test-counts-consistent",
                       validate(report, today=dt.date(2026, 11, 15)))
 
+    def test_emulator_and_synthetic_pilot_do_not_count_as_full_release(self):
+        report = {
+            "native": {
+                "physical_device": True, "page_size_bytes": 4096,
+                "production_rules_loaded": False,
+                "independent_non_eicar_threat_detection": False,
+            },
+            "model": {
+                "synthetic_fixture_only": True,
+                "independent_external_source_holdout": False,
+            },
+            "signatures": {
+                "fresh_install_verified": False,
+                "test_only_rules_excluded": False,
+            },
+            "release": {
+                "signed_aab": False, "target_sdk": 35,
+                "play_sensitive_permissions_approved": False,
+                "vpn_service_policy_review": False,
+                "real_device_scan_and_dns_qa": False,
+            },
+        }
+        failures = validate(report, today=dt.date(2026, 11, 16))
+        for expected in (
+            "physical-arm64-16kb-page-test",
+            "native-production-rules-actually-loaded",
+            "native-independent-malware-detection",
+            "ml-not-synthetic-fixtures",
+            "ml-independent-external-source",
+            "threat-feed-signed-bootstrap-tested",
+            "threat-feed-not-test-only",
+            "aab-release-signing",
+            "play-target-api36",
+            "play-sensitive-permissions-approval",
+            "play-vpnservice-policy-review",
+            "physical-dns-and-scan-acceptance",
+        ):
+            self.assertIn(expected, failures)
+
     def test_rejects_tested_artifact_different_from_release(self):
         report = {
             "native": {"tested_apk_sha256": "a"*64},

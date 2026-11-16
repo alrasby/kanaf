@@ -29,6 +29,17 @@ def validate(report, *, today=None):
     required(native.get("clamav") == "1.4.6", "patched-clamav-version")
     required(native.get("abi") == "arm64-v8a", "native-arm64-abi")
     required(native.get("physical_device") is True, "physical-arm64-device-test")
+    required(native.get("page_size_bytes") == 16384 and
+             type(native.get("page_size_bytes")) is int,
+             "physical-arm64-16kb-page-test")
+    required(native.get("production_rules_loaded") is True,
+             "native-production-rules-actually-loaded")
+    required(is_digest(native.get("production_clamav_rules_sha256")),
+             "native-production-clamav-rules-hash")
+    required(is_digest(native.get("production_yara_rules_sha256")),
+             "native-production-yara-rules-hash")
+    required(native.get("independent_non_eicar_threat_detection") is True,
+             "native-independent-malware-detection")
     required(native.get("clamav_eicar_detected") is True, "real-clamav-positive")
     required(native.get("clamav_benign_no_match") is True, "real-clamav-negative")
     required(native.get("yara_eicar_detected") is True, "real-yarax-positive")
@@ -39,6 +50,10 @@ def validate(report, *, today=None):
     required(is_digest(model.get("weights_sha256")), "ml-model-hash")
     required(is_digest(model.get("independent_test_corpus_sha256")), "ml-test-corpus-hash")
     required(model.get("validated_label_provenance") is True, "ml-ground-truth-provenance")
+    required(model.get("synthetic_fixture_only") is False,
+             "ml-not-synthetic-fixtures")
+    required(model.get("independent_external_source_holdout") is True,
+             "ml-independent-external-source")
     required(model.get("independent_test") is True, "ml-independent-holdout")
     sample_count = model.get("test_samples")
     benign_count = model.get("benign_samples")
@@ -70,6 +85,10 @@ def validate(report, *, today=None):
              feed.get("real_non_test_signatures", 0) > 0, "threat-feed-real-coverage")
     required(feed.get("verified_signature") is True, "threat-feed-rsa-proof")
     required(feed.get("signed_antirollback_test") is True, "threat-feed-antirollback")
+    required(feed.get("fresh_install_verified") is True,
+             "threat-feed-signed-bootstrap-tested")
+    required(feed.get("test_only_rules_excluded") is True,
+             "threat-feed-not-test-only")
     required(bool(feed.get("license_and_source_review_id")), "threat-feed-provenance")
     try:
         when = dt.date.fromisoformat(feed.get("verified_date", ""))
@@ -79,6 +98,15 @@ def validate(report, *, today=None):
 
     release = report.get("release") if isinstance(report.get("release"), dict) else {}
     required(release.get("signed_apk") is True, "apk-release-signing")
+    required(release.get("signed_aab") is True, "aab-release-signing")
+    required(type(release.get("target_sdk")) is int and
+             release.get("target_sdk", 0) >= 36, "play-target-api36")
+    required(release.get("play_sensitive_permissions_approved") is True,
+             "play-sensitive-permissions-approval")
+    required(release.get("vpn_service_policy_review") is True,
+             "play-vpnservice-policy-review")
+    required(release.get("real_device_scan_and_dns_qa") is True,
+             "physical-dns-and-scan-acceptance")
     required(is_digest(release.get("signed_apk_sha256")), "release-apk-digest")
     required(release.get("signed_apk_sha256") == native.get("tested_apk_sha256"),
              "tested-artifact-must-match-release-artifact")
