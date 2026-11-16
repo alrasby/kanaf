@@ -73,6 +73,22 @@ jobs:
           echo "ANDROID_HOME=$ANDROID_HOME"
       - name: Run native unit tests and Android lint
         run: bash tools/gradle_retry_429.sh --no-daemon :app:testDebugUnitTest :app:lintDebug :app:assembleDebug --stacktrace
+      - name: Verify separate security-only DNS build for future Google Play
+        run: |
+          set -euo pipefail
+          bash tools/gradle_retry_429.sh --no-daemon \
+            -PkanafPlayDnsSecurityOnly=true \
+            :app:testDebugUnitTest :app:assembleDebug :app:bundleDebug \
+            :app:verifyKanafPlayDnsPolicy --stacktrace
+      - name: Negative test - community DNS must not pass Play policy gate
+        run: |
+          set -euo pipefail
+          if gradle --no-daemon :app:verifyKanafPlayDnsPolicy > /tmp/kanaf-play-dns-negative.log 2>&1; then
+            echo "::error::Community ad DNS build accepted by Google Play DNS policy gate"
+            exit 1
+          fi
+          grep -q 'KANAF_PLAY_DNS_POLICY_BLOCKED' /tmp/kanaf-play-dns-negative.log ||
+            { tail -n 80 /tmp/kanaf-play-dns-negative.log; exit 1; }
       - name: Enforce production release must fail closed without external evidence
         shell: bash
         run: |

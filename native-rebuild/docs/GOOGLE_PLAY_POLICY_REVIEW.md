@@ -26,7 +26,14 @@ This document records evidence requirements; it is **not a Play approval**.
   forwarded to selected AdGuard DNS over TLS/HTTPS are received by that
   **independent provider**, which may see domains and connecting IP addresses.
   The app cannot promise the provider logs nothing.
-- **HIGH BLOCKER: cross-app ad blocking**. The current local DNS blocklist
+- **HIGH BLOCKER for the default community build: cross-app ad blocking**.
+  There is now a distinct candidate build flag
+  `-PkanafPlayDnsSecurityOnly=true`, which disables the local advertising
+  classifier and restricts upstream DoH to Cloudflare's malware/phishing-only
+  endpoint. See `DNS_DISTRIBUTION_POLICY.md`. The default community build
+  retains its opt-in ad features. The candidate is not Play-approved yet:
+  binary, real-device and policy evidence remain mandatory.
+  The current local DNS blocklist
   and AdGuard DNS upstream can interfere with ads served by OTHER applications.
   Google's Device and Network Abuse rules explicitly list this kind of
   behavior as a violation example. VPN eligibility for device-security apps

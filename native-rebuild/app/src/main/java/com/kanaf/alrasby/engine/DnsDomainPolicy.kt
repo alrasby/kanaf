@@ -11,7 +11,7 @@ enum class DnsRuleCategory { SECURITY_THREAT, AD_TRACKER, ALLOWED }
  * protection is provided by the Cloudflare security-only DoH upstream.
  * Verified signed threat-domain feeds can be integrated independently later.
  */
-internal class DnsDomainPolicy(
+class DnsDomainPolicy(
     private val verifiedThreatHosts: Set<String>,
     private val allowAdTrackerBlocking: Boolean
 ) {
