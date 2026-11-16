@@ -159,6 +159,7 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
     val autoScanSession = remember { AtomicLong(0) }
     val manualScanSession = remember { AtomicLong(0) }
     val scopedScanSession = remember { AtomicLong(0) }
+    val scopedScanCancellation = remember { AtomicBoolean(false) }
     val selfTestSession = remember { AtomicLong(0) }
     var manualScanActive by remember { mutableStateOf(false) }
     var scopedScanActive by remember { mutableStateOf(false) }
@@ -228,8 +229,11 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
                         "انتهت المحاولة: تطبيقات=" + scan.installedApps +
                             "، ملفات APK=" + scan.appApksAttempted +
                             "، ملفات مشتركة=" + scan.sharedFilesAttempted +
+                            "، ملفات APK محفوظة=" + scan.storedApksAttempted +
                             "، بصمات محسوبة=" + scan.hashed +
-                            "، فحوص أصلية=" + scan.nativeChecked +
+                            "، محاولات فحص أصلية=" + scan.nativeChecked +
+                            " (تطبيقات=" + scan.nativeInstalledAttempts +
+                            "، ملفات مشتركة=" + scan.nativeSharedAttempts + ")" +
                             "، تطابقات=" + scan.matches +
                             "، فحوص غير مكتملة=" + scan.incomplete +
                             "، تحذيرات بنيوية=" + scan.structuralWarnings +
@@ -239,8 +243,11 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
                         "Attempted: installed apps=" + scan.installedApps +
                             ", APK files=" + scan.appApksAttempted +
                             ", shared files=" + scan.sharedFilesAttempted +
+                            ", stored APKs=" + scan.storedApksAttempted +
                             ", SHA-256 completed=" + scan.hashed +
-                            ", native checks=" + scan.nativeChecked +
+                            ", native checks attempted=" + scan.nativeChecked +
+                            " (installed=" + scan.nativeInstalledAttempts +
+                            ", shared=" + scan.nativeSharedAttempts + ")" +
                             ", signature matches=" + scan.matches +
                             ", incomplete checks=" + scan.incomplete +
                             ", archive warnings=" + scan.structuralWarnings +
@@ -290,6 +297,7 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
         ActivityResultContracts.OpenDocumentTree()
     ) { tree ->
         if (tree != null && !busy) {
+            scopedScanCancellation.set(false)
             val session = scopedScanSession.incrementAndGet()
             scopedScanActive = true
             busy = true
@@ -300,7 +308,9 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
             scope.launch {
                 val attempted = withContext(Dispatchers.IO) {
                     runCatching {
-                        val files = ScopedDeviceScan().scan(activity, tree)
+                        val files = ScopedDeviceScan().scan(activity, tree) {
+                            scopedScanCancellation.get() || scopedScanSession.get() != session
+                        }
                         val apps = InstalledAppAudit().run(activity)
                         files to apps
                     }
@@ -410,6 +420,7 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
                 }
                 manualScanSession.incrementAndGet()
                 scopedScanSession.incrementAndGet()
+                scopedScanCancellation.set(true)
                 selfTestSession.incrementAndGet()
                 if (manualScanActive || scopedScanActive || engineSelfTestActive) {
                     manualScanActive = false

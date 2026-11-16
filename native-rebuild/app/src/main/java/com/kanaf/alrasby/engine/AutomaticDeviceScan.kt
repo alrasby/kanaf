@@ -25,7 +25,10 @@ class AutomaticDeviceScan {
         val sharedFilesAttempted: Int, val hashed: Int, val nativeChecked: Int,
         val matches: Int, val incomplete: Int, val structuralWarnings: Int,
         val truncated: Boolean, val sharedStorageGranted: Boolean,
-        val signaturesReady: Boolean, val findings: List<Finding>
+        val signaturesReady: Boolean, val findings: List<Finding>,
+        val storedApksAttempted: Int = 0,
+        val nativeInstalledAttempts: Int = 0,
+        val nativeSharedAttempts: Int = 0
     )
 
     companion object {
@@ -72,6 +75,14 @@ class AutomaticDeviceScan {
             SystemClock.elapsedRealtime() - start > limits.durationMs
 
         val signatures = runCatching { SignatureRepository(context).load() }.getOrNull()
+        val canReadShared = includeSharedStorage && sharedStorageGranted()
+        val allocation = NativeScanAllocation(limits.nativeChecks, canReadShared)
+        // Reuse stateless hashing objects, rather than allocating a scanner
+        // and its configuration thousands of times per one-tap scan.
+        val hashEngine = HashSignatureEngine(signatures,
+            StreamScanner(maxBytes = limits.hashBytes,
+                maxDurationNanos = 25_000_000_000L,
+                signatures = signatures ?: emptyMap()))
         val packageManager = context.packageManager
         val applications = try {
             @Suppress("DEPRECATION")
@@ -85,6 +96,7 @@ class AutomaticDeviceScan {
         var sharedAttempted = 0
         var hashed = 0
         var nativeChecked = 0
+        var storedApksAttempted = 0
         var matched = 0
         var incomplete = 0
         var structuralWarnings = 0
@@ -101,7 +113,9 @@ class AutomaticDeviceScan {
             }
         }
 
-        fun record(file: File, display: String, apk: Boolean) {
+        fun record(file: File, display: String, installedApp: Boolean) {
+            val apk = installedApp || file.name.endsWith(".apk", ignoreCase = true)
+            val archived = apk || file.name.endsWith(".zip", ignoreCase = true)
             if (stopped()) { truncated = true; return }
             if (!file.isFile || !file.canRead() || file.length() <= 0 ||
                 file.length() > limits.hashBytes) {
@@ -112,18 +126,13 @@ class AutomaticDeviceScan {
             // The SHA-256 adapter reads first; native JNI copies a second time.
             // A changed input invalidates an apparent detection rather than
             // silently treating two different versions as one malicious file.
-            val hashVerdict = HashSignatureEngine(
-                signatures,
-                StreamScanner(maxBytes = limits.hashBytes,
-                    maxDurationNanos = 25_000_000_000L,
-                    signatures = signatures ?: emptyMap())
-            ).scan({ file.inputStream() }, ::stopped)
+            val hashVerdict = hashEngine.scan({ file.inputStream() }, ::stopped)
             if (hashVerdict is AntivirusEngine.Verdict.NoKnownMatch ||
                 hashVerdict is AntivirusEngine.Verdict.Detected) {
                 hashed++ // Number of successfully computed SHA-256 hashes.
             }
             val canNativeScan = file.length() <= MAX_NATIVE_BYTES &&
-                nativeChecked < limits.nativeChecks && !stopped()
+                !stopped() && allocation.reserve(installedApp, archived)
             val native = if (canNativeScan) {
                 nativeChecked++
                 runCatching { NativeScannerBridge.scan(context, Uri.fromFile(file)) }.getOrNull()
@@ -191,7 +200,6 @@ class AutomaticDeviceScan {
             }
         }
 
-        val canReadShared = includeSharedStorage && sharedStorageGranted()
         if (canReadShared && !stopped()) {
             val root = Environment.getExternalStorageDirectory()
             val rootCanonical = runCatching { root.canonicalPath }.getOrNull()
@@ -245,6 +253,8 @@ class AutomaticDeviceScan {
                         }
                         if (!entry.isFile || !processed.add(canonical)) continue
                         sharedAttempted++
+                        if (entry.name.endsWith(".apk", ignoreCase = true))
+                            storedApksAttempted++
                         record(entry, entry.name.replace('\n', ' ').take(90), false)
                         notifyProgress("files")
                     }
@@ -256,7 +266,8 @@ class AutomaticDeviceScan {
         return Report(
             packages.size, apkAttempted, sharedAttempted, hashed, nativeChecked,
             matched, incomplete, structuralWarnings, truncated,
-            canReadShared, signatures != null, findings
+            canReadShared, signatures != null, findings,
+            storedApksAttempted, allocation.installedReserved, allocation.sharedReserved
         )
     }
 }
