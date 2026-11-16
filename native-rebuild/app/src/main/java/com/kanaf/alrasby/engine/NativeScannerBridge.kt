@@ -1,12 +1,14 @@
 package com.kanaf.alrasby.engine
 
 import android.content.Context
+import com.kanaf.alrasby.BuildConfig
 import android.content.pm.ApplicationInfo
 import android.util.Log
 import android.net.Uri
 import java.io.File
 import java.io.ByteArrayInputStream
 import java.io.InputStream
+import java.io.ByteArrayOutputStream
 import java.security.MessageDigest
 
 /**
@@ -72,12 +74,33 @@ object NativeScannerBridge {
 
     /** Only called by the scanner Service running in :scanner. Never call from the UI process. */
     internal fun scanInWorker(context: Context, uri: Uri): Report =
-        scanSource(context) { context.contentResolver.openInputStream(uri) }
+        scanSource(context, false) { context.contentResolver.openInputStream(uri) }
 
     internal fun selfTestInWorker(context: Context): Report =
-        scanSource(context) { ByteArrayInputStream(eicar) }
+        scanSource(context, true) { ByteArrayInputStream(eicar) }
 
-    private fun scanSource(context: Context, source: () -> InputStream?): Report {
+    private fun verifiedProductionAsset(context: Context, name: String,
+                                        expectedSha: String, maxBytes: Int): ByteArray? {
+        if (!ProductionNativeRulePolicy.validHash(expectedSha)) return null
+        return runCatching {
+            context.assets.open(name).use { stream ->
+                val out = ByteArrayOutputStream()
+                val block = ByteArray(8192)
+                while (true) {
+                    val n = stream.read(block)
+                    if (n < 0) break
+                    if (n > maxBytes - out.size()) return null
+                    if (n > 0) out.write(block, 0, n)
+                }
+                out.toByteArray()
+            }
+        }.getOrNull()?.takeIf {
+            ProductionNativeRulePolicy.verified(it, expectedSha, maxBytes)
+        }
+    }
+
+    private fun scanSource(context: Context, selfTestOnly: Boolean,
+                           source: () -> InputStream?): Report {
         var clamGate = NativeEngineGate("clamav", false, false, false)
         var yaraGate = NativeEngineGate("yara-x", false, false, false)
         fun report(clam: AntivirusEngine.Verdict, yara: AntivirusEngine.Verdict) =
@@ -88,6 +111,7 @@ object NativeScannerBridge {
         if (!bridgeLoaded) return report(incomplete("jni-bridge-unavailable"), incomplete("jni-bridge-unavailable"))
 
         var db: File? = null
+        var productionDb: File? = null
         var test: File? = null
         var target: File? = null
         try {
@@ -159,10 +183,30 @@ object NativeScannerBridge {
             } finally {
                 benign.delete()
             }
-            clamGate = NativeEngineGate("clamav", libraries.clamavLoaded, clamRulesOK, clamOK,
-                engineVersion = "1.4.6", rulesVersion = "EICAR-test-v1")
-            yaraGate = NativeEngineGate("yara-x", libraries.yaraXLoaded, yaraRulesOK, yaraOK,
-                engineVersion = "0.13.0", rulesVersion = "EICAR-test-v1")
+            // Debug builds use EICAR fixtures for diagnostics. In production
+            // regular user files must NEVER be checked only against test rules.
+            // Independent real-rule assets must be pinned in BuildConfig and
+            // verified before a native scan can return NoKnownMatch.
+            val production = !BuildConfig.DEBUG && !selfTestOnly
+            val realClam = if (production) verifiedProductionAsset(context,
+                "production_clamav.ndb", BuildConfig.KANAF_NATIVE_CLAM_RULE_SHA256,
+                ProductionNativeRulePolicy.MAX_CLAM_BYTES) else null
+            val realYara = if (production) verifiedProductionAsset(context,
+                "production_yara.yar", BuildConfig.KANAF_NATIVE_YARA_RULE_SHA256,
+                ProductionNativeRulePolicy.MAX_YARA_BYTES) else null
+            if (realClam != null) {
+                productionDb = stagedFile(context, "kanaf-clam-prod-", ".ndb", realClam)
+            }
+            val activeClam = if (production) productionDb else rulesFile
+            val activeYara = if (production) realYara?.toString(Charsets.UTF_8) else yaraRules
+            clamGate = NativeEngineGate("clamav", libraries.clamavLoaded,
+                clamRulesOK && (!production || realClam != null), clamOK,
+                engineVersion = "1.4.6",
+                rulesVersion = if (production) "publisher-native-v1" else "EICAR-test-v1")
+            yaraGate = NativeEngineGate("yara-x", libraries.yaraXLoaded,
+                yaraRulesOK && (!production || realYara != null), yaraOK,
+                engineVersion = "0.13.0",
+                rulesVersion = if (production) "publisher-native-v1" else "EICAR-test-v1")
 
             val selected = File.createTempFile("kanaf-scan-", ".bin", context.cacheDir)
             target = selected
@@ -193,12 +237,16 @@ object NativeScannerBridge {
                 return report(incomplete("staged-file-integrity-failed"),
                     incomplete("staged-file-integrity-failed"))
             }
-            val clamVerdict = if (clamGate.ready) verdict(
-                clamScanNative(selected.absolutePath, rulesFile.absolutePath), sha256
-            ) else incomplete(clamGate.unavailableReason() ?: "clamav-not-ready")
-            val yaraVerdict = if (yaraGate.ready) verdict(
-                yaraScanNative(selected.absolutePath, yaraRules), sha256
-            ) else incomplete(yaraGate.unavailableReason() ?: "yara-not-ready")
+            val clamVerdict = if (clamGate.ready && activeClam != null) verdict(
+                clamScanNative(selected.absolutePath, activeClam.absolutePath), sha256
+            ) else incomplete(if (production && realClam == null)
+                "production-clamav-rules-unavailable"
+            else clamGate.unavailableReason() ?: "clamav-not-ready")
+            val yaraVerdict = if (yaraGate.ready && activeYara != null) verdict(
+                yaraScanNative(selected.absolutePath, activeYara), sha256
+            ) else incomplete(if (production && realYara == null)
+                "production-yara-rules-unavailable"
+            else yaraGate.unavailableReason() ?: "yara-not-ready")
             if (!StagedFileIntegrity.verify(selected, sha256, copiedBytes)) {
                 return report(incomplete("staged-file-changed-during-scan"),
                     incomplete("staged-file-changed-during-scan"))
@@ -210,6 +258,7 @@ object NativeScannerBridge {
             return report(incomplete("native-symbol-unavailable"), incomplete("native-symbol-unavailable"))
         } finally {
             db?.delete()
+            productionDb?.delete()
             test?.delete()
             target?.delete()
         }
