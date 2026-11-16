@@ -85,7 +85,7 @@ jobs:
           mkdir -p /tmp/kanaf-clam-ai /tmp/kanaf-yara-ai
           gh run download "$CLAM_RUN" --repo "$GITHUB_REPOSITORY" -n kanaf-clamav-arm64-diagnostics -D /tmp/kanaf-clam-ai
           gh run download "$YARA_RUN" --repo "$GITHUB_REPOSITORY" -n kanaf-yarax-arm64-diagnostics -D /tmp/kanaf-yara-ai
-          test "$(tr -d '\\n' < /tmp/kanaf-clam-ai/revision.txt)" = "5853e1396777bae4d909cd3dd44f58352e7cf9b3"
+          test "$(cat /tmp/kanaf-clam-ai/revision.txt)" = "5853e1396777bae4d909cd3dd44f58352e7cf9b3"
           dest=native-rebuild/app/src/main/jniLibs/arm64-v8a
           mkdir -p "$dest"
           cp /tmp/kanaf-clam-ai/arm64-output/libclamav.so "$dest/"
