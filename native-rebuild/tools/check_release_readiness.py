@@ -116,7 +116,7 @@ def validate(report, *, today=None):
     # Direct distribution must not invent Play Store approval. Play permission
     # checks remain mandatory for a Play release or an unspecified channel.
     if distribution != "direct":
-            required(release.get("play_sensitive_permissions_approved") is True,
+        required(release.get("play_sensitive_permissions_approved") is True,
                  "play-sensitive-permissions-approval")
         required(release.get("vpn_service_policy_review") is True,
                  "play-vpnservice-policy-review")
