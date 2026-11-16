@@ -1,0 +1,96 @@
+name: Kanaf AI URL pilot — real dataset and Android smoke test
+on:
+  push:
+    branches: [rebuild/kanaf-native-v1]
+    paths:
+      - '.github/workflows/kanaf-url-ai-pilot.yml'
+      - 'native-rebuild/tools/train_url_risk_model.py'
+      - 'native-rebuild/tools/test_train_url_risk_model.py'
+      - 'native-rebuild/tools/run_url_ai_android_ci.sh'
+      - 'native-rebuild/app/src/main/java/com/kanaf/alrasby/engine/KanafUrlAi.kt'
+      - 'native-rebuild/app/src/main/java/com/kanaf/alrasby/MainActivity.kt'
+      - 'native-rebuild/app/src/main/java/com/kanaf/alrasby/KanafGlassHome.kt'
+      - 'native-rebuild/app/src/androidTest/java/com/kanaf/alrasby/KanafUrlAiAndroidTest.kt'
+      - 'native-rebuild/app/build.gradle.kts'
+  workflow_dispatch:
+concurrency:
+  group: kanaf-url-ai-pilot
+  cancel-in-progress: true
+permissions:
+  contents: read
+jobs:
+  train-and-android-test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Offline lexical feature contract tests
+        run: python3 -m unittest discover -s native-rebuild/tools -p 'test_train_url_risk_model.py' -v
+      - name: Install pinned scientific Python packages
+        run: python3 -m pip install --disable-pip-version-check numpy==2.1.3 scikit-learn==1.6.1
+      - name: Train against original licensed PhiUSIIL URLs; sign temporary pilot model
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out /tmp/kanaf-url-pilot.key
+          openssl pkey -in /tmp/kanaf-url-pilot.key -pubout -outform DER |
+            base64 -w0 > /tmp/kanaf-url-public.b64
+          python3 native-rebuild/tools/train_url_risk_model.py \
+            --private-key /tmp/kanaf-url-pilot.key \
+            --output-dir /tmp/kanaf-url-ai
+          install -m 0644 /tmp/kanaf-url-ai/url_risk_model.txt native-rebuild/app/src/main/assets/url_risk_model.txt
+          install -m 0644 /tmp/kanaf-url-ai/url_risk_model.sig native-rebuild/app/src/main/assets/url_risk_model.sig
+          echo "KANAF_URL_KEY=$(cat /tmp/kanaf-url-public.b64)" >> "$GITHUB_ENV"
+          rm -f /tmp/kanaf-url-pilot.key
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Install Android SDK for API36 and CMake
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager -print -quit)"
+          test -x "$SDKMANAGER"
+          "$SDKMANAGER" "platforms;android-36" "build-tools;35.0.0" "ndk;27.2.12479018" "cmake;3.22.1"
+      - name: Verify signed model and assemble experimental debug APK
+        working-directory: native-rebuild
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle --no-daemon :app:testDebugUnitTest :app:assembleDebug \
+            -PkanafUrlModelPublicKeyBase64="$KANAF_URL_KEY" --stacktrace
+      - name: Exercise signed model on Android 35 emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          ram-size: 2048M
+          heap-size: 256M
+          emulator-boot-timeout: 900
+          disable-animations: true
+          working-directory: native-rebuild
+          script: bash tools/run_url_ai_android_ci.sh
+      - name: Publish experimental APK and aggregated provenance (no private keys/raw URLs)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kanaf-ai-url-empirical-preview
+          path: |
+            native-rebuild/app/build/outputs/apk/debug/app-debug.apk
+            /tmp/kanaf-url-ai/evaluation.json
+            /tmp/kanaf-url-ai/PUBLIC_DATA_ATTRIBUTION.txt
+            /tmp/kanaf-url-ai/url_risk_model.txt
+            /tmp/kanaf-url-ai/url_risk_model.sig
+            native-rebuild/app/build/reports/androidTests/
+            native-rebuild/app/build/outputs/androidTest-results/
+          if-no-files-found: warn
