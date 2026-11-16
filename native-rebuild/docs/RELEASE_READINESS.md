@@ -115,3 +115,56 @@ python3 tools/check_release_readiness.py \
 These checks establish **artifact/signing consistency**, not physical hardware
 testing, malware detection rates, legal permission approvals or independent
 security certification. Those still require evidence produced outside CI.
+
+### Release operator workflow — exact distributions (16 November 2026)
+
+Only the publisher's **protected local/signing environment** can run this.
+`tools/build_approved_release.sh` has three modes:
+
+- `status`: show the presence/absence of signed production inputs, trusted
+  publisher keys, offline QA attestation and packaged ARM64 libraries; never
+  prints key content or passwords. File presence **does not certify** a signature.
+- `build`: after the external real inputs are provisioned, run the strict
+  Gradle production gate, build a fully **signed** Release APK **and** AAB,
+  confirm APK v2/v3 and AAB JAR signatures, and print both SHA-256 hashes.
+  Output is still **only a release candidate**, not a certified product.
+- `verify`: only after the **same signed APK bytes** have passed real ARM64
+  hardware QA and independent dataset/effectiveness review, verify the
+  separate independently signed QA JSON, signature, out-of-band pinned QA
+  key, artifact SHA-256 hashes and Android signatures. Any mismatch blocks.
+
+Choose the channel **explicitly** using `KANAF_RELEASE_DISTRIBUTION`:
+`play` builds with security-only Cloudflare DoH and no local ad-blocking;
+`direct` retains existing community ad/tracker filtering. Gradle release
+preflight now insists on matching
+`-PkanafReleaseDistribution=<play|direct>` with
+`-PkanafPlayDnsSecurityOnly=<true|false>` and refuses ambiguous releases.
+The Android foreground-service subtype is automatically generated from the
+same build policy; the Play variant can no longer advertise ad filtering.
+
+Example:
+```bash
+cd native-rebuild
+export KANAF_RELEASE_DISTRIBUTION=play
+bash tools/build_approved_release.sh status
+# Provision offline-validated production assets, ARM64 native libraries,
+# owner-controlled signing env and independent QA attestation outside Git.
+bash tools/build_approved_release.sh build
+# Following physical-device QA on the exact signed APK and independent
+# signing of the final QA evidence JSON:
+bash tools/build_approved_release.sh verify
+```
+
+For the second stage set
+`KANAF_QA_RELEASE_EVIDENCE`, `KANAF_QA_RELEASE_SIGNATURE`,
+`KANAF_QA_PUBLIC_KEY_DER`, and the trusted out-of-band
+`KANAF_TRUSTED_QA_PUBLIC_KEY_DER_SHA256`.
+The report must include `release.distribution` and
+`release.dns_security_only` matching the compiled variant. A direct release
+does not require approval by a store where it is not distributed, but **still**
+requires real malware/benign validation, physical-device QA, signed assets,
+security review and licensed signatures. A direct APK must never be presented
+as a Play-compatible binary.
+
+No release is currently approved: these external inputs and production
+signatures have not been supplied or demonstrated in the repository.
