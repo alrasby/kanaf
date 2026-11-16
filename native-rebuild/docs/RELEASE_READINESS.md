@@ -76,3 +76,42 @@ Even with valid asset preflight, require a separately signed final artifact
 report via `tools/check_release_readiness.py`, real Android ARM64
 hardware/16-KiB kernel verification, representative independent malware
 and benign evaluations, policy declarations and publication approval.
+
+### Final artifact identity and independent trust pin (added 16 Nov 2026)
+
+The signed QA report is **not** a substitute for examining the actual shipped
+artifacts. `tools/check_release_readiness.py` now requires:
+
+- `--apk` and `--aab` pointing to the actual final release artifacts;
+  the script hashes both files (streaming SHA-256), compares their hashes to
+  `release.signed_apk_sha256` and `release.signed_aab_sha256`, and requires
+  the APK digest to match `native.tested_apk_sha256`.
+- `apksigner verify --min-sdk-version 26 --verbose --print-certs`, with a
+  modern v2/v3 APK signature and exactly one certificate whose actual digest
+  matches `release.apk_signer_cert_sha256`. Install trusted Android SDK
+  Build Tools on the release-signing host.
+- `jarsigner -verify -strict` must affirm the uploaded AAB is signed, using
+  the trusted JDK toolchain. The AAB upload key can differ from the APK
+  distribution signing certificate under Play App Signing.
+- `--expected-qa-public-key-sha256` pins the **DER bytes** of the independent
+  QA public key via an external, publisher/QA-controlled trusted channel.
+  Signing evidence using an attacker-provided substitute key cannot satisfy
+  that independently pinned fingerprint. It must not equal the threat-feed key.
+- Missing artifacts, missing sign-tool executables, invalid signing, altered
+  bytes, unpinned QA keys, or evidence lacking the new signed AAB/certificate
+  fields block release. Debug APKs cannot satisfy this production gate.
+
+Usage (paths and trusted fingerprint supplied by the independent publisher):
+```bash
+python3 tools/check_release_readiness.py \
+  --evidence /secure/qa/release.json \
+  --signature /secure/qa/release.sig \
+  --qa-public-key /secure/qa/qa-public.der \
+  --expected-qa-public-key-sha256 "$TRUSTED_QA_PUBLIC_KEY_DER_SHA256" \
+  --apk /secure/release/kanaf-release.apk \
+  --aab /secure/release/kanaf-release.aab
+```
+
+These checks establish **artifact/signing consistency**, not physical hardware
+testing, malware detection rates, legal permission approvals or independent
+security certification. Those still require evidence produced outside CI.

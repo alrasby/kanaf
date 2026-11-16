@@ -1,6 +1,10 @@
 import datetime as dt
+import hashlib
+import subprocess
+import tempfile
+from pathlib import Path
 import unittest
-from check_release_readiness import validate
+from check_release_readiness import validate, verify_artifacts, verify_attestation
 
 
 class ReleaseReadinessTest(unittest.TestCase):
@@ -106,6 +110,77 @@ class ReleaseReadinessTest(unittest.TestCase):
         }
         self.assertIn("tested-artifact-must-match-release-artifact",
                       validate(report, today=dt.date(2026, 11, 15)))
+
+    def test_release_artifact_bytes_and_signatures_must_be_real(self):
+        with tempfile.TemporaryDirectory() as directory:
+            apk = Path(directory) / "signed.apk"
+            aab = Path(directory) / "signed.aab"
+            apk.write_bytes(b"actual release APK fixture")
+            aab.write_bytes(b"actual signed AAB fixture")
+            digest = lambda b: hashlib.sha256(b).hexdigest()
+            cert = "c" * 64
+            report = {"release": {
+                "signed_apk_sha256": digest(apk.read_bytes()),
+                "signed_aab_sha256": digest(aab.read_bytes()),
+                "apk_signer_cert_sha256": cert,
+            }}
+
+            def verified_runner(command, **kwargs):
+                if command[0] == "apksigner":
+                    output = ("Verified using v2 scheme (APK Signature Scheme v2): true\\n"
+                              "Signer #1 certificate SHA-256 digest: " + cert + "\\n")
+                else:
+                    output = "jar verified.\\n"
+                return subprocess.CompletedProcess(command, 0, output, "")
+
+            self.assertEqual([], verify_artifacts(report, apk, aab, run=verified_runner))
+            apk.write_bytes(b"mutated after physical-device test")
+            self.assertIn("apk-actual-bytes-mismatch",
+                          verify_artifacts(report, apk, aab, run=verified_runner))
+            apk.write_bytes(b"actual release APK fixture")
+            aab.write_bytes(b"other AAB")
+            self.assertIn("aab-actual-bytes-mismatch",
+                          verify_artifacts(report, apk, aab, run=verified_runner))
+
+    def test_fake_signing_tools_and_wrong_certificate_block_release(self):
+        with tempfile.TemporaryDirectory() as directory:
+            apk = Path(directory) / "app.apk"
+            aab = Path(directory) / "app.aab"
+            apk.write_bytes(b"apk bytes")
+            aab.write_bytes(b"aab bytes")
+            digest = lambda p: hashlib.sha256(p.read_bytes()).hexdigest()
+            report = {"release": {
+                "signed_apk_sha256": digest(apk),
+                "signed_aab_sha256": digest(aab),
+                "apk_signer_cert_sha256": "a" * 64,
+            }}
+            def legacy_signer(command, **kwargs):
+                if command[0] == "apksigner":
+                    output = ("Verified using v1 scheme (JAR signing): true\\n"
+                              "Signer #1 certificate SHA-256 digest: " + "b" * 64)
+                else:
+                    output = "jar is unsigned."
+                return subprocess.CompletedProcess(command, 0, output, "")
+            issues = verify_artifacts(report, apk, aab, run=legacy_signer)
+            for expected in ("apk-modern-signature-absent",
+                             "apk-signer-certificate-mismatch",
+                             "aab-signature-not-confirmed"):
+                self.assertIn(expected, issues)
+
+            def missing_tool(command, **kwargs):
+                raise FileNotFoundError(command[0])
+            issues = verify_artifacts(report, apk, aab, run=missing_tool)
+            self.assertIn("apk-verification-unavailable", issues)
+            self.assertIn("aab-verification-unavailable", issues)
+
+    def test_independent_qa_key_fingerprint_is_pinned(self):
+        with tempfile.TemporaryDirectory() as directory:
+            key = Path(directory) / "qa-key.der"
+            key.write_bytes(b"substituted self-signed QA key")
+            with self.assertRaisesRegex(ValueError, "untrusted-qa-key-fingerprint-mismatch"):
+                verify_attestation(Path(directory) / "report",
+                                   Path(directory) / "signature",
+                                   key, "a" * 64)
 
 
 if __name__ == "__main__":

@@ -7,6 +7,7 @@ not a substitute for human evaluation or physical-device penetration testing.
 """
 import argparse
 import datetime as dt
+import hashlib
 import json
 from pathlib import Path
 import re
@@ -99,6 +100,8 @@ def validate(report, *, today=None):
     release = report.get("release") if isinstance(report.get("release"), dict) else {}
     required(release.get("signed_apk") is True, "apk-release-signing")
     required(release.get("signed_aab") is True, "aab-release-signing")
+    required(is_digest(release.get("signed_aab_sha256")), "aab-artifact-digest")
+    required(is_digest(release.get("apk_signer_cert_sha256")), "apk-signer-certificate-digest")
     required(type(release.get("target_sdk")) is int and
              release.get("target_sdk", 0) >= 36, "play-target-api36")
     required(release.get("play_sensitive_permissions_approved") is True,
@@ -116,7 +119,73 @@ def validate(report, *, today=None):
     return problems
 
 
-def verify_attestation(evidence_path: Path, signature_path: Path, public_key_path: Path):
+def verify_artifacts(report, apk_path: Path, aab_path: Path, *, run=subprocess.run):
+    """Bind independently signed QA claims to actual files and signing certificates.
+
+    Missing signers/tools, mismatched bytes or invalid signatures MUST block release.
+    apksigner and jarsigner come from the publisher's trusted Android/JDK toolchain.
+    """
+    problems = []
+    release = report.get("release") if isinstance(report.get("release"), dict) else {}
+
+    def digest(path, label):
+        try:
+            if not path.is_file() or path.stat().st_size == 0:
+                raise OSError("empty or missing artifact")
+            value = hashlib.sha256()
+            with path.open("rb") as stream:
+                for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                    value.update(chunk)
+            return value.hexdigest()
+        except OSError:
+            problems.append(label + "-unreadable")
+            return None
+
+    apk_digest = digest(apk_path, "apk")
+    aab_digest = digest(aab_path, "aab")
+    if apk_digest is not None and apk_digest != release.get("signed_apk_sha256"):
+        problems.append("apk-actual-bytes-mismatch")
+    if aab_digest is not None and aab_digest != release.get("signed_aab_sha256"):
+        problems.append("aab-actual-bytes-mismatch")
+
+    def execute(command, label):
+        try:
+            result = run(command, capture_output=True, text=True, timeout=120, check=False)
+        except (OSError, subprocess.TimeoutExpired):
+            problems.append(label + "-verification-unavailable")
+            return None
+        if result.returncode != 0:
+            problems.append(label + "-signature-invalid")
+            return None
+        return result.stdout + "\n" + result.stderr
+
+    if apk_digest is not None:
+        output = execute(["apksigner", "verify", "--min-sdk-version", "26",
+                          "--verbose", "--print-certs", str(apk_path)], "apk")
+        if output is not None:
+            # v2/v3 protect APK contents, unlike relying on a legacy JAR signature.
+            if not re.search(r"Verified using v[23] scheme[^\\n]*:\\s*true", output, re.I):
+                problems.append("apk-modern-signature-absent")
+            certificates = re.findall(
+                r"Signer #\\d+ certificate SHA-256 digest:\\s*([0-9a-fA-F]{64})",
+                output, re.I)
+            if (len(certificates) != 1 or
+                    certificates[0].lower() != release.get("apk_signer_cert_sha256")):
+                problems.append("apk-signer-certificate-mismatch")
+    if aab_digest is not None:
+        output = execute(["jarsigner", "-verify", "-strict", str(aab_path)], "aab")
+        if output is not None and "jar verified." not in output.lower():
+            problems.append("aab-signature-not-confirmed")
+    return problems
+
+
+def verify_attestation(evidence_path: Path, signature_path: Path,
+                       public_key_path: Path, expected_key_sha256: str):
+    if not re.fullmatch(r"[0-9a-f]{64}", expected_key_sha256):
+        raise ValueError("untrusted-qa-key-fingerprint-invalid")
+    actual = hashlib.sha256(public_key_path.read_bytes()).hexdigest()
+    if actual != expected_key_sha256:
+        raise ValueError("untrusted-qa-key-fingerprint-mismatch")
     completed = subprocess.run([
         "openssl", "dgst", "-sha256", "-verify", str(public_key_path),
         "-signature", str(signature_path), str(evidence_path)
@@ -130,10 +199,19 @@ def main():
     p.add_argument("--evidence", type=Path, required=True)
     p.add_argument("--signature", type=Path, required=True)
     p.add_argument("--qa-public-key", type=Path, required=True)
+    p.add_argument("--expected-qa-public-key-sha256", required=True,
+                   help="Pinned SHA-256 fingerprint from an independent trusted channel")
+    p.add_argument("--apk", type=Path, required=True)
+    p.add_argument("--aab", type=Path, required=True)
     args = p.parse_args()
-    verify_attestation(args.evidence, args.signature, args.qa_public_key)
+    verify_attestation(args.evidence, args.signature, args.qa_public_key,
+                       args.expected_qa_public_key_sha256)
     evidence = json.loads(args.evidence.read_text("utf-8"))
     failures = validate(evidence)
+    if not failures:
+        if evidence["signatures"]["pinned_key_sha256"] == args.expected_qa_public_key_sha256:
+            failures.append("qa-key-must-be-independent-of-threat-feed-key")
+        failures.extend(verify_artifacts(evidence, args.apk, args.aab))
     if failures:
         raise SystemExit("RELEASE BLOCKED: " + ", ".join(failures))
     print("TECHNICAL RELEASE GATES PASSED ON SIGNED CLAIMS. Independent audit still required.")
