@@ -175,14 +175,20 @@ def train(data, source, private_key, output):
     xtr, ytr = arrays["train"]
     xval, yval = arrays["val"]
     xte, yte = arrays["test"]
-    scaler = StandardScaler().fit(xtr)
-    clf = LogisticRegression(C=0.2, class_weight="balanced", max_iter=500,
+    # Feature ablation is a pre-declared safety measure: the first pilot
+    # learned huge, opposite-signed coefficients for dot/subdomain counts,
+    # classifying reputable www. domains as almost certainly phishing.
+    # Exclude both collinear dimensions; keep their signed slots at zero so
+    # Android's 12-feature inference protocol stays backwards compatible.
+    active = (0, 1, 2, 4, 5, 6, 7, 8, 9, 11)
+    scaler = StandardScaler().fit(xtr[:, active])
+    clf = LogisticRegression(C=0.02, class_weight="balanced", max_iter=500,
                              solver="lbfgs", random_state=93)
-    clf.fit(scaler.transform(xtr), ytr)
-    # Fold training-set normalization into the signed linear weights; all
-    # inference runs offline with just 12 URL-lexical features.
-    weights = clf.coef_[0] / scaler.scale_
-    bias = float(clf.intercept_[0] - np.dot(weights, scaler.mean_))
+    clf.fit(scaler.transform(xtr[:, active]), ytr)
+    weights = np.zeros(COLUMNS, dtype=np.float64)
+    selected = clf.coef_[0] / scaler.scale_
+    weights[list(active)] = selected
+    bias = float(clf.intercept_[0] - np.dot(selected, scaler.mean_))
     if not np.isfinite(weights).all() or not math.isfinite(bias) or (
         np.max(np.abs(weights)) > 100 or abs(bias) > 100):
         raise ValueError("model weights invalid")
@@ -225,6 +231,30 @@ def train(data, source, private_key, output):
         "notes": "URL string only; never fetched/visited sites. Labels historical. "
             "No external-dataset validation. Not a probability calibration or clean verdict."
     }
+    # A low false positive rate on historical dataset is not enough:
+    # check frozen, real, independently known legitimate *root* URLs.
+    # This is a pre-distribution sanity guard, NOT an external ROC benchmark.
+    known_benign = (
+        "https://www.wikipedia.org/", "https://www.microsoft.com/",
+        "https://www.apple.com/", "https://www.google.com/",
+        "https://www.mozilla.org/", "https://www.un.org/",
+        "https://www.nasa.gov/", "https://www.gov.uk/"
+    )
+    control = [float(score(np.asarray([lexical_features(url)]))[0])
+               for url in known_benign]
+    metrics["known_benign_root_controls"] = {
+        "urls_tested": len(control),
+        "max_pilot_score": max(control),
+        "median_pilot_score": float(np.median(control)),
+        "falsely_above_80pct": sum(v >= 0.80 for v in control)
+    }
+    # Persist the honest failure record even if the pilot does not qualify.
+    output.mkdir(parents=True, exist_ok=True)
+    (output / "evaluation.json").write_text(
+        json.dumps(metrics, indent=2, sort_keys=True) + "\\n", encoding="utf8")
+    if any(v >= 0.80 for v in control):
+        raise ValueError("pilot blocked: unacceptably high false alarms on known legitimate roots")
+
     # A deliberately relaxed pilot gate. DO NOT use Android malware release
     # acceptance metrics or claim independent external validation.
     if not (metrics["holdout_auc"] >= 0.68 and
