@@ -124,8 +124,6 @@ object NativeScannerBridge {
             val yaraRulesOK = digest(yaraBytes) == YARA_RULE_HASH
             val rulesFile = stagedFile(context, "kanaf-clam-", ".ndb", clamBytes)
             db = rulesFile
-            val testFile = stagedFile(context, "kanaf-eicar-", ".txt", eicar)
-            test = testFile
             val yaraRules = yaraBytes.toString(Charsets.UTF_8)
             // Positive self-test: the real native engine MUST find the harmless EICAR pattern.
             // Negative self-test prevents a scanner that reports every file as infected.
@@ -141,6 +139,8 @@ object NativeScannerBridge {
                 clamOK = true
                 yaraOK = true
             } else {
+                val testFile = stagedFile(context, "kanaf-eicar-", ".txt", eicar)
+                test = testFile
                 val benign = stagedFile(context, "kanaf-benign-", ".txt",
                     "kanaf-scan-control".toByteArray())
                 try {
