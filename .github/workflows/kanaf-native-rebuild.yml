@@ -73,6 +73,23 @@ jobs:
           echo "ANDROID_HOME=$ANDROID_HOME"
       - name: Run native unit tests and Android lint
         run: bash tools/gradle_retry_429.sh --no-daemon :app:testDebugUnitTest :app:lintDebug :app:assembleDebug --stacktrace
+      - name: Enforce production release must fail closed without external evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gradle --no-daemon :app:verifyKanafProductionInputs > /tmp/kanaf-production-gate.log 2>&1; then
+            echo "::error::Unsafe: production preflight accepted missing publisher assets"
+            exit 1
+          fi
+          if ! grep -q 'KANAF_PRODUCTION_RELEASE_BLOCKED' /tmp/kanaf-production-gate.log; then
+            tail -n 85 /tmp/kanaf-production-gate.log
+            echo "::error::Production gate failed for a build error instead of security refusal"
+            exit 1
+          fi
+          gradle --no-daemon -m :app:preReleaseBuild > /tmp/kanaf-release-dry-run.log
+          grep -q 'verifyKanafProductionInputs' /tmp/kanaf-release-dry-run.log ||
+            { cat /tmp/kanaf-release-dry-run.log; exit 1; }
+          echo "Security gate verified: publishing cannot proceed without independent release inputs."
       - name: Upload diagnostic reports
         if: always()
         uses: actions/upload-artifact@v4

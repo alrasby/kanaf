@@ -6,6 +6,9 @@ merge until the following independently grounded evidence is attached.
 | Gate | Required independently verifiable evidence | Current status |
 | --- | --- | --- |
 | ClamAV 1.4.6 + YARA-X 0.13.0 native ARM64 | Real ARM64 hardware, EICAR/benign and representative licensed malware/cleanware fixtures, 0 crashes; per-engine positive/negative outcomes | Translated ARM64 emulator EICAR passed; hardware and real corpus pending |
+| Publisher-signed native production rules | Independently sourced and audited ClamAV NDB + YARA-X YAR, pinned SHA-256 in APK; no EICAR-only verdicts | Release scanner now demands pinned production assets and fails INCOMPLETE if missing; real rules not provided |
+| First-run signed threat feed | Publisher-signed ZIP containing curated SHA-256 rules included at build, pinned RSA public key and anti-rollback, verified AtomicFile installation | Bootstrapping implemented and Android signing/tamper tests added; no production feed/key provided |
+| Fail-closed release preflight | Independently signed QA asset attestation, fully signed malware model, audited native rules, publisher threat feed, owner keystore; final signed-APK digest and physical QA | Gradle release now refuses missing inputs; signing and QA keys must be provisioned externally |
 | Production threat signatures | Legal redistribution/provenance per record; actual non-EICAR signatures; independent signed RSA publisher key, secure storage, HTTPS feed and rollback/tamper/revocation tests | Offline publisher tool and test-only signed fixtures pass; **no production database/key** |
 | Device scan coverage | APK base/splits; Android 8–latest with different permissions, accessible shared storage, large files, archives, timeouts, cancellation, race/snapshot changes, no file deletion | Bounded app scan and consensus code covered in CI; physical devices and real coverage evaluation pending |
 | False-positive/false-negative calibration | Independent labeled threat+benign datasets with privacy-safe sourcing; measure specificity, sensitivity, precision and broken/unknown rates; document non-overlap | No licensed independent corpus/benchmarks |
@@ -31,3 +34,45 @@ References:
 - ClamAV: https://docs.clamav.net/manual/Signatures.html
 - YARA-X licensing: https://github.com/VirusTotal/yara-x/blob/main/LICENSE
 - Kanaf signature publishing procedure: THREAT_FEED_PUBLISHING.md
+
+### Production deployment gate — never use CI test credentials
+
+`./gradlew :app:verifyKanafProductionInputs` is a **negative test** without
+external publisher materials; the task must fail with
+`KANAF_PRODUCTION_RELEASE_BLOCKED`. `preReleaseBuild` depends on this task.
+The normal debug/emulator route remains available without production secrets.
+
+Release publisher inputs must be provided outside source control:
+- `-PkanafSignaturePublicKeyBase64=<publisher RSA SPKI DER Base64>`,
+  `-PkanafSignatureMinVersion=<positive monotonically increasing version>`,
+  `-PkanafSignatureFeedHttpsUrl=https://<publisher>/...zip`;
+  `src/main/assets/production_signatures.zip` must be signed and contain
+  **real independently audited** non-EICAR signatures.
+- `src/main/assets/production_clamav.ndb`,
+  `src/main/assets/production_yara.yar`, and
+  `-PkanafNativeClamRuleSha256=<lowercase SHA256>`,
+  `-PkanafNativeYaraRuleSha256=<lowercase SHA256>`.
+  The release worker verifies both rule digests and **never substitutes
+  EICAR test fixtures** for normal file scans.
+- `src/main/assets/validated_model.txt` + `validated_model.sig` and
+  `-PkanafModelPublicKeyBase64=<publisher key DER Base64>`.
+  Generated structural-fixture model weights do not qualify.
+- An **independent** QA signing key (not equal to either publisher key),
+  with env paths `KANAF_QA_ATTESTATION`,
+  `KANAF_QA_ATTESTATION_SIGNATURE` (raw SHA256withRSA binary signature),
+  `KANAF_QA_PUBLIC_KEY_DER` (SPKI DER).
+  Attested ASCII file (LF newlines), in order:
+  `Kanaf-Production-Assets-v1`; SHA256 model bytes; SHA256 signed feed's
+  uncompressed `signatures.tsv`; SHA256 ClamAV rules; SHA256 YARA-X
+  rules; independently audited dataset-license review ID; security review
+  ID. **QA independence and truthfulness require external human verification**;
+  a valid signature does not certify factual claims by itself.
+- `KANAF_RELEASE_KEYSTORE_FILE`,
+  `KANAF_RELEASE_STORE_PASSWORD`, `KANAF_RELEASE_KEY_ALIAS`,
+  `KANAF_RELEASE_KEY_PASSWORD`. All kept exclusively in protected local
+  signing infrastructure, never committed or printed.
+
+Even with valid asset preflight, require a separately signed final artifact
+report via `tools/check_release_readiness.py`, real Android ARM64
+hardware/16-KiB kernel verification, representative independent malware
+and benign evaluations, policy declarations and publication approval.

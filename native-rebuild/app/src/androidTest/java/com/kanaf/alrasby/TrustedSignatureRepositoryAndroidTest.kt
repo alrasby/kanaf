@@ -8,6 +8,10 @@ import java.security.KeyPairGenerator
 import java.security.MessageDigest
 import java.security.Signature
 import java.util.Base64
+import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
+import java.util.zip.ZipOutputStream
+import java.util.zip.ZipEntry
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -39,6 +43,51 @@ class TrustedSignatureRepositoryAndroidTest {
         return SignedSignatureUpdate.Manifest(
             version, checksum, Base64.getEncoder().encodeToString(signer.sign())
         )
+    }
+
+    private fun asZip(data: ByteArray, manifest: SignedSignatureUpdate.Manifest): ByteArray {
+        val metadata = ("${manifest.version}\n${manifest.sha256}\n" +
+            manifest.signatureBase64 + "\n").toByteArray(Charsets.US_ASCII)
+        return ByteArrayOutputStream().also { bytes ->
+            ZipOutputStream(bytes).use { zip ->
+                zip.putNextEntry(ZipEntry("signatures.tsv"))
+                zip.write(data)
+                zip.closeEntry()
+                zip.putNextEntry(ZipEntry("manifest.txt"))
+                zip.write(metadata)
+                zip.closeEntry()
+            }
+        }.toByteArray()
+    }
+
+    @Test fun firstUsePublisherFeedBootstrapsAtomicallyAndRejectsWrongSigner() {
+        val repo = SignatureRepository(context)
+        val directory = context.filesDir.resolve("signature-db")
+        listOf("verified.bundle", "verified.bundle.bak", "verified.bundle.new").forEach {
+            directory.resolve(it).delete()
+        }
+        val trusted = KeyPairGenerator.getInstance("RSA").apply {
+            initialize(2048)
+        }.generateKeyPair()
+        val attacker = KeyPairGenerator.getInstance("RSA").apply {
+            initialize(2048)
+        }.generateKeyPair()
+        val db = payload("Kanaf.Test.Only")
+        val rejected = asZip(db, signed(201L, db, attacker))
+        assertThrows(Exception::class.java) {
+            repo.installBundledIfAbsent(ByteArrayInputStream(rejected),
+                trusted.public.encoded, 200L)
+        }
+        assertFalse("Untrusted ZIP cannot publish a database",
+            directory.resolve("verified.bundle").exists())
+        val valid = asZip(db, signed(201L, db, trusted))
+        assertTrue(repo.installBundledIfAbsent(ByteArrayInputStream(valid),
+            trusted.public.encoded, 200L))
+        assertEquals("Kanaf.Test.Only", repo.load()["a".repeat(64)])
+        assertFalse("Existing signed database cannot be overwritten by bootstrap",
+            repo.installBundledIfAbsent(ByteArrayInputStream(rejected),
+                trusted.public.encoded, 200L))
+        assertEquals("Kanaf.Test.Only", repo.load()["a".repeat(64)])
     }
 
     @Test fun verifiedInstallPersistsAndRejectsRollbackWrongKeyOrTampering() {

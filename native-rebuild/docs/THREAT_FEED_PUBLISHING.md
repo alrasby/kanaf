@@ -39,3 +39,16 @@ current debug build remains intentionally UNCONFIGURED for real updates.
 publisher-owned offline key, independently validated threat samples and false
 positive results, hardware Android QA, Play Console sensitive permission
 declarations, and signed release approval.
+
+## Production first-use trust chain
+
+When the app binary has an app-pinned minimum signature version and RSA public
+key, `SignatureRepository.load()` now verifies
+`assets/production_signatures.zip` on first use and atomically installs it.
+Subsequent signed downloads/upgrades must be strictly newer; a corrupt ZIP,
+wrong signer, missing key, missing asset, or legacy unverified state cannot
+fall back to debug signatures. Test-only EICAR assets remain for debug engine
+self-tests, NOT actual production file scans. For native scanning, the APK
+requires separately hash-pinned `production_clamav.ndb` and
+`production_yara.yar` assets. Their content still needs external licensing,
+provenance, and accuracy audits before it can be designated production-ready.
