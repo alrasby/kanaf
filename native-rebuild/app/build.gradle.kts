@@ -1,3 +1,12 @@
+import java.security.KeyFactory
+import java.security.MessageDigest
+import java.security.Signature
+import java.security.PublicKey
+import java.security.interfaces.RSAPublicKey
+import java.security.spec.X509EncodedKeySpec
+import java.util.Base64
+import java.util.zip.ZipFile
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -124,25 +133,25 @@ val verifyKanafProductionInputs = tasks.register("verifyKanafProductionInputs") 
         fun property(name: String): String =
             providers.gradleProperty(name).orNull.orEmpty().trim()
         fun sha(bytes: ByteArray): String =
-            java.security.MessageDigest.getInstance("SHA-256").digest(bytes)
+            MessageDigest.getInstance("SHA-256").digest(bytes)
                 .joinToString("") { "%02x".format(it.toInt() and 255) }
-        fun publisherKey(name: String): java.security.interfaces.RSAPublicKey {
+        fun publisherKey(name: String): RSAPublicKey {
             val encoded = property(name)
             if (encoded.isBlank()) block("missing-publisher-key:$name")
             val key = runCatching {
-                java.security.KeyFactory.getInstance("RSA").generatePublic(
-                    java.security.spec.X509EncodedKeySpec(
-                        java.util.Base64.getDecoder().decode(encoded)
+                KeyFactory.getInstance("RSA").generatePublic(
+                    X509EncodedKeySpec(
+                        Base64.getDecoder().decode(encoded)
                     )
-                ) as java.security.interfaces.RSAPublicKey
+                ) as RSAPublicKey
             }.getOrNull() ?: block("invalid-publisher-key:$name")
             if (key.modulus.bitLength() < 2048) block("weak-publisher-key:$name")
             return key
         }
         fun verified(bytes: ByteArray, signature: ByteArray,
-                     key: java.security.PublicKey, label: String) {
+                     key: PublicKey, label: String) {
             val ok = runCatching {
-                java.security.Signature.getInstance("SHA256withRSA").run {
+                Signature.getInstance("SHA256withRSA").run {
                     initVerify(key)
                     update(bytes)
                     verify(signature)
@@ -177,7 +186,7 @@ val verifyKanafProductionInputs = tasks.register("verifyKanafProductionInputs") 
             block("missing-signed-production-malware-model")
         val modelBytes = model.readBytes()
         val modelSignature = runCatching {
-            java.util.Base64.getDecoder().decode(signature.readText().trim())
+            Base64.getDecoder().decode(signature.readText().trim())
         }.getOrNull() ?: block("invalid-production-malware-model-signature")
         verified(modelBytes, modelSignature, modelKey, "production-malware-model")
         val lines = modelBytes.toString(Charsets.US_ASCII).split("\n")
@@ -191,7 +200,7 @@ val verifyKanafProductionInputs = tasks.register("verifyKanafProductionInputs") 
             block("missing-or-oversized-signed-threat-feed")
         val database: ByteArray
         val manifest: String
-        java.util.zip.ZipFile(feedFile).use { archive ->
+        ZipFile(feedFile).use { archive ->
             val entries = archive.entries().asSequence().toList()
             if (entries.map { it.name }.toSet() !=
                 setOf("signatures.tsv", "manifest.txt") || entries.size != 2)
@@ -213,7 +222,7 @@ val verifyKanafProductionInputs = tasks.register("verifyKanafProductionInputs") 
         if (version < minVersion) block("signed-threat-feed-below-version-floor")
         if (meta.groupValues[2] != sha(database)) block("signed-feed-digest-mismatch")
         val feedSignature = runCatching {
-            java.util.Base64.getDecoder().decode(meta.groupValues[3])
+            Base64.getDecoder().decode(meta.groupValues[3])
         }.getOrNull() ?: block("invalid-threat-feed-signature-encoding")
         verified("Kanaf-DB-v1\n$version\n${meta.groupValues[2]}\n".toByteArray(Charsets.US_ASCII),
             feedSignature, feedKey, "production-threat-feed")
@@ -227,18 +236,18 @@ val verifyKanafProductionInputs = tasks.register("verifyKanafProductionInputs") 
         }
         // Independent approval is intentionally NOT minted from this job.
         // It must be a separately signed QA report against these exact hashes.
-        val qaFile = System.getenv("KANAF_QA_ATTESTATION")?.let(::file)
+        val qaFile = System.getenv("KANAF_QA_ATTESTATION")?.let { file(it) }
             ?: block("missing-independent-QA-attestation")
-        val qaSig = System.getenv("KANAF_QA_ATTESTATION_SIGNATURE")?.let(::file)
+        val qaSig = System.getenv("KANAF_QA_ATTESTATION_SIGNATURE")?.let { file(it) }
             ?: block("missing-independent-QA-signature")
-        val qaKeyPath = System.getenv("KANAF_QA_PUBLIC_KEY_DER")?.let(::file)
+        val qaKeyPath = System.getenv("KANAF_QA_PUBLIC_KEY_DER")?.let { file(it) }
             ?: block("missing-independent-QA-public-key")
         if (!qaFile.isFile || !qaSig.isFile || !qaKeyPath.isFile)
             block("missing-independent-QA-artifact")
         val qaKey = runCatching {
-            java.security.KeyFactory.getInstance("RSA").generatePublic(
-                java.security.spec.X509EncodedKeySpec(qaKeyPath.readBytes())
-            ) as java.security.interfaces.RSAPublicKey
+            KeyFactory.getInstance("RSA").generatePublic(
+                X509EncodedKeySpec(qaKeyPath.readBytes())
+            ) as RSAPublicKey
         }.getOrNull() ?: block("invalid-independent-QA-key")
         if (qaKey.modulus.bitLength() < 2048 ||
             qaKey.encoded.contentEquals(feedKey.encoded) ||
@@ -256,7 +265,7 @@ val verifyKanafProductionInputs = tasks.register("verifyKanafProductionInputs") 
             declared[5].isBlank() || declared[6].isBlank()) {
             block("QA-reviewed-assets-differ-from-build-or-audit-IDs-missing")
         }
-        val store = System.getenv("KANAF_RELEASE_KEYSTORE_FILE")?.let(::file)
+        val store = System.getenv("KANAF_RELEASE_KEYSTORE_FILE")?.let { file(it) }
         if (store?.isFile != true ||
             listOf("KANAF_RELEASE_STORE_PASSWORD", "KANAF_RELEASE_KEY_ALIAS",
                 "KANAF_RELEASE_KEY_PASSWORD").any {
