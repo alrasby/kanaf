@@ -251,7 +251,7 @@ def train(data, source, private_key, output):
     # Persist the honest failure record even if the pilot does not qualify.
     output.mkdir(parents=True, exist_ok=True)
     (output / "evaluation.json").write_text(
-        json.dumps(metrics, indent=2, sort_keys=True) + "\\n", encoding="utf8")
+        json.dumps(metrics, indent=2, sort_keys=True) + "\n", encoding="utf8")
     if any(v >= 0.80 for v in control):
         raise ValueError("pilot blocked: unacceptably high false alarms on known legitimate roots")
 
