@@ -17,7 +17,12 @@ class DnsTileControlActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         if (KanafDnsVpnService.isRunning()) {
-            stopService(Intent(this, KanafDnsVpnService::class.java))
+            runCatching {
+                startService(Intent(this, KanafDnsVpnService::class.java)
+                    .setAction(KanafDnsVpnService.ACTION_STOP))
+            }.onFailure {
+                stopService(Intent(this, KanafDnsVpnService::class.java))
+            }
             finish()
             return
         }

@@ -1,5 +1,7 @@
 package com.kanaf.alrasby.engine
 
+import com.kanaf.alrasby.BuildConfig
+
 /**
  * Honest, affirmative in-app disclosures for BOTH DNS entry points.
  * The HTTPS DNS provider is an independent third party; the app cannot
@@ -9,7 +11,15 @@ object KanafPrivacyDisclosure {
     const val VPN_TITLE_AR = "موافقة منفصلة على خدمة DNS وVPN"
     const val VPN_TITLE_EN = "Separate DNS and VPN consent"
 
-    val VPN_AR = "عند تفعيل Kanaf DNS ينشئ أندرويد نفق VPN محليًا لحركة DNS الموجهة إليه فقط، " +
+    val VPN_AR = if (BuildConfig.KANAF_PLAY_DNS_SECURITY_ONLY) {
+        "عند تفعيل Kanaf DNS ينشئ أندرويد نفق VPN محليًا لاستعلامات DNS الموجهة إليه فقط، " +
+        "ولا يفحص محتوى HTTPS. تُرسل الاستعلامات المسموح بها مشفرة عبر HTTPS إلى Cloudflare " +
+        "للحماية من نطاقات البرمجيات الخبيثة والتصيد فقط، وليس لحجب الإعلانات. " +
+        "قد يرى Cloudflare أسماء النطاقات وعنوان اتصالك وفق سياسة خصوصيته. " +
+        "لا يحتفظ كنف بسجل أسماء النطاقات؛ العدادات مؤقتة للجلسة فقط. " +
+        "لا يمكن تشغيل VPN آخر بالتزامن، ويمكن إيقاف كنف في أي وقت. " +
+        "هل توافق صراحةً على استخدام VPN وإرسال استعلامات DNS إلى Cloudflare؟"
+    } else "عند تفعيل Kanaf DNS ينشئ أندرويد نفق VPN محليًا لحركة DNS الموجهة إليه فقط، " +
         "وليس لتصفح الإنترنت أو محتوى HTTPS. تُفحص نطاقات DNS محليًا للحجب، " +
         "وتُرسل الطلبات المسموح بها مشفّرة عبر HTTPS إلى مزوّد AdGuard DNS الذي تختاره. " +
         "قد يرى المزوّد نطاقات الاستعلام وعنوان اتصالك وفق سياسة خصوصيته. " +
@@ -18,7 +28,15 @@ object KanafPrivacyDisclosure {
         "لا يمكن تشغيل VPN آخر معه، ويمكنك إيقافه في أي وقت. " +
         "هل توافق صراحةً على تشغيل VPN المحلي وإرسال طلبات DNS للمزوّد المحدد؟"
 
-    val VPN_EN = "Kanaf DNS creates an Android local VPN for DNS queries addressed to its resolver only; " +
+    val VPN_EN = if (BuildConfig.KANAF_PLAY_DNS_SECURITY_ONLY) {
+        "Kanaf DNS uses an Android local VPN only for DNS queries addressed to its resolver. " +
+        "It does not inspect HTTPS content. Allowed DNS queries travel over encrypted HTTPS " +
+        "to independent Cloudflare security DNS for malware and phishing protection only, " +
+        "NOT ad or tracker blocking. Cloudflare may see queried domains and your connecting IP " +
+        "under its privacy policy. Kanaf stores no DNS domain history; session counters are " +
+        "temporary. Other VPNs cannot operate simultaneously. You can stop Kanaf at any time. " +
+        "Do you explicitly agree to use the local VPN and send DNS queries to Cloudflare?"
+    } else "Kanaf DNS creates an Android local VPN for DNS queries addressed to its resolver only; " +
         "it does not inspect HTTPS content or route general browsing traffic. " +
         "Kanaf checks DNS names locally for blocking and sends allowed queries over encrypted HTTPS " +
         "to your selected third-party AdGuard DNS provider. That provider may see queried domains " +
@@ -32,7 +50,9 @@ object KanafPrivacyDisclosure {
         "الفحص: تُقرأ الملفات التي تختارها وحزم التطبيقات المتاحة وفق صلاحيات أندرويد محليًا؛ " +
         "لا تُرفع الملفات أو محتوياتها إلى خوادم كنف. نتائج الجلسة المختصرة اختيارية وتُمسح عند الإيقاف.\n\n" +
         "DNS: لا يجمع كنف سجلًا بأسماء النطاقات. عند تفعيلك VPN الاختياري تُرسل طلبات DNS " +
-        "المسموح بها عبر HTTPS إلى مزوّد AdGuard DNS الخارجي الذي اخترته؛ " +
+        (if (BuildConfig.KANAF_PLAY_DNS_SECURITY_ONLY)
+            "المسموح بها عبر HTTPS إلى Cloudflare DNS الأمني، الذي يحجب البرمجيات الخبيثة والتصيد وليس الإعلانات؛ "
+         else "المسموح بها عبر HTTPS إلى مزوّد AdGuard DNS الخارجي الذي اخترته؛ ") +
         "قد يتلقى المزوّد أسماء النطاقات وعنوان IP ويطبّق سياسة الخصوصية الخاصة به.\n\n" +
         "التحديثات: عند اختيار تحديث قواعد الكشف، يتصل التطبيق بعنوان HTTPS المخصص للناشر " +
         "للتحقق من قواعد موقّعة. الخزنة تحتفظ بنسخ مشفرة داخل التطبيق باستخدام Android Keystore؛ " +
@@ -47,8 +67,10 @@ object KanafPrivacyDisclosure {
         "under Android permissions; file contents are not uploaded to Kanaf servers. " +
         "Optional brief session history is cleared when disabled.\n\n" +
         "DNS: Kanaf keeps no DNS domain history. When you enable optional VPN filtering, allowed " +
-        "queries are sent over HTTPS to your chosen independent AdGuard DNS provider. The provider " +
-        "may receive domain names and your connecting IP address, subject to its own privacy policy.\n\n" +
+        (if (BuildConfig.KANAF_PLAY_DNS_SECURITY_ONLY)
+            "queries are sent over HTTPS to Cloudflare security DNS for malware and phishing protection, not ad blocking. "
+         else "queries are sent over HTTPS to your chosen independent AdGuard DNS provider. ") +
+        "The provider may receive domain names and your connecting IP address, under its own privacy policy.\n\n" +
         "Updates: when you request threat-rule updates, the app contacts the publisher-configured " +
         "HTTPS address for signed rules. The encrypted vault stores copies locally using Android " +
         "Keystore; you can remove them manually. Android deletes local app data on uninstall.\n\n" +

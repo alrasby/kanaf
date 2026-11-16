@@ -27,6 +27,7 @@ import androidx.compose.ui.platform.testTag
 import com.kanaf.alrasby.engine.LinkInspector
 import com.kanaf.alrasby.engine.KanafUrlAi
 import com.kanaf.alrasby.engine.KanafPrivacyDisclosure
+import com.kanaf.alrasby.engine.DnsProviderStore
 import com.kanaf.alrasby.engine.EncryptedVault
 import com.kanaf.alrasby.engine.InstalledAppInventory
 
@@ -424,7 +425,9 @@ fun KanafGlassHome(
                             modifier = Modifier.weight(1f).heightIn(min = 56.dp)
                                 .testTag("open_dns_page"),
                             shape = RoundedCornerShape(18.dp)) {
-                            Text(tr("DNS وحجب الإعلانات", "DNS & ad blocking"),
+                            Text(if (BuildConfig.KANAF_PLAY_DNS_SECURITY_ONLY)
+                                tr("حماية DNS", "DNS security") else
+                                tr("DNS وحجب الإعلانات", "DNS & ad blocking"),
                                 maxLines = 2, textAlign = TextAlign.Center)
                         }
                         OutlinedButton(onClick = { page = 10 },
@@ -446,10 +449,12 @@ fun KanafGlassHome(
                         Text(tr("Kanaf DNS", "Kanaf DNS"), color = ink,
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold)
-                        Text(tr(
-                            "مرشح محلي للإعلانات والتتبع، مع DNS مشفر واختيار مزوّد واحد.",
-                            "Local ad/tracker blocking with encrypted DNS and one selected provider."
-                        ), color = secondary, style = MaterialTheme.typography.bodySmall)
+                        Text(if (BuildConfig.KANAF_PLAY_DNS_SECURITY_ONLY)
+                            tr("حماية DNS من البرمجيات الخبيثة والتصيد عبر مزوّد مشفر، دون حجب الإعلانات.",
+                                "Encrypted malware/phishing DNS protection without ad blocking.")
+                        else tr("مرشح محلي للإعلانات والتتبع، مع DNS مشفر واختيار مزوّد واحد.",
+                                "Local ad/tracker blocking with encrypted DNS and one selected provider."),
+                            color = secondary, style = MaterialTheme.typography.bodySmall)
                         Row(
                             modifier = Modifier.fillMaxWidth().heightIn(min = 60.dp),
                             verticalAlignment = Alignment.CenterVertically,
@@ -507,14 +512,14 @@ fun KanafGlassHome(
                             "فعّل نطاقًا واحدًا. يمكنك التبديل بين المزوّدين أثناء التشغيل بعد التحقق من الاتصال المشفّر.",
                             "Enable one provider. Switch securely while filtering after the new provider is verified."
                         ), color = secondary, style = MaterialTheme.typography.bodySmall)
-                        for (host in listOf(
-                            "dns.adguard.com", "dns.adguard-dns.com",
-                            "family.adguard-dns.com"
-                        )) {
+                        for (host in DnsProviderStore.choices) {
                             val chosen = selectedDnsProvider == host
                             val providerActive = chosen && vpnRequested
                             val canToggle = !dnsBusy && (providerActive || privateDnsCompatible)
                             val subtitle = when (host) {
+                                DnsProviderStore.PLAY_SECURITY ->
+                                    tr("حماية البرمجيات الخبيثة والتصيد، دون حجب الإعلانات",
+                                       "Malware/phishing protection; no ad blocking")
                                 "dns.adguard.com" ->
                                     tr("اسم قديم لنفس خادم AdGuard القياسي",
                                         "Legacy alias of the standard AdGuard server")

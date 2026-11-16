@@ -24,6 +24,7 @@ class KanafDnsTileService : TileService() {
             if (Build.VERSION.SDK_INT >= 29) {
                 subtitle = if (running) when (KanafDnsVpnService.activeProvider()) {
                     DnsProviderStore.FAMILY -> "Family DNS active"
+                    DnsProviderStore.PLAY_SECURITY -> "Malware DNS active"
                     else -> "Encrypted DNS active"
                 } else when (snapshot.mode) {
                     PrivateDnsCompatibility.Mode.OFF ->

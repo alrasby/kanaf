@@ -22,6 +22,7 @@ import android.os.ParcelFileDescriptor
 import android.os.SystemClock
 import com.kanaf.alrasby.MainActivity
 import com.kanaf.alrasby.R
+import com.kanaf.alrasby.BuildConfig
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.IOException
@@ -111,7 +112,7 @@ class KanafDnsVpnService : VpnService() {
         // Never run a timed-out resolver call on the only TUN reader thread.
         ThreadPoolExecutor.AbortPolicy()
     )
-    @Volatile private var providerAtStart = DnsProviderStore.STANDARD
+    @Volatile private var providerAtStart = DnsProviderStore.defaultProvider
     private val counters = DnsSessionCounters()
     private val switchGeneration = java.util.concurrent.atomic.AtomicLong()
 
@@ -226,7 +227,10 @@ class KanafDnsVpnService : VpnService() {
                     return@post
                 }
                 try {
-                    val builder = Builder().setSession("Kanaf DNS ad filter")
+                    val builder = Builder().setSession(
+                        if (BuildConfig.KANAF_PLAY_DNS_SECURITY_ONLY)
+                            "Kanaf DNS security" else "Kanaf DNS ad filter"
+                    )
                         .setMtu(1500).addAddress(TUN_IP, 32)
                         .addDnsServer(DNS_IP).addRoute(DNS_IP, 32)
                         // Route only Kanaf's IPv6 DNS address; never hijack all IPv6 traffic.
@@ -259,7 +263,7 @@ class KanafDnsVpnService : VpnService() {
     private fun notification(): Notification {
         val manager = getSystemService(NotificationManager::class.java)
         manager.createNotificationChannel(NotificationChannel(
-            CHANNEL_ID, "Kanaf DNS filter", NotificationManager.IMPORTANCE_LOW
+            CHANNEL_ID, "Kanaf DNS", NotificationManager.IMPORTANCE_LOW
         ))
         val open = PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
@@ -268,7 +272,8 @@ class KanafDnsVpnService : VpnService() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         return Notification.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.kanaf_status_icon)
-            .setContentTitle("Kanaf: DNS ad filter")
+            .setContentTitle(if (BuildConfig.KANAF_PLAY_DNS_SECURITY_ONLY)
+                "Kanaf: secure DNS" else "Kanaf: DNS ad filter")
             .setContentText("Encrypted DNS filtering is active. Tap Stop to disconnect.")
             .setContentIntent(open).setOngoing(true)
             .addAction(Notification.Action.Builder(null, "Stop", stop).build())
@@ -304,7 +309,7 @@ class KanafDnsVpnService : VpnService() {
     }
 
     private fun handle(packet: ByteArray, output: FileOutputStream) {
-        val reply = DnsFilterCore.reply(packet, DNS_BYTES, counters, DNS_V6_BYTES, ::forward) ?: return
+        val reply = DnsFilterCore.reply(packet, DNS_BYTES, counters, DNS_V6_BYTES, resolver = ::forward) ?: return
         sendReply(output, reply)
     }
 
