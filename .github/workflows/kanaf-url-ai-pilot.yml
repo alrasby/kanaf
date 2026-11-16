@@ -18,6 +18,7 @@ concurrency:
   cancel-in-progress: true
 permissions:
   contents: read
+  actions: read
 jobs:
   train-and-android-test:
     runs-on: ubuntu-24.04
@@ -71,6 +72,28 @@ jobs:
           SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager -print -quit)"
           test -x "$SDKMANAGER"
           "$SDKMANAGER" "platforms;android-36" "build-tools;35.0.0" "ndk;27.2.12479018" "cmake;3.22.1"
+      - name: Include previously verified 16 KiB ARM64 antivirus engines
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          CLAM_RUN=43745138794
+          YARA_RUN=43745138817
+          test "$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$CLAM_RUN/jobs" --jq '.jobs[] | select(.name == "clamav") | .conclusion')" = success
+          test "$(gh run view "$YARA_RUN" --repo "$GITHUB_REPOSITORY" --json conclusion --jq .conclusion)" = success
+          mkdir -p /tmp/kanaf-clam-ai /tmp/kanaf-yara-ai
+          gh run download "$CLAM_RUN" --repo "$GITHUB_REPOSITORY" -n kanaf-clamav-arm64-diagnostics -D /tmp/kanaf-clam-ai
+          gh run download "$YARA_RUN" --repo "$GITHUB_REPOSITORY" -n kanaf-yarax-arm64-diagnostics -D /tmp/kanaf-yara-ai
+          test "$(tr -d '\\n' < /tmp/kanaf-clam-ai/revision.txt)" = "5853e1396777bae4d909cd3dd44f58352e7cf9b3"
+          dest=native-rebuild/app/src/main/jniLibs/arm64-v8a
+          mkdir -p "$dest"
+          cp /tmp/kanaf-clam-ai/arm64-output/libclamav.so "$dest/"
+          cp /tmp/kanaf-clam-ai/arm64-output/libclammspack.so "$dest/"
+          cp /tmp/kanaf-yara-ai/libyara_x_capi.so "$dest/"
+          for so in "$dest"/*.so; do
+            python3 native-rebuild/tools/verify_arm64_elf.py --require-16kb "$so"
+          done
       - name: Verify signed model and assemble experimental debug APK
         working-directory: native-rebuild
         shell: bash
@@ -78,6 +101,21 @@ jobs:
           set -euo pipefail
           gradle --no-daemon :app:testDebugUnitTest :app:assembleDebug \
             -PkanafUrlModelPublicKeyBase64="$KANAF_URL_KEY" --stacktrace
+      - name: Verify combined experimental APK contains both AI and native scanners
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk=native-rebuild/app/build/outputs/apk/debug/app-debug.apk
+          test -s "$apk"
+          for entry in assets/url_risk_model.txt assets/url_risk_model.sig lib/arm64-v8a/libclamav.so lib/arm64-v8a/libclammspack.so lib/arm64-v8a/libyara_x_capi.so lib/arm64-v8a/libkanaf_scan.so; do
+            unzip -Z1 "$apk" | grep -Fx "$entry"
+          done
+          mkdir -p /tmp/kanaf-ai-native-check
+          unzip -q "$apk" 'lib/arm64-v8a/*.so' -d /tmp/kanaf-ai-native-check
+          for so in /tmp/kanaf-ai-native-check/lib/arm64-v8a/*.so; do
+            python3 native-rebuild/tools/verify_arm64_elf.py --require-16kb "$so"
+          done
+          "$ANDROID_HOME/build-tools/35.0.0/zipalign" -c -P 16 -v 4 "$apk"
       - name: Enable KVM for reliable emulator acceleration
         shell: bash
         run: |
@@ -101,7 +139,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: kanaf-ai-url-empirical-preview
+          name: kanaf-ai-combined-native-and-url-preview
           path: |
             native-rebuild/app/build/outputs/apk/debug/app-debug.apk
             /tmp/kanaf-url-ai/evaluation.json
