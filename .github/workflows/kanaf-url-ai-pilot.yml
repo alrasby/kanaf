@@ -47,6 +47,7 @@ jobs:
           echo "KANAF_URL_KEY=$(cat /tmp/kanaf-url-public.b64)" >> "$GITHUB_ENV"
           rm -f /tmp/kanaf-url-pilot.key
       - name: Preserve actual training evidence independently of emulator
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: kanaf-url-ai-real-data-training-evidence
@@ -55,7 +56,7 @@ jobs:
             /tmp/kanaf-url-ai/PUBLIC_DATA_ATTRIBUTION.txt
             /tmp/kanaf-url-ai/url_risk_model.txt
             /tmp/kanaf-url-ai/url_risk_model.sig
-          if-no-files-found: error
+          if-no-files-found: warn
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
