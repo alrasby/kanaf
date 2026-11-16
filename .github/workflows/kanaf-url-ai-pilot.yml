@@ -11,6 +11,7 @@ on:
       - 'native-rebuild/app/src/main/java/com/kanaf/alrasby/MainActivity.kt'
       - 'native-rebuild/app/src/main/java/com/kanaf/alrasby/KanafGlassHome.kt'
       - 'native-rebuild/app/src/androidTest/java/com/kanaf/alrasby/KanafUrlAiAndroidTest.kt'
+      - 'native-rebuild/app/src/androidTest/java/com/kanaf/alrasby/RealApkPipelineAndroidTest.kt'
       - 'native-rebuild/app/build.gradle.kts'
   workflow_dispatch:
 concurrency:
