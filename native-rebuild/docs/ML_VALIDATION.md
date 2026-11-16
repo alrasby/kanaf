@@ -42,3 +42,26 @@ No scan contents, messages, calls or personal data are uploaded to AI servers.
 
 A publisher signature is NOT a substitute for independent ground-truth
 labeling and model performance evidence, and cannot approve a model by itself.
+
+## Kanaf AI APK structural pilot (available; NOT malware detection)
+
+An offline classifier trained on **12,000 deterministic generated structural
+samples**, with **3,000 separate-seed fixture evaluations**, is available as
+`ExperimentalApkStructureModel`. Labels mean *intentional ZIP/DEX structural
+faults*, NOT malicious APK ground truth. Never refer to fixture AUC as malware
+detection accuracy, or the model score as a probability of infection.
+The included coefficient values come from logistic regression with log1p
+features and regularization; reproducible script:
+`tools/train_apk_structure_pilot.py`. Trained coefficients are compiled into
+the APK, not fetched from a server. No user files leave the device.
+
+A real Kanaf debug APK (SHA-256
+`8165e731310497d198708d289353976799f946343f9afb01f4afab3e52f9f2f5`)
+was checked as a benign *structural sanity control*, not as a training
+source or malware/benign labeled dataset. The separate production
+`VerifiedLinearThreatModel` still requires independently audited real APK
+samples and publisher-signed weights; these conditions are NOT bypassed.
+
+The actually real-data-trained URL phishing pilot based on PhiUSIIL remains
+separate (`docs/KANAF_AI_URL_PILOT.md`), and does not imply APK malware
+classification capability.
