@@ -58,8 +58,8 @@ def apk_features(path):
     with zipfile.ZipFile(path) as apk:
         names = [item.filename for item in apk.infolist()]
         entries = apk.infolist()
-    dex = sum(bool(re.fullmatch(r"classes(?:[2-9][0-9]*)?\\.dex", n)) for n in names)
-    libs = sum(bool(re.fullmatch(r"lib/[^/]+/[^/]+\\.so", n)) for n in names)
+    dex = sum(bool(re.fullmatch(r"classes(?:[2-9][0-9]*)?\.dex", n)) for n in names)
+    libs = sum(bool(re.fullmatch(r"lib/[^/]+/[^/]+\.so", n)) for n in names)
     unsafe = sum(n.startswith("/") or ".." in n.replace("\\", "/").split("/")
                  or "\\" in n for n in names)
     # Cannot reproduce DEX header validation from ZIP names alone;
