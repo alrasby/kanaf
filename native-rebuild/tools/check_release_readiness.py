@@ -111,6 +111,7 @@ def validate(report, *, today=None):
     required(release.get("signed_aab") is True, "aab-release-signing")
     required(is_digest(release.get("signed_aab_sha256")), "aab-artifact-digest")
     required(is_digest(release.get("apk_signer_cert_sha256")), "apk-signer-certificate-digest")
+    required(is_digest(release.get("aab_signer_cert_sha256")), "aab-signer-certificate-digest")
     required(type(release.get("target_sdk")) is int and
              release.get("target_sdk", 0) >= 36, "play-target-api36")
     # Direct distribution must not invent Play Store approval. Play permission
@@ -205,9 +206,30 @@ def verify_artifacts(report, apk_path: Path, aab_path: Path, *, run=subprocess.r
                     certificates[0].lower() != release.get("apk_signer_cert_sha256")):
                 problems.append("apk-signer-certificate-mismatch")
     if aab_digest is not None:
-        output = execute(["jarsigner", "-verify", "-strict", str(aab_path)], "aab")
-        if output is not None and "jar verified." not in output.lower():
-            problems.append("aab-signature-not-confirmed")
+        # Android AAB upload certificates are commonly self-signed. The
+        # JDK '-strict' flag rejects valid signed AABs with exit code 4.
+        # Instead verify every signed entry and pin the actual upload key.
+        output = execute(
+            ["jarsigner", "-verify", "-verbose", "-certs", str(aab_path)], "aab")
+        if output is not None:
+            lower = output.lower()
+            if "jar verified." not in lower:
+                problems.append("aab-signature-not-confirmed")
+            if "unsigned entries" in lower or re.search(
+                    r"(?m)^\s*\?\s+\d+\s+.+\S+$", output):
+                problems.append("aab-unsigned-entries")
+            if "certificate has expired" in lower or "not yet valid" in lower:
+                problems.append("aab-signer-certificate-expired")
+        cert_info = execute(
+            ["keytool", "-printcert", "-jarfile", str(aab_path)], "aab-cert")
+        if cert_info is not None:
+            signers = re.findall(r"(?m)^Signer #\d+:", cert_info)
+            certs = re.findall(
+                r"(?m)^\s*SHA256:\s*((?:[0-9A-Fa-f]{2}:){31}[0-9A-Fa-f]{2})\s*$",
+                cert_info)
+            leaf = certs[0].replace(":", "").lower() if certs else None
+            if len(signers) != 1 or leaf != release.get("aab_signer_cert_sha256"):
+                problems.append("aab-signer-certificate-mismatch")
     return problems
 
 

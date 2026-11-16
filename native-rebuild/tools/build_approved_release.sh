@@ -47,7 +47,12 @@ case "$action" in
     [[ -s "$apk" && -s "$aab" ]] ||
       { echo "KANAF_RELEASE_BLOCKED: missing signed APK/AAB" >&2; exit 2; }
     apksigner verify --min-sdk-version 26 --verbose --print-certs "$apk" >/dev/null
-    jarsigner -verify -strict "$aab" >/dev/null
+    signed_output="$(jarsigner -verify -verbose -certs "$aab")"
+    if [[ "$signed_output" != *"jar verified."* ||
+          "$signed_output" == *"unsigned entries"* ]]; then
+      echo "KANAF_RELEASE_BLOCKED: AAB unsigned or contains unsigned entries" >&2
+      exit 2
+    fi
     sha256sum "$apk" "$aab"
     echo "SIGNED CANDIDATES ONLY: conduct real ARM64 hardware QA and obtain a separately signed final evidence report."
     ;;
