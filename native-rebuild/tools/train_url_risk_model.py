@@ -19,7 +19,7 @@ import urllib.parse
 import urllib.request
 import zipfile
 
-UCI_DATASET_URL = "https://archive.ics.uci.edu/static/public/967/phiusiil+phishing+url+website.zip"
+UCI_DATASET_URL = "https://archive.ics.uci.edu/static/public/967/phiusiil%2Bphishing%2Burl%2Bdataset.zip"
 DOI = "10.17632/shwpxscxy2.2"
 MODEL_VERSION = "phiusiiil-url-pilot-1"
 COLUMNS = 12
@@ -100,6 +100,10 @@ def download_dataset():
         if len(data) > 45_000_000:
             raise ValueError("dataset archive exceeds configured bound")
     archive_sha = hashlib.sha256(data).hexdigest()
+    # Independently published reproducible hash, checked before opening CSV.
+    expected_sha = "0a639fd03aea6308c5b1c10c92aa23c2ce1505447a9137271865cd0badc9a59a"
+    if archive_sha != expected_sha:
+        raise ValueError("PhiUSIIL archive SHA-256 differs from pinned research source")
     with zipfile.ZipFile(io.BytesIO(data)) as bundle:
         choices = [n for n in bundle.namelist() if n.lower().endswith(".csv")
                    and not n.startswith("__MACOSX")]
