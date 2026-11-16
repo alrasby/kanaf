@@ -1,7 +1,13 @@
 package com.kanaf.alrasby
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -13,7 +19,11 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import com.kanaf.alrasby.engine.LinkDomainReputation
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -275,13 +285,19 @@ fun KanafGlassHome(
             Column(
                 Modifier.widthIn(max = 680.dp).fillMaxWidth().fillMaxHeight()
                     .windowInsetsPadding(WindowInsets.safeDrawing)
-                    .padding(horizontal = 16.dp, vertical = 18.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Text("⬡", color = if (dark) Aqua else Teal,
-                        style = MaterialTheme.typography.headlineLarge)
-                    Spacer(Modifier.width(10.dp))
+                    Box(
+                        Modifier.size(48.dp).clip(RoundedCornerShape(14.dp))
+                            .background(Color(0xFFD4F0EB)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Image(painterResource(R.drawable.kanaf_launcher_foreground),
+                            contentDescription = null, modifier = Modifier.size(48.dp))
+                    }
+                    Spacer(Modifier.width(8.dp))
                     Column(Modifier.weight(1f)) {
                         Text(tr("كنف", "Kanaf"), color = ink,
                             style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
@@ -309,9 +325,8 @@ fun KanafGlassHome(
                 if ((page != 0 && page != 5 && page != 9 && page != 10) ||
                     (page == 0 && sectionsOpen)) {
                     FlowRow(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(3.dp)
+                        modifier = Modifier.fillMaxWidth().selectableGroup(),
+                        horizontalArrangement = Arrangement.spacedBy(5.dp)
                     ) {
                         KanafSection.entries.filter { it.id !in hiddenSections }
                             .forEach { section ->
@@ -324,22 +339,24 @@ fun KanafGlassHome(
                                     KanafSection.HISTORY -> tr("السجل", "History")
                                     KanafSection.ENGINES -> tr("المحركات", "Engines")
                                 }
-                                FilterChip(
-                                    selected = page == section.page,
-                                    onClick = { page = section.page },
-                                    modifier = Modifier.testTag("nav_" + section.id)
-                                        .heightIn(min = 48.dp),
-                                    label = {
-                                        Text(label, style = MaterialTheme.typography.labelMedium,
-                                            fontWeight = if (page == section.page)
-                                                FontWeight.Bold else FontWeight.Medium)
-                                    },
-                                    shape = RoundedCornerShape(15.dp),
-                                    colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = if (dark) Color(0xFF185F65) else Teal,
-                                        selectedLabelColor = Color.White
-                                    ),
-                                )
+                                val selected = page == section.page
+                                val shape = RoundedCornerShape(10.dp)
+                                Box(
+                                    Modifier.heightIn(min = 48.dp).clip(shape)
+                                        .selectable(selected, role = Role.Tab) { page = section.page }
+                                        .testTag("nav_" + section.id),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(label,
+                                        modifier = Modifier.background(
+                                            if (selected) {
+                                                if (dark) Color(0xFF185F65) else Teal
+                                            } else card, shape
+                                        ).padding(horizontal = 10.dp, vertical = 6.dp),
+                                        color = if (selected) Color.White else ink,
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium)
+                                }
                             }
                     }
                 }
@@ -348,7 +365,7 @@ fun KanafGlassHome(
                     Modifier.fillMaxWidth().weight(1f)
                         .verticalScroll(scrollState)
                         .padding(bottom = 12.dp),
-                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                    verticalArrangement = Arrangement.spacedBy(9.dp)
                 ) {
                 if (page == 0) {
                     GlassPanel(card, stroke) {
@@ -422,7 +439,7 @@ fun KanafGlassHome(
                     Row(Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         OutlinedButton(onClick = { page = 9 },
-                            modifier = Modifier.weight(1f).heightIn(min = 56.dp)
+                            modifier = Modifier.weight(1f).heightIn(min = 48.dp)
                                 .testTag("open_dns_page"),
                             shape = RoundedCornerShape(18.dp)) {
                             Text(if (BuildConfig.KANAF_PLAY_DNS_SECURITY_ONLY)
@@ -431,7 +448,7 @@ fun KanafGlassHome(
                                 maxLines = 2, textAlign = TextAlign.Center)
                         }
                         OutlinedButton(onClick = { page = 10 },
-                            modifier = Modifier.weight(1f).heightIn(min = 56.dp)
+                            modifier = Modifier.weight(1f).heightIn(min = 48.dp)
                                 .testTag("open_scan_tools"),
                             shape = RoundedCornerShape(18.dp)) {
                             Text(tr("خيارات الفحص", "Scan options"),
@@ -747,7 +764,7 @@ fun KanafGlassHome(
                         Button(
                             onClick = { linkReport = LinkInspector.inspectText(linkInput) },
                             enabled = linkInput.isNotBlank(),
-                            modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp),
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
                             shape = RoundedCornerShape(16.dp)
                         ) {
                             Text(tr("تحليل محلي", "Inspect locally"))
@@ -774,13 +791,55 @@ fun KanafGlassHome(
                                     color = secondary)
                             }
                         }
-                        report.items.forEach { item ->
+                        report.items.forEachIndexed { index, item ->
                             GlassPanel(card, stroke) {
                                 Text(item.host ?: tr("مضيف غير قابل للتحليل", "Unparseable host"),
                                     color = ink, style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.SemiBold)
                                 Text(item.url.take(240) + if (item.url.length > 240) "…" else "",
                                     color = secondary, style = MaterialTheme.typography.bodySmall)
+                                item.host?.takeIf(LinkDomainReputation::supports)?.let { host ->
+                                    key(report, index, item.url) {
+                                        val scope = rememberCoroutineScope()
+                                        var checking by remember { mutableStateOf(false) }
+                                        var reputation by remember {
+                                            mutableStateOf<LinkDomainReputation.Result?>(null)
+                                        }
+                                        Text(tr("يُرسل اسم النطاق فقط إلى Cloudflare عبر DNS مشفّر.",
+                                            "Only the hostname is sent to Cloudflare over encrypted DNS."),
+                                            color = secondary, style = MaterialTheme.typography.bodySmall)
+                                        TextButton(enabled = !checking, onClick = {
+                                            checking = true
+                                            reputation = null
+                                            scope.launch {
+                                                try {
+                                                    reputation = withContext(Dispatchers.IO) {
+                                                        LinkDomainReputation.check(host)
+                                                    }
+                                                } finally {
+                                                    checking = false
+                                                }
+                                            }
+                                        }) {
+                                            Text(if (checking) tr("جارٍ التحقق…", "Checking…")
+                                                else tr("فحص النطاق عبر Cloudflare", "Check domain with Cloudflare"))
+                                        }
+                                        when (reputation) {
+                                            LinkDomainReputation.Result.BLOCKED -> Text(tr(
+                                                "أعاد Cloudflare Security عنوان الحجب لهذا النطاق.",
+                                                "Cloudflare Security returned a blocking address."),
+                                                color = MaterialTheme.colorScheme.error)
+                                            LinkDomainReputation.Result.NOT_BLOCKED -> Text(tr(
+                                                "لم يحجب Cloudflare النطاق. سلامة الصفحة غير مؤكدة.",
+                                                "Cloudflare did not block the domain. Page safety is unverified."),
+                                                color = secondary)
+                                            LinkDomainReputation.Result.UNAVAILABLE -> Text(tr(
+                                                "تعذّر الحصول على نتيجة DNS قابلة للتفسير.",
+                                                "No conclusive DNS response was available."), color = secondary)
+                                            null -> Unit
+                                        }
+                                    }
+                                }
                                 Spacer(Modifier.height(8.dp))
                                 Text(when (item.verdict) {
                                     LinkInspector.Verdict.REVIEW ->
@@ -893,7 +952,7 @@ fun KanafGlassHome(
                         Spacer(Modifier.height(12.dp))
                         Button(
                             onClick = onTestEngines, enabled = !busy,
-                            modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp),
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
                             shape = RoundedCornerShape(16.dp)
                         ) {
                             Text(if (busy) tr("جارٍ الاختبار…", "Testing…")
@@ -974,7 +1033,7 @@ fun KanafGlassHome(
                                 }
                                 Row(
                                     Modifier.fillMaxWidth().clickable { onLanguageChange(option) }
-                                        .heightIn(min = 56.dp).padding(vertical = 6.dp),
+                                        .heightIn(min = 48.dp).padding(vertical = 6.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     RadioButton(selected = uiLanguage == option,
@@ -1008,7 +1067,7 @@ fun KanafGlassHome(
                                 KanafSection.ENGINES -> tr("محركات الكشف", "Detection engines")
                                 KanafSection.SCAN -> tr("الفحص", "Scan")
                             }
-                            Row(Modifier.fillMaxWidth().heightIn(min = 50.dp),
+                            Row(Modifier.fillMaxWidth().heightIn(min = 48.dp),
                                 verticalAlignment = Alignment.CenterVertically) {
                                 Text(label, color = ink, style = MaterialTheme.typography.bodyMedium,
                                     modifier = Modifier.weight(1f))
@@ -1075,7 +1134,7 @@ fun KanafGlassHome(
                             "Kanaf checks a publisher-signed threat database. Native engine binaries update through application releases."
                         ), color = secondary, style = MaterialTheme.typography.bodySmall)
                         OutlinedButton(onClick = onUpdateThreatRules, enabled = !busy,
-                            modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
                                 .testTag("update_detection_rules")) {
                             Text(tr("التحقق من تحديثات الكشف", "Check detection updates"))
                         }
@@ -1109,13 +1168,13 @@ fun KanafGlassHome(
                         ), color = secondary, style = MaterialTheme.typography.bodyMedium)
                         Spacer(Modifier.height(12.dp))
                         Button(onClick = { confirmVaultSave = true }, enabled = !busy,
-                            modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
                             shape = RoundedCornerShape(16.dp)) {
                             Text(tr("إضافة ملف إلى الخزنة", "Add file to vault"))
                         }
                         Spacer(Modifier.height(8.dp))
                         OutlinedButton(onClick = { confirmQuarantine = true }, enabled = !busy,
-                            modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
                             shape = RoundedCornerShape(16.dp)) {
                             Text(tr("حجر مستند مختار (قد يحذف الأصل)",
                                 "Quarantine selected document (may delete original)"))
@@ -1321,7 +1380,7 @@ private fun GlassPanel(
         Modifier.fillMaxWidth()
             .border(1.dp, outline, RoundedCornerShape(22.dp))
             .background(fill, RoundedCornerShape(22.dp))
-            .padding(20.dp),
+            .padding(horizontal = 14.dp, vertical = 12.dp),
         content = content
     )
 }
