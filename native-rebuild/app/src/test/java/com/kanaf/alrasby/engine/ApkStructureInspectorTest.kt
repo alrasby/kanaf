@@ -55,6 +55,15 @@ class ApkStructureInspectorTest {
         assertEquals("cancelled", (result as ApkStructureInspector.Result.Incomplete).reason)
     }
 
+    @Test fun parsingTimeoutFailsClosedBeforePotentialZipBombDecompression() {
+        var ticks = 0L
+        val inspector = ApkStructureInspector(maxDurationNanos = 10L,
+            nanoTime = { ticks += 11L; ticks })
+        val result = inspector.inspect(
+            ByteArrayInputStream(archive("AndroidManifest.xml", "classes.dex")))
+        assertEquals("time-limit", (result as ApkStructureInspector.Result.Incomplete).reason)
+    }
+
     @Test fun invalidArchiveFailsClosed() {
         val result = ApkStructureInspector().inspect(ByteArrayInputStream(byteArrayOf(1, 2, 3)))
         assertTrue(result is ApkStructureInspector.Result.Incomplete)

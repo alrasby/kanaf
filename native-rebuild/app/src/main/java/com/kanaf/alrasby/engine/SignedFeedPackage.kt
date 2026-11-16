@@ -15,7 +15,17 @@ internal object SignedFeedPackage {
     data class Parsed(val bytes: ByteArray, val manifest: SignedSignatureUpdate.Manifest)
     private const val MAX_META = 4096
 
-    fun parse(source: InputStream): Parsed {
+    fun parse(source: InputStream,
+              maxDurationNanos: Long = 30_000_000_000L,
+              nanoTime: () -> Long = System::nanoTime): Parsed {
+        require(maxDurationNanos > 0)
+        val startedAt = nanoTime()
+        fun checkDeadline() {
+            if (nanoTime() - startedAt >= maxDurationNanos ||
+                Thread.currentThread().isInterrupted) {
+                throw IOException("signed-feed-timeout-or-interrupted")
+            }
+        }
         val payloads = HashMap<String, ByteArray>()
         val limited = object : java.io.FilterInputStream(source) {
             var bytesRead = 0L
@@ -33,7 +43,9 @@ internal object SignedFeedPackage {
         }
         ZipInputStream(limited).use { archive ->
             while (true) {
+                checkDeadline()
                 val entry = archive.nextEntry ?: break
+                checkDeadline()
                 val name = entry.name
                 val max = when (name) {
                     "manifest.txt" -> MAX_META
@@ -43,9 +55,17 @@ internal object SignedFeedPackage {
                 if (entry.isDirectory || name in payloads) throw IOException("signed-feed-duplicate-entry")
                 val output = ByteArrayOutputStream()
                 val buffer = ByteArray(8192)
+                var zeroReads = 0
                 while (true) {
+                    checkDeadline()
                     val n = archive.read(buffer)
+                    checkDeadline()
                     if (n < 0) break
+                    if (n == 0) {
+                        if (++zeroReads >= 16) throw IOException("signed-feed-stalled-stream")
+                        continue
+                    }
+                    zeroReads = 0
                     if (n > max - output.size()) throw IOException("signed-feed-uncompressed-limit")
                     if (n > 0) output.write(buffer, 0, n)
                 }

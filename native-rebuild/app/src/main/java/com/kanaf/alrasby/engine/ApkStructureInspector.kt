@@ -10,9 +10,14 @@ import java.util.zip.ZipInputStream
 class ApkStructureInspector(
     private val maxEntries: Int = 4096,
     private val maxEntryBytes: Long = 64L * 1024 * 1024,
-    private val maxExpandedBytes: Long = 256L * 1024 * 1024
+    private val maxExpandedBytes: Long = 256L * 1024 * 1024,
+    private val maxDurationNanos: Long = 25_000_000_000L,
+    private val nanoTime: () -> Long = System::nanoTime
 ) {
-    init { require(maxEntries > 0 && maxEntryBytes > 0 && maxExpandedBytes > 0) }
+    init {
+        require(maxEntries > 0 && maxEntryBytes > 0 &&
+            maxExpandedBytes > 0 && maxDurationNanos > 0)
+    }
 
     data class Summary(
         val entries: Int,
@@ -29,6 +34,12 @@ class ApkStructureInspector(
     }
 
     fun inspect(input: InputStream, cancelled: () -> Boolean = { false }): Result {
+        val startedAt = nanoTime()
+        fun stopReason(): String? = when {
+            cancelled() -> "cancelled"
+            nanoTime() - startedAt >= maxDurationNanos -> "time-limit"
+            else -> null
+        }
         var entries = 0
         var dex = 0
         var libraries = 0
@@ -38,11 +49,13 @@ class ApkStructureInspector(
         var total = 0L
         val names = HashSet<String>()
         val buffer = ByteArray(64 * 1024)
+        var zeroReads = 0
         try {
             ZipInputStream(input).use { zip ->
                 while (true) {
-                    if (cancelled()) return Result.Incomplete("cancelled")
+                    stopReason()?.let { return Result.Incomplete(it) }
                     val entry = zip.nextEntry ?: break
+                    stopReason()?.let { return Result.Incomplete(it) }
                     entries++
                     if (entries > maxEntries) return Result.Incomplete("entry-limit")
                     val name = entry.name
@@ -55,11 +68,17 @@ class ApkStructureInspector(
                     if (Regex("^lib/[^/]+/[^/]+\\.so$").matches(normalized)) libraries++
                     var entryBytes = 0L
                     if (!entry.isDirectory) {
+                        zeroReads = 0
                         while (true) {
-                            if (cancelled()) return Result.Incomplete("cancelled")
+                            stopReason()?.let { return Result.Incomplete(it) }
                             val n = zip.read(buffer)
+                            stopReason()?.let { return Result.Incomplete(it) }
                             if (n < 0) break
-                            if (n == 0) continue
+                            if (n == 0) {
+                                if (++zeroReads >= 16) return Result.Incomplete("stalled-stream")
+                                continue
+                            }
+                            zeroReads = 0
                             if (n.toLong() > maxEntryBytes - entryBytes) return Result.Incomplete("entry-size-limit")
                             if (n.toLong() > maxExpandedBytes - total) return Result.Incomplete("expanded-size-limit")
                             entryBytes += n
@@ -72,6 +91,7 @@ class ApkStructureInspector(
         } catch (_: Exception) {
             return Result.Incomplete("invalid-or-unreadable-apk")
         }
+        stopReason()?.let { return Result.Incomplete(it) }
         if (!manifest || dex == 0) return Result.Incomplete("missing-required-apk-components")
         return Result.Complete(Summary(entries, dex, libraries, manifest, resources, unsafe, total))
     }

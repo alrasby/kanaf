@@ -68,6 +68,16 @@ class SignedFeedPackageTest {
         }
     }
 
+    @Test fun parsingDeadlineRejectsUntrustedCompressedFeeds() {
+        var now = 0L
+        val zipped = zip("manifest.txt" to manifest(), "signatures.tsv" to database)
+        val error = assertThrows(Exception::class.java) {
+            SignedFeedPackage.parse(ByteArrayInputStream(zipped),
+                maxDurationNanos = 10, nanoTime = { now += 11; now })
+        }
+        assertTrue(error.message.orEmpty().contains("timeout"))
+    }
+
     @Test fun rejectsOversizedEntryBeforeAcceptingPayload() {
         val tooBig = ByteArray(VerifiedSignatureBundle.MAX_DATABASE_BYTES + 1)
         assertThrows(Exception::class.java) {
