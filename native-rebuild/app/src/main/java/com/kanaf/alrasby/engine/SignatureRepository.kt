@@ -29,17 +29,19 @@ class SignatureRepository(private val context: Context) {
      */
     internal fun installBundledIfAbsent(
         source: InputStream, pinnedPublicKey: ByteArray, minVersion: Long
-    ): Boolean = synchronized(bootstrapLock) {
-        if (hasCommittedState(verifiedBundle)) return@synchronized false
-        if (legacyActive.isFile || hasCommittedState(legacyVersion)) {
-            error("legacy-signature-db-requires-verified-reinstall")
+    ): Boolean = source.use { input ->
+        synchronized(bootstrapLock) {
+            if (hasCommittedState(verifiedBundle)) return@synchronized false
+            if (legacyActive.isFile || hasCommittedState(legacyVersion)) {
+                error("legacy-signature-db-requires-verified-reinstall")
+            }
+            val parsed = SignedFeedPackage.parse(input)
+            require(parsed.manifest.version >= minVersion && minVersion > 0L) {
+                "Bundled database below release minimum"
+            }
+            installVerified(parsed.bytes, parsed.manifest, pinnedPublicKey)
+            true
         }
-        val parsed = source.use { SignedFeedPackage.parse(it) }
-        require(parsed.manifest.version >= minVersion && minVersion > 0L) {
-            "Bundled database below release minimum"
-        }
-        installVerified(parsed.bytes, parsed.manifest, pinnedPublicKey)
-        true
     }
     private val directory: File
         get() = File(context.filesDir, "signature-db").also { check(it.mkdirs() || it.isDirectory) }
@@ -107,7 +109,7 @@ class SignatureRepository(private val context: Context) {
         bytes: ByteArray,
         manifest: SignedSignatureUpdate.Manifest,
         pinnedPublicKeyDer: ByteArray
-    ) {
+    ) = synchronized(bootstrapLock) {
         require(manifest.version >= BuildConfig.KANAF_SIGNATURE_MIN_VERSION) {
             "Signature database below binary minimum version"
         }
