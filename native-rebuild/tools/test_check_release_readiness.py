@@ -182,6 +182,27 @@ class ReleaseReadinessTest(unittest.TestCase):
                                    Path(directory) / "signature",
                                    key, "a" * 64)
 
+    def test_real_der_rsa_attestation_round_trip_and_tamper_rejection(self):
+        # Short-lived test identity only, never a Kanaf publisher or QA key.
+        with tempfile.TemporaryDirectory() as directory:
+            key = Path(directory) / "temporary-private.pem"
+            public = Path(directory) / "temporary-public.der"
+            report = Path(directory) / "report.json"
+            signature = Path(directory) / "report.sig"
+            def openssl(*args):
+                subprocess.run(["openssl", *map(str, args)],
+                               check=True, capture_output=True, timeout=20)
+            openssl("genpkey", "-algorithm", "RSA", "-pkeyopt",
+                    "rsa_keygen_bits:2048", "-out", key)
+            openssl("pkey", "-in", key, "-pubout", "-outform", "DER", "-out", public)
+            report.write_text('{"schema":1}', encoding="utf-8")
+            openssl("dgst", "-sha256", "-sign", key, "-out", signature, report)
+            pinned = hashlib.sha256(public.read_bytes()).hexdigest()
+            verify_attestation(report, signature, public, pinned)
+            report.write_text('{"schema":2}', encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "evidence-signature-invalid"):
+                verify_attestation(report, signature, public, pinned)
+
 
 if __name__ == "__main__":
     unittest.main()

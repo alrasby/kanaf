@@ -6,12 +6,14 @@ using a key supplied OUTSIDE this repository and APK. This is a technical gate,
 not a substitute for human evaluation or physical-device penetration testing.
 """
 import argparse
+import base64
 import datetime as dt
 import hashlib
 import json
 from pathlib import Path
 import re
 import subprocess
+import tempfile
 
 
 def validate(report, *, today=None):
@@ -186,10 +188,19 @@ def verify_attestation(evidence_path: Path, signature_path: Path,
     actual = hashlib.sha256(public_key_path.read_bytes()).hexdigest()
     if actual != expected_key_sha256:
         raise ValueError("untrusted-qa-key-fingerprint-mismatch")
-    completed = subprocess.run([
-        "openssl", "dgst", "-sha256", "-verify", str(public_key_path),
-        "-signature", str(signature_path), str(evidence_path)
-    ], capture_output=True, check=False, timeout=10)
+    # Publisher QA stores its pinned public key as X.509 SPKI DER, while
+    # 'openssl dgst -verify' expects a PEM public key. Convert only the
+    # already fingerprint-verified PUBLIC bytes in a disposable directory.
+    encoded = base64.b64encode(public_key_path.read_bytes()).decode("ascii")
+    pem_lines = "\n".join(encoded[n:n + 64] for n in range(0, len(encoded), 64))
+    with tempfile.TemporaryDirectory(prefix="kanaf-qa-pub-") as temporary:
+        pem = Path(temporary) / "qa-public.pem"
+        pem.write_text("-----BEGIN PUBLIC KEY-----\n" + pem_lines +
+                       "\n-----END PUBLIC KEY-----\n", encoding="ascii")
+        completed = subprocess.run([
+            "openssl", "dgst", "-sha256", "-verify", str(pem),
+            "-signature", str(signature_path), str(evidence_path)
+        ], capture_output=True, check=False, timeout=10)
     if completed.returncode != 0:
         raise ValueError("evidence-signature-invalid")
 
