@@ -46,6 +46,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.kanaf.alrasby.engine.ThreatFeatureVector
 import com.kanaf.alrasby.engine.VerifiedLinearThreatModel
+import com.kanaf.alrasby.engine.KanafUrlAi
 import com.kanaf.alrasby.engine.ThreatModel
 import com.kanaf.alrasby.engine.TrustJourney
 import com.kanaf.alrasby.engine.ThreatEvidence
@@ -594,15 +595,26 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
         mutableStateOf(runCatching { SignatureRepository(activity).load() }.getOrNull())
     }
     val mlModel: ThreatModel = remember { VerifiedLinearThreatModel.load(activity) }
-    val aiModelStatus = if (mlModel is VerifiedLinearThreatModel) KanafMessage(
-        "نموذج محلي موقّع محمّل: " + mlModel.modelVersion +
-            ". النتيجة استشارية، ولا تُثبت سلامة الملفات.",
-        "Signed on-device model loaded: " + mlModel.modelVersion +
-            ". Advisory score only; never proof of safety."
+    val urlRiskModel = remember { KanafUrlAi.load(activity) }
+    val apkAiStatus = if (mlModel is VerifiedLinearThreatModel) KanafMessage(
+        "نموذج APK موقّع محمّل: " + mlModel.modelVersion +
+            "؛ درجته استشارية وليست حكم حماية.",
+        "Signed APK model loaded: " + mlModel.modelVersion +
+            "; advisory only, not an antivirus verdict."
     ) else KanafMessage(
-        "غير مفعل: هذا الإصدار لا يتضمن نموذجًا مدرّبًا موقّعًا ومدققًا. لا تُرسل الملفات أو الرسائل إلى خدمة ذكاء اصطناعي.",
-        "Unavailable: no signed, independently validated trained model is shipped. No files or messages are uploaded to an AI service."
+        "تحليل APK بالذكاء الاصطناعي غير متاح: لا توجد أوزان مدربة ومعتمدة لبرمجيات أندرويد الخبيثة.",
+        "APK malware AI unavailable: independently validated Android malware weights have not been supplied."
     )
+    val urlAiStatus = if (urlRiskModel != null) KanafMessage(
+        "تحليل روابط تجريبي فعّال محليًا بنموذج " + urlRiskModel.version +
+            " مدرّب على بيانات PhiUSIIL التاريخية. النتائج تقديرية وليست تأكيدًا للسلامة.",
+        "Experimental offline URL model " + urlRiskModel.version +
+            " loaded from historical PhiUSIIL labels. Scores are advisory, not a safety guarantee."
+    ) else KanafMessage(
+        "نموذج روابط Kanaf AI التجريبي غير مضمّن في هذا البناء.",
+        "Experimental Kanaf AI URL model is not included in this build."
+    )
+    val aiModelStatus = KanafMessage.combine(listOf(urlAiStatus, apkAiStatus))
     val trustedFeed = remember { ProductionFeedInstaller() }
     var feedStatus by remember { mutableStateOf(KanafMessage.EMPTY) }
     val rulesUpdater = remember { ThreatRuleUpdater() }
@@ -1115,6 +1127,7 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
         },
         selfTestStatus = selfTestStatus.displayed(uiLanguage),
         aiModelStatus = aiModelStatus.displayed(uiLanguage),
+        urlRiskModel = urlRiskModel,
         onTestEngines = {
             if (!busy) {
                 val session = selfTestSession.incrementAndGet()

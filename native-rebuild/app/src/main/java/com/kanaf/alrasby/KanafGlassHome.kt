@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import com.kanaf.alrasby.engine.LinkInspector
+import com.kanaf.alrasby.engine.KanafUrlAi
 import com.kanaf.alrasby.engine.EncryptedVault
 import com.kanaf.alrasby.engine.InstalledAppInventory
 
@@ -73,6 +74,7 @@ fun KanafGlassHome(
     status: String,
     selfTestStatus: String,
     aiModelStatus: String,
+    urlRiskModel: KanafUrlAi?,
     onTestEngines: () -> Unit,
     onPickFile: () -> Unit,
     deviceScanStatus: String,
@@ -725,8 +727,8 @@ fun KanafGlassHome(
                             Text(tr("تحليل محلي", "Inspect locally"))
                         }
                         Text(tr(
-                            "تحليل بنيوي فقط لروابط HTTP/HTTPS، دون اتصال بالشبكة أو فتح الروابط. لا يتحقق من سمعة الموقع أو وجود برمجيات خبيثة.",
-                            "Structure-only HTTP/HTTPS inspection. No network access or link opening. This does not check site reputation or malware."
+                            "تحليل محلي دون فتح الرابط أو إرسال بياناته. عند توافر Kanaf AI التجريبي تُعرض درجة احتمالية مبنية على نص الرابط وبيانات تاريخية، لا فحص سمعة أو ضمان سلامة.",
+                            "Local analysis without opening or uploading the URL. When experimental Kanaf AI is included, its historical URL-text score is advisory; no site reputation check or safety guarantee."
                         ), color = secondary, style = MaterialTheme.typography.bodySmall)
                     }
                     linkReport?.let { report ->
@@ -765,6 +767,25 @@ fun KanafGlassHome(
                                         tr("لم تظهر مؤشرات بنيوية معروفة؛ سلامة الرابط غير مؤكدة.",
                                             "No structural flags found; the link's safety is not verified.")
                                 }, color = if (dark) Aqua else Teal)
+                                if (item.verdict != LinkInspector.Verdict.INVALID) {
+                                    val urlScore = urlRiskModel?.evaluate(item.url)
+                                    if (urlScore != null) {
+                                        Spacer(Modifier.height(8.dp))
+                                        Text(tr(
+                                            "Kanaf AI تجريبي — مؤشر تشابه مع روابط التصيّد في بيانات التدريب: " +
+                                                (urlScore * 100).toInt() + "%؛ ليس حكمًا بوجود تصيّد أو تأكيدًا للسلامة.",
+                                            "Experimental Kanaf AI — similarity to historical phishing URL patterns: " +
+                                                (urlScore * 100).toInt() + "%. Not a phishing verdict or proof of safety."
+                                        ), modifier = Modifier.testTag("url_ai_score"),
+                                            color = if (dark) Aqua else Teal,
+                                            style = MaterialTheme.typography.bodySmall)
+                                    } else if (urlRiskModel == null) {
+                                        Text(tr("Kanaf AI للروابط غير مفعّل في هذه النسخة.",
+                                            "Kanaf AI URL model not enabled in this build."),
+                                            color = secondary,
+                                            style = MaterialTheme.typography.bodySmall)
+                                    }
+                                }
                                 item.signals.forEach { signal ->
                                     Text("• " + signalText(signal), color = secondary,
                                         style = MaterialTheme.typography.bodySmall)
@@ -901,8 +922,8 @@ fun KanafGlassHome(
                             style = MaterialTheme.typography.bodyMedium,
                             modifier = Modifier.testTag("kanaf_ai_status"))
                         Text(tr(
-                            "التحليل اليدوي لخصائص APK فقط عند توفر نموذج معتمد. لا يصل للرسائل أو المكالمات خفية ولا يحذف الملفات.",
-                            "Only selected APK structural analysis, when a verified model is available. No hidden access to messages or calls, and no file deletion."
+                            "نموذج الروابط التجريبي منفصل عن نموذج APK. كلاهما محلي، ولا يصل للرسائل أو المكالمات خفية ولا يحذف الملفات. لا تُعتمد درجات النموذج التجريبي لتحديد سلامة الروابط.",
+                            "The experimental URL model is separate from APK scanning. Both are offline and never secretly access messages/calls or delete files. Pilot scores do not establish link safety."
                         ), color = secondary, style = MaterialTheme.typography.bodySmall)
                     }
                     GlassPanel(card, stroke) {

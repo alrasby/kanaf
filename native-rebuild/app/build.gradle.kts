@@ -48,6 +48,18 @@ android {
             "Invalid machine-learning signing public key"
         }
         buildConfigField("String", "KANAF_MODEL_PUBLIC_KEY_BASE64", "\"$modelKey\"")
+        val urlModelKey = providers.gradleProperty("kanafUrlModelPublicKeyBase64")
+            .orNull.orEmpty()
+        require(urlModelKey.matches(Regex("[A-Za-z0-9+/=]*"))) {
+            "Invalid URL model verification key"
+        }
+        val urlWeights = file("src/main/assets/url_risk_model.txt")
+        val urlProof = file("src/main/assets/url_risk_model.sig")
+        require(if (urlModelKey.isBlank()) !urlWeights.exists() && !urlProof.exists()
+                else urlWeights.isFile && urlProof.isFile) {
+            "Experimental URL AI requires signed weights and build-pinned key, or NONE."
+        }
+        buildConfigField("String", "KANAF_URL_MODEL_PUBLIC_KEY_BASE64", "\"$urlModelKey\"")
         val modelFile = file("src/main/assets/validated_model.txt")
         val modelSignature = file("src/main/assets/validated_model.sig")
         require(if (modelKey.isBlank()) !modelFile.exists() && !modelSignature.exists()
