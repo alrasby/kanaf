@@ -53,11 +53,17 @@ class KanafUiNavigationTest {
             rule.onNodeWithTag("dns_system_off").assertExists()
             rule.onNodeWithTag("dns_system_auto").assertExists()
         }
-        rule.onNodeWithTag("dns_provider_dns_adguard-dns_com").assertExists()
-        rule.onNodeWithTag("dns_provider_family_adguard-dns_com").assertExists()
-        rule.onNodeWithTag("dns_provider_switch_dns_adguard_com").assertExists()
-        rule.onNodeWithTag("dns_provider_switch_dns_adguard-dns_com").assertExists()
-        rule.onNodeWithTag("dns_provider_switch_family_adguard-dns_com").assertExists()
+        if (BuildConfig.KANAF_PLAY_DNS_SECURITY_ONLY) {
+            rule.onNodeWithTag("dns_provider_security_cloudflare-dns_com").assertExists()
+            rule.onNodeWithTag("dns_provider_switch_security_cloudflare-dns_com").assertExists()
+            rule.onNodeWithTag("dns_provider_dns_adguard-dns_com").assertDoesNotExist()
+        } else {
+            rule.onNodeWithTag("dns_provider_dns_adguard-dns_com").assertExists()
+            rule.onNodeWithTag("dns_provider_family_adguard-dns_com").assertExists()
+            rule.onNodeWithTag("dns_provider_switch_dns_adguard_com").assertExists()
+            rule.onNodeWithTag("dns_provider_switch_dns_adguard-dns_com").assertExists()
+            rule.onNodeWithTag("dns_provider_switch_family_adguard-dns_com").assertExists()
+        }
         rule.onNodeWithTag("dns_add_quick_tile").assertExists()
         rule.onNodeWithTag("dns_filter_switch").assertExists()
         rule.onNodeWithTag("dns_refresh_stats").assertExists()

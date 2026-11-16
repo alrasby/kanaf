@@ -35,10 +35,11 @@ class DnsFilterAndroidTest {
             forwarded = true
             null
         }!!
-        assertFalse(forwarded)
+        val isPlay = BuildConfig.KANAF_PLAY_DNS_SECURITY_ONLY
+        assertEquals(isPlay, forwarded)
         val parsed = com.kanaf.alrasby.engine.DnsIpv6PacketCodec.parseUdp(answer)!!
         assertEquals(54213, parsed.destinationPort)
-        assertEquals(3, parsed.dns[3].toInt() and 15)
+        assertEquals(if (isPlay) 2 else 3, parsed.dns[3].toInt() and 15)
         assertArrayEquals(client, parsed.destinationIp)
     }
 
@@ -60,9 +61,10 @@ class DnsFilterAndroidTest {
             forwarded = true
             null
         }!!
-        assertFalse(forwarded)
+        val isPlay = BuildConfig.KANAF_PLAY_DNS_SECURITY_ONLY
+        assertEquals(isPlay, forwarded)
         val decoded = DnsPacketCodec.parseUdp(response)!!
-        assertEquals(3, decoded.dns[3].toInt() and 15)
+        assertEquals(if (isPlay) 2 else 3, decoded.dns[3].toInt() and 15)
         assertEquals(54000, decoded.destinationPort)
         assertArrayEquals(client, decoded.destinationIp)
     }

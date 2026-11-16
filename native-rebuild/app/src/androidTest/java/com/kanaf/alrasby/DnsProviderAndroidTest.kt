@@ -13,6 +13,15 @@ class DnsProviderAndroidTest {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val original = DnsProviderStore.selected(context)
         try {
+            if (BuildConfig.KANAF_PLAY_DNS_SECURITY_ONLY) {
+                assertFalse(DnsProviderStore.choose(context, DnsProviderStore.FAMILY))
+                assertFalse(DnsProviderStore.choose(context, DnsProviderStore.STANDARD))
+                assertTrue(DnsProviderStore.choose(context, DnsProviderStore.PLAY_SECURITY))
+                assertEquals(DnsProviderStore.PLAY_SECURITY, DnsProviderStore.selected(context))
+                assertEquals("https://security.cloudflare-dns.com/dns-query",
+                    DnsProviderStore.endpoint(DnsProviderStore.selected(context)))
+                assertNull(DnsProviderStore.endpoint(DnsProviderStore.STANDARD))
+            } else {
             assertTrue(DnsProviderStore.choose(context, DnsProviderStore.FAMILY))
             assertEquals(DnsProviderStore.FAMILY, DnsProviderStore.selected(context))
             assertEquals("https://family.adguard-dns.com/dns-query",
@@ -25,6 +34,8 @@ class DnsProviderAndroidTest {
 
             assertFalse(DnsProviderStore.choose(context, "attacker.invalid"))
             assertEquals(DnsProviderStore.LEGACY, DnsProviderStore.selected(context))
+            }
+            assertFalse(DnsProviderStore.choose(context, "attacker.invalid"))
         } finally {
             assertTrue(DnsProviderStore.choose(context, original))
         }
