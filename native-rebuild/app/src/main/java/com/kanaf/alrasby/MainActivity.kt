@@ -46,6 +46,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.kanaf.alrasby.engine.ThreatFeatureVector
 import com.kanaf.alrasby.engine.VerifiedLinearThreatModel
+import com.kanaf.alrasby.engine.ExperimentalApkStructureModel
 import com.kanaf.alrasby.engine.KanafUrlAi
 import com.kanaf.alrasby.engine.ThreatModel
 import com.kanaf.alrasby.engine.TrustJourney
@@ -594,7 +595,12 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
     var signatures by remember {
         mutableStateOf(runCatching { SignatureRepository(activity).load() }.getOrNull())
     }
-    val mlModel: ThreatModel = remember { VerifiedLinearThreatModel.load(activity) }
+    // Prefer independently validated, signed malware weights when available.
+    // Otherwise the clearly marked structural fixture pilot is advisory only.
+    val mlModel: ThreatModel = remember {
+        val trusted = VerifiedLinearThreatModel.load(activity)
+        if (trusted is VerifiedLinearThreatModel) trusted else ExperimentalApkStructureModel
+    }
     val urlRiskModel = remember { KanafUrlAi.load(activity) }
     val apkAiStatus = if (mlModel is VerifiedLinearThreatModel) KanafMessage(
         "نموذج APK موقّع محمّل: " + mlModel.modelVersion +
@@ -602,8 +608,8 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
         "Signed APK model loaded: " + mlModel.modelVersion +
             "; advisory only, not an antivirus verdict."
     ) else KanafMessage(
-        "تحليل APK بالذكاء الاصطناعي غير متاح: لا توجد أوزان مدربة ومعتمدة لبرمجيات أندرويد الخبيثة.",
-        "APK malware AI unavailable: independently validated Android malware weights have not been supplied."
+        "نموذج Kanaf AI البنيوي التجريبي يعمل محليًا. أوزانه مدربة على أمثلة بنيوية مولّدة للاختبار وليس ملفات خبيثة حقيقية؛ لا يُعتبر كاشف فيروسات.",
+        "Experimental local Kanaf AI structural model is active. Weights were trained on generated structural fixtures, NOT real malware; this is not a malware detector."
     )
     val urlAiStatus = if (urlRiskModel != null) KanafMessage(
         "تحليل روابط تجريبي فعّال محليًا بنموذج " + urlRiskModel.version +
@@ -873,10 +879,17 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
                                     "التحليل بالذكاء الاصطناعي غير متاح؛ لم يُشغَّل نموذج مدرّب ومعتمد.",
                                     "AI risk analysis unavailable; no trained, validated model was run."
                                 )
-                                is ThreatModel.Prediction.Scored -> KanafMessage(
-                                    "درجة ML استشارية: ${modelResult.riskProbability} (نموذج ${modelResult.modelVersion}). ليست إثباتًا لوجود تهديد.",
-                                    "Advisory ML score: ${modelResult.riskProbability} (model ${modelResult.modelVersion}). Not proof of malware."
-                                )
+                                is ThreatModel.Prediction.Scored ->
+                                    if (modelResult.modelVersion == ExperimentalApkStructureModel.modelVersion) {
+                                        val score = (modelResult.riskProbability * 100f).toInt()
+                                        KanafMessage(
+                                            "Kanaf AI: مؤشر شذوذ بنيوي تجريبي $score/100. النموذج مدرب على أمثلة مولّدة، وليس على برمجيات خبيثة فعلية؛ النتيجة لا تثبت العدوى أو السلامة.",
+                                            "Kanaf AI: experimental structural anomaly score $score/100. Trained on generated fixtures, NOT real malware; neither proof of infection nor safety."
+                                        )
+                                    } else KanafMessage(
+                                        "درجة ML استشارية: ${modelResult.riskProbability} (نموذج ${modelResult.modelVersion}). ليست إثباتًا لوجود تهديد.",
+                                        "Advisory ML score: ${modelResult.riskProbability} (model ${modelResult.modelVersion}). Not proof of malware."
+                                    )
                             }
                             KanafMessage.combine(listOf(
                                 decisionNote, assessmentNote, consensusNote,
