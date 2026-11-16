@@ -71,10 +71,12 @@ class DnsAdFilterTest {
             client, server, 53001, 53, query("ads.doubleclick.net"))!!
         var calls = 0
         val reply = DnsFilterCore.reply(packet, server) { calls++; null }!!
-        assertEquals(0, calls)
+        val isPlay = com.kanaf.alrasby.BuildConfig.KANAF_PLAY_DNS_SECURITY_ONLY
+        assertEquals(if (isPlay) 1 else 0, calls)
         val decoded = DnsPacketCodec.parseUdp(reply)!!
         assertEquals(53001, decoded.destinationPort)
-        assertEquals(3, decoded.dns[3].toInt() and 15)
+        // Play DNS forwards ads; null upstream fails as SERVFAIL, not NXDOMAIN.
+        assertEquals(if (isPlay) 2 else 3, decoded.dns[3].toInt() and 15)
         assertArrayEquals(client, decoded.destinationIp)
     }
 

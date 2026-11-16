@@ -22,17 +22,20 @@ class DnsSessionCountersTest {
 
     @Test fun countsBlockedForwardedAndFailedWithoutRecordingDomains() {
         val stats = DnsSessionCounters()
+        var adUpstreamCalls = 0
         assertNotNull(DnsFilterCore.reply(packet("ads.doubleclick.net"), server, stats) {
-            fail("blocked DNS must not reach upstream")
+            adUpstreamCalls++
             null
         })
+        val isPlay = com.kanaf.alrasby.BuildConfig.KANAF_PLAY_DNS_SECURITY_ONLY
+        assertEquals(if (isPlay) 1 else 0, adUpstreamCalls)
         val valid = DnsPacketCodec.nxdomain(query("example.com"))!!
         assertNotNull(DnsFilterCore.reply(packet("example.com"), server, stats) { valid })
         assertNotNull(DnsFilterCore.reply(packet("example.org"), server, stats) { null })
         val snapshot = stats.snapshot()
-        assertEquals(1, snapshot.blocked)
+        assertEquals(if (isPlay) 0 else 1, snapshot.blocked)
         assertEquals(1, snapshot.forwarded)
-        assertEquals(1, snapshot.failed)
+        assertEquals(if (isPlay) 2 else 1, snapshot.failed)
         assertEquals(3, snapshot.total)
         assertFalse(snapshot.toString().contains("example.com"))
     }

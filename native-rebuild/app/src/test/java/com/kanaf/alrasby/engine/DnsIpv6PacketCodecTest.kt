@@ -60,10 +60,11 @@ class DnsIpv6PacketCodecTest {
         }!!
         val answer = DnsIpv6PacketCodec.parseUdp(blocked)!!
         assertEquals(51234, answer.destinationPort)
-        assertEquals(3, answer.dns[3].toInt() and 15)
+        val isPlay = com.kanaf.alrasby.BuildConfig.KANAF_PLAY_DNS_SECURITY_ONLY
+        assertEquals(if (isPlay) 2 else 3, answer.dns[3].toInt() and 15)
         assertArrayEquals(client, answer.destinationIp)
-        assertEquals(0, upstream)
-        assertEquals(1, counts.snapshot().blocked)
+        assertEquals(if (isPlay) 1 else 0, upstream)
+        assertEquals(if (isPlay) 0 else 1, counts.snapshot().blocked)
 
         val clean = question("example.com")
         val valid = DnsPacketCodec.nxdomain(clean)!!
