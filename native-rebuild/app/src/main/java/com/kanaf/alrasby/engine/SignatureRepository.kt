@@ -5,6 +5,8 @@ import com.kanaf.alrasby.BuildConfig
 import android.util.AtomicFile
 import java.io.File
 import java.io.InputStreamReader
+import java.io.InputStream
+import java.util.Base64
 
 /**
  * Local signature repository. Remote updating is DISABLED until an authenticated
@@ -14,6 +16,31 @@ import java.io.InputStreamReader
  * This prevents an interrupted update from pairing different versions and data.
  */
 class SignatureRepository(private val context: Context) {
+    companion object {
+        // One lock per process ensures simultaneous first-use requests cannot
+        // independently install conflicting publisher feed versions.
+        private val bootstrapLock = Any()
+    }
+
+    /**
+     * Production first-run: verify the publisher-signed APK-bundled database
+     * against the application-pinned key, then atomically commit it.
+     * The built-in debug/test signatures.tsv file is NEVER a production fallback.
+     */
+    internal fun installBundledIfAbsent(
+        source: InputStream, pinnedPublicKey: ByteArray, minVersion: Long
+    ): Boolean = synchronized(bootstrapLock) {
+        if (hasCommittedState(verifiedBundle)) return@synchronized false
+        if (legacyActive.isFile || hasCommittedState(legacyVersion)) {
+            error("legacy-signature-db-requires-verified-reinstall")
+        }
+        val parsed = source.use { SignedFeedPackage.parse(it) }
+        require(parsed.manifest.version >= minVersion && minVersion > 0L) {
+            "Bundled database below release minimum"
+        }
+        installVerified(parsed.bytes, parsed.manifest, pinnedPublicKey)
+        true
+    }
     private val directory: File
         get() = File(context.filesDir, "signature-db").also { check(it.mkdirs() || it.isDirectory) }
 
@@ -27,6 +54,23 @@ class SignatureRepository(private val context: Context) {
         file.isFile || File(file.path + ".bak").isFile
 
     fun load(): Map<String, String> {
+        if (BuildConfig.KANAF_SIGNATURE_MIN_VERSION > 0L &&
+            !hasCommittedState(verifiedBundle)) {
+            synchronized(bootstrapLock) {
+                if (!hasCommittedState(verifiedBundle) &&
+                    !legacyActive.isFile && !hasCommittedState(legacyVersion)) {
+                    val encoded = BuildConfig.KANAF_SIGNATURE_PUBLIC_KEY_BASE64
+                    check(encoded.isNotBlank()) { "production-feed-key-unavailable" }
+                    val pub = Base64.getDecoder().decode(encoded)
+                    // No unsigned fallback if asset is missing, corrupt, or
+                    // signed by the wrong key. Callers report INCOMPLETE.
+                    context.assets.open("production_signatures.zip").use { input ->
+                        installBundledIfAbsent(input, pub,
+                            BuildConfig.KANAF_SIGNATURE_MIN_VERSION)
+                    }
+                }
+            }
+        }
         val atomic = AtomicFile(verifiedBundle)
         if (hasCommittedState(verifiedBundle)) {
             // Read + hash-verify the WHOLE bundle before exposing any signature rows.
