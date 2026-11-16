@@ -43,7 +43,7 @@ class KanafAiIntegrationAndroidTest {
         assertTrue(fault is ThreatModel.Prediction.Scored)
         assertTrue((baseline as ThreatModel.Prediction.Scored).riskProbability <
             (fault as ThreatModel.Prediction.Scored).riskProbability)
-        assertEquals("apk-structure-fixture-v1", fault.modelVersion)
+        assertEquals("apk-structure-fixture-v1", (fault as ThreatModel.Prediction.Scored).modelVersion)
         assertTrue(model.classify(observed(0).copy(apkDexCount = null))
             is ThreatModel.Prediction.Unavailable)
     }
