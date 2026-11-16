@@ -90,9 +90,13 @@ artifacts. `tools/check_release_readiness.py` now requires:
   modern v2/v3 APK signature and exactly one certificate whose actual digest
   matches `release.apk_signer_cert_sha256`. Install trusted Android SDK
   Build Tools on the release-signing host.
-- `jarsigner -verify -strict` must affirm the uploaded AAB is signed, using
-  the trusted JDK toolchain. The AAB upload key can differ from the APK
-  distribution signing certificate under Play App Signing.
+- `jarsigner -verify -verbose -certs` must affirm valid AAB signatures
+  **without unsigned file entries**. Android upload signing certificates are
+  commonly self-signed, so `-strict` can falsely reject a valid AAB.
+  The trusted JDK `keytool -printcert -jarfile` must confirm **exactly one**
+  signer whose leaf SHA-256 matches the signed QA report field
+  `release.aab_signer_cert_sha256`. The AAB upload signing certificate may
+  differ from the APK app-signing certificate under Play App Signing.
 - `--expected-qa-public-key-sha256` pins the **DER bytes** of the independent
   QA public key via an external, publisher/QA-controlled trusted channel.
   Signing evidence using an attacker-provided substitute key cannot satisfy

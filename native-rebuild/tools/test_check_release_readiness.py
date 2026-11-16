@@ -1,5 +1,8 @@
 import datetime as dt
 import hashlib
+import re
+import shutil
+import zipfile
 import subprocess
 import tempfile
 from pathlib import Path
@@ -130,14 +133,18 @@ class ReleaseReadinessTest(unittest.TestCase):
                 "signed_apk_sha256": digest(apk.read_bytes()),
                 "signed_aab_sha256": digest(aab.read_bytes()),
                 "apk_signer_cert_sha256": cert,
+                "aab_signer_cert_sha256": cert,
             }}
 
             def verified_runner(command, **kwargs):
                 if command[0] == "apksigner":
                     output = ("Verified using v2 scheme (APK Signature Scheme v2): true\n"
                               "Signer #1 certificate SHA-256 digest: " + cert + "\n")
-                else:
+                elif command[0] == "jarsigner":
                     output = "jar verified.\n"
+                else:
+                    output = ("Signer #1:\nCertificate #1:\nSHA256: " +
+                              ":".join(cert[i:i+2] for i in range(0, 64, 2)) + "\n")
                 return subprocess.CompletedProcess(command, 0, output, "")
 
             self.assertEqual([], verify_artifacts(report, apk, aab, run=verified_runner))
@@ -160,13 +167,16 @@ class ReleaseReadinessTest(unittest.TestCase):
                 "signed_apk_sha256": digest(apk),
                 "signed_aab_sha256": digest(aab),
                 "apk_signer_cert_sha256": "a" * 64,
+                "aab_signer_cert_sha256": "a" * 64,
             }}
             def legacy_signer(command, **kwargs):
                 if command[0] == "apksigner":
                     output = ("Verified using v1 scheme (JAR signing): true\n"
                               "Signer #1 certificate SHA-256 digest: " + "b" * 64)
-                else:
+                elif command[0] == "jarsigner":
                     output = "jar is unsigned."
+                else:
+                    output = "Signer #1:\nSHA256: " + ":".join(["bb"] * 32) + "\n"
                 return subprocess.CompletedProcess(command, 0, output, "")
             issues = verify_artifacts(report, apk, aab, run=legacy_signer)
             for expected in ("apk-modern-signature-absent",
@@ -179,6 +189,7 @@ class ReleaseReadinessTest(unittest.TestCase):
             issues = verify_artifacts(report, apk, aab, run=missing_tool)
             self.assertIn("apk-verification-unavailable", issues)
             self.assertIn("aab-verification-unavailable", issues)
+            self.assertIn("aab-cert-verification-unavailable", issues)
 
     def test_independent_qa_key_fingerprint_is_pinned(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -244,6 +255,53 @@ class ReleaseReadinessTest(unittest.TestCase):
         base["release"]["distribution"] = "unknown"
         self.assertIn("release-distribution-missing",
                       validate(base, today=dt.date(2026, 11, 16)))
+
+    def test_real_self_signed_aab_key_accepted_and_unsigned_append_rejected(self):
+        if not shutil.which("keytool") or not shutil.which("jarsigner"):
+            self.skipTest("JDK signer tools unavailable")
+        # Ephemeral offline test identity only. No actual publisher secret.
+        with tempfile.TemporaryDirectory() as directory:
+            d = Path(directory)
+            aab = d / "fixture.aab"
+            store = d / "test.jks"
+            apk = d / "simulated.apk"
+            apk.write_bytes(b"mocked APK signature fixture")
+            with zipfile.ZipFile(aab, "w") as archive:
+                archive.writestr("base/manifest/AndroidManifest.xml", b"test manifest")
+            def jdk(*args):
+                return subprocess.run(args, check=True, capture_output=True,
+                                      text=True, timeout=40)
+            pwd = "OnlyFixture123"
+            jdk("keytool", "-genkeypair", "-alias", "test", "-keyalg", "RSA",
+                "-keysize", "2048", "-validity", "365", "-keystore", str(store),
+                "-storepass", pwd, "-keypass", pwd, "-dname",
+                "CN=Temporary Kanaf Test", "-noprompt")
+            jdk("jarsigner", "-keystore", str(store), "-storepass", pwd,
+                "-keypass", pwd, str(aab), "test")
+            key_output = jdk("keytool", "-printcert", "-jarfile", str(aab)).stdout
+            match = re.search(r"SHA256:\s*((?:[0-9A-Fa-f]{2}:){31}[0-9A-Fa-f]{2})",
+                              key_output)
+            self.assertIsNotNone(match)
+            thumb = match.group(1).replace(":", "").lower()
+            cert = "b" * 64
+            report = {"release": {
+                "signed_apk_sha256": hashlib.sha256(apk.read_bytes()).hexdigest(),
+                "signed_aab_sha256": hashlib.sha256(aab.read_bytes()).hexdigest(),
+                "apk_signer_cert_sha256": cert,
+                "aab_signer_cert_sha256": thumb,
+            }}
+            def real_jdk_mock_apksigner(command, **kwargs):
+                if command[0] == "apksigner":
+                    message = ("Verified using v2 scheme (APK Signature Scheme v2): true\n"
+                               "Signer #1 certificate SHA-256 digest: " + cert + "\n")
+                    return subprocess.CompletedProcess(command, 0, message, "")
+                return subprocess.run(command, **kwargs)
+            self.assertEqual([],
+                verify_artifacts(report, apk, aab, run=real_jdk_mock_apksigner))
+            with zipfile.ZipFile(aab, "a") as archive:
+                archive.writestr("base/untrusted.bin", b"unsigned payload")
+            self.assertIn("aab-unsigned-entries",
+                verify_artifacts(report, apk, aab, run=real_jdk_mock_apksigner))
 
 
 if __name__ == "__main__":
