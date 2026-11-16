@@ -29,6 +29,25 @@ class KanafAiIntegrationAndroidTest {
         assertEquals("model-not-installed", (result as ThreatModel.Prediction.Unavailable).reason)
     }
 
+    @Test fun compiledStructuralPilotExecutesOnAndroidWithoutMalwareClaims() {
+        val model = com.kanaf.alrasby.engine.ExperimentalApkStructureModel
+        fun observed(unsafe: Int) = ThreatFeatureVector(
+            apkDexCount = 5, apkNativeLibraryCount = 11,
+            apkUnsafePathCount = unsafe, dexInvalidHeaderCount = 0,
+            zipUnsafeNameCount = unsafe, zipEntryCount = 169,
+            zipExpandedBytes = 51441611L
+        )
+        val baseline = model.classify(observed(0))
+        val fault = model.classify(observed(3))
+        assertTrue(baseline is ThreatModel.Prediction.Scored)
+        assertTrue(fault is ThreatModel.Prediction.Scored)
+        assertTrue((baseline as ThreatModel.Prediction.Scored).riskProbability <
+            (fault as ThreatModel.Prediction.Scored).riskProbability)
+        assertEquals("apk-structure-fixture-v1", fault.modelVersion)
+        assertTrue(model.classify(observed(0).copy(apkDexCount = null))
+            is ThreatModel.Prediction.Unavailable)
+    }
+
     @Test fun backupAndCleartextRemainDisabled() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         assertEquals(0, context.applicationInfo.flags and ApplicationInfo.FLAG_ALLOW_BACKUP)
