@@ -1,4 +1,4 @@
-name: Kanaf Android APK with isolated native engines
+name: Kanaf Android APK/AAB prototype with isolated native engines
 on:
   push:
     branches: [rebuild/kanaf-native-v1]
@@ -69,11 +69,11 @@ jobs:
           SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager -print -quit)"
           test -x "$SDKMANAGER"
           "$SDKMANAGER" "platforms;android-36" "build-tools;35.0.0" "ndk;27.2.12479018" "cmake;3.22.1"
-      - name: Run app tests and assemble debug APK
+      - name: Run app tests and assemble debug APK and debug AAB
         working-directory: native-rebuild
         run: |
           set -euo pipefail
-          bash tools/gradle_retry_429.sh --no-daemon :app:testDebugUnitTest :app:assembleDebug --stacktrace
+          bash tools/gradle_retry_429.sh --no-daemon :app:testDebugUnitTest :app:assembleDebug :app:bundleDebug --stacktrace
       - name: Verify APK contains all native libraries
         shell: bash
         run: |
@@ -97,8 +97,23 @@ jobs:
           done
           "$ANDROID_HOME/build-tools/35.0.0/zipalign" -c -P 16 -v 4 "$apk"
           echo "Verified 16 KiB native ELF PT_LOAD and APK ZIP alignment."
+      - name: Verify prototype Android App Bundle contains native engines
+        shell: bash
+        run: |
+          set -euo pipefail
+          aab=native-rebuild/app/build/outputs/bundle/debug/app-debug.aab
+          test -s "$aab"
+          for so in libclamav.so libclammspack.so libyara_x_capi.so libkanaf_scan.so; do
+            unzip -Z1 "$aab" | grep -Fx "base/lib/arm64-v8a/$so"
+          done
+          # App Bundle is a publishing input, not directly installable and
+          # NEVER a Play-ready release without publisher signing/QA.
+          sha256sum "$aab"
+          echo "Debug AAB structure verified; this is not a signed production artifact."
       - uses: actions/upload-artifact@v4
         with:
           name: kanaf-native-engines-packaging-prototype
-          path: native-rebuild/app/build/outputs/apk/debug/app-debug.apk
+          path: |
+            native-rebuild/app/build/outputs/apk/debug/app-debug.apk
+            native-rebuild/app/build/outputs/bundle/debug/app-debug.aab
           if-no-files-found: error
