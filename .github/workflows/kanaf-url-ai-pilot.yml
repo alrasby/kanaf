@@ -46,6 +46,16 @@ jobs:
           install -m 0644 /tmp/kanaf-url-ai/url_risk_model.sig native-rebuild/app/src/main/assets/url_risk_model.sig
           echo "KANAF_URL_KEY=$(cat /tmp/kanaf-url-public.b64)" >> "$GITHUB_ENV"
           rm -f /tmp/kanaf-url-pilot.key
+      - name: Preserve actual training evidence independently of emulator
+        uses: actions/upload-artifact@v4
+        with:
+          name: kanaf-url-ai-real-data-training-evidence
+          path: |
+            /tmp/kanaf-url-ai/evaluation.json
+            /tmp/kanaf-url-ai/PUBLIC_DATA_ATTRIBUTION.txt
+            /tmp/kanaf-url-ai/url_risk_model.txt
+            /tmp/kanaf-url-ai/url_risk_model.sig
+          if-no-files-found: error
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -67,6 +77,12 @@ jobs:
           set -euo pipefail
           gradle --no-daemon :app:testDebugUnitTest :app:assembleDebug \
             -PkanafUrlModelPublicKeyBase64="$KANAF_URL_KEY" --stacktrace
+      - name: Enable KVM for reliable emulator acceleration
+        shell: bash
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
       - name: Exercise signed model on Android 35 emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
