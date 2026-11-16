@@ -127,10 +127,10 @@ class ReleaseReadinessTest(unittest.TestCase):
 
             def verified_runner(command, **kwargs):
                 if command[0] == "apksigner":
-                    output = ("Verified using v2 scheme (APK Signature Scheme v2): true\\n"
-                              "Signer #1 certificate SHA-256 digest: " + cert + "\\n")
+                    output = ("Verified using v2 scheme (APK Signature Scheme v2): true\n"
+                              "Signer #1 certificate SHA-256 digest: " + cert + "\n")
                 else:
-                    output = "jar verified.\\n"
+                    output = "jar verified.\n"
                 return subprocess.CompletedProcess(command, 0, output, "")
 
             self.assertEqual([], verify_artifacts(report, apk, aab, run=verified_runner))
@@ -156,7 +156,7 @@ class ReleaseReadinessTest(unittest.TestCase):
             }}
             def legacy_signer(command, **kwargs):
                 if command[0] == "apksigner":
-                    output = ("Verified using v1 scheme (JAR signing): true\\n"
+                    output = ("Verified using v1 scheme (JAR signing): true\n"
                               "Signer #1 certificate SHA-256 digest: " + "b" * 64)
                 else:
                     output = "jar is unsigned."

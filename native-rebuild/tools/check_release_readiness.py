@@ -164,10 +164,10 @@ def verify_artifacts(report, apk_path: Path, aab_path: Path, *, run=subprocess.r
                           "--verbose", "--print-certs", str(apk_path)], "apk")
         if output is not None:
             # v2/v3 protect APK contents, unlike relying on a legacy JAR signature.
-            if not re.search(r"Verified using v[23] scheme[^\\n]*:\\s*true", output, re.I):
+            if not re.search(r"Verified using v[23] scheme[^\n]*:\s*true", output, re.I):
                 problems.append("apk-modern-signature-absent")
             certificates = re.findall(
-                r"Signer #\\d+ certificate SHA-256 digest:\\s*([0-9a-fA-F]{64})",
+                r"Signer #\d+ certificate SHA-256 digest:\s*([0-9a-fA-F]{64})",
                 output, re.I)
             if (len(certificates) != 1 or
                     certificates[0].lower() != release.get("apk_signer_cert_sha256")):
