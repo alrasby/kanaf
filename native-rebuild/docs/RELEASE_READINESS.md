@@ -108,6 +108,7 @@ python3 tools/check_release_readiness.py \
   --signature /secure/qa/release.sig \
   --qa-public-key /secure/qa/qa-public.der \
   --expected-qa-public-key-sha256 "$TRUSTED_QA_PUBLIC_KEY_DER_SHA256" \
+  --expected-distribution play \
   --apk /secure/release/kanaf-release.apk \
   --aab /secure/release/kanaf-release.aab
 ```

@@ -4,7 +4,8 @@ import subprocess
 import tempfile
 from pathlib import Path
 import unittest
-from check_release_readiness import validate, verify_artifacts, verify_attestation
+from check_release_readiness import (validate, verify_artifacts, verify_attestation,
+                                     verify_expected_distribution)
 
 
 class ReleaseReadinessTest(unittest.TestCase):
@@ -208,6 +209,16 @@ class ReleaseReadinessTest(unittest.TestCase):
             report.write_text('{"schema":2}', encoding="utf-8")
             with self.assertRaisesRegex(ValueError, "evidence-signature-invalid"):
                 verify_attestation(report, signature, public, pinned)
+
+    def test_publisher_channel_cannot_substitute_signed_direct_report_for_play(self):
+        self.assertEqual([], verify_expected_distribution(
+            {"release": {"distribution": "play"}}, "play"))
+        self.assertIn("independent-qa-distribution-mismatch",
+                      verify_expected_distribution(
+                          {"release": {"distribution": "direct"}}, "play"))
+        with self.assertRaisesRegex(ValueError, "untrusted-expected-distribution"):
+            verify_expected_distribution(
+                {"release": {"distribution": "play"}}, "unknown")
 
     def test_release_distribution_requires_truthful_dns_compilation(self):
         base = {"release": {

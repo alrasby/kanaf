@@ -66,6 +66,7 @@ case "$action" in
       --signature "$KANAF_QA_RELEASE_SIGNATURE" \
       --qa-public-key "$KANAF_QA_PUBLIC_KEY_DER" \
       --expected-qa-public-key-sha256 "$KANAF_TRUSTED_QA_PUBLIC_KEY_DER_SHA256" \
+      --expected-distribution "$channel" \
       --apk "app/build/outputs/apk/release/app-release.apk" \
       --aab "app/build/outputs/bundle/release/app-release.aab"
     ;;

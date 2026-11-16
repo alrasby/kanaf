@@ -143,6 +143,14 @@ def validate(report, *, today=None):
     return problems
 
 
+def verify_expected_distribution(report, expected: str):
+    if expected not in ("play", "direct"):
+        raise ValueError("untrusted-expected-distribution")
+    release = report.get("release") if isinstance(report, dict) else None
+    actual = release.get("distribution") if isinstance(release, dict) else None
+    return [] if actual == expected else ["independent-qa-distribution-mismatch"]
+
+
 def verify_artifacts(report, apk_path: Path, aab_path: Path, *, run=subprocess.run):
     """Bind independently signed QA claims to actual files and signing certificates.
 
@@ -234,6 +242,8 @@ def main():
     p.add_argument("--qa-public-key", type=Path, required=True)
     p.add_argument("--expected-qa-public-key-sha256", required=True,
                    help="Pinned SHA-256 fingerprint from an independent trusted channel")
+    p.add_argument("--expected-distribution", choices=("play", "direct"), required=True,
+                   help="Release channel independently selected by publisher")
     p.add_argument("--apk", type=Path, required=True)
     p.add_argument("--aab", type=Path, required=True)
     args = p.parse_args()
@@ -241,6 +251,7 @@ def main():
                        args.expected_qa_public_key_sha256)
     evidence = json.loads(args.evidence.read_text("utf-8"))
     failures = validate(evidence)
+    failures.extend(verify_expected_distribution(evidence, args.expected_distribution))
     if not failures:
         if evidence["signatures"]["pinned_key_sha256"] == args.expected_qa_public_key_sha256:
             failures.append("qa-key-must-be-independent-of-threat-feed-key")
