@@ -100,6 +100,12 @@ class ReleaseReadinessTest(unittest.TestCase):
             "play-sensitive-permissions-approval",
             "play-vpnservice-policy-review",
             "physical-dns-and-scan-acceptance",
+            "play-cross-app-ad-blocking-policy",
+            "play-vpn-prominent-disclosure",
+            "physical-vpn-disconnect-and-dns-leak-qa",
+            "play-live-app-privacy-policy",
+            "play-data-safety-attestation",
+            "play-special-use-fgs-approval",
         ):
             self.assertIn(expected, failures)
 

@@ -5,6 +5,7 @@ import android.app.AlertDialog
 import android.content.Intent
 import android.net.VpnService
 import android.os.Bundle
+import com.kanaf.alrasby.KanafUiPreferences
 
 /**
  * Foreground user gesture launched from Quick Settings. Only the Android
@@ -36,8 +37,28 @@ class DnsTileControlActivity : Activity() {
                 .setOnCancelListener { finish() }.show()
             return
         }
-        val request = VpnService.prepare(this)
-        if (request == null) startFilter() else startActivityForResult(request, vpnPermissionRequest)
+        // Android's system VPN permission is NOT a substitute for Google
+        // Play's prominent in-app disclosure and affirmative consent.
+        val arabic = KanafUiPreferences(this).language().isArabic()
+        AlertDialog.Builder(this)
+            .setTitle(if (arabic) KanafPrivacyDisclosure.VPN_TITLE_AR
+                else KanafPrivacyDisclosure.VPN_TITLE_EN)
+            .setMessage(if (arabic) KanafPrivacyDisclosure.VPN_AR
+                else KanafPrivacyDisclosure.VPN_EN)
+            .setPositiveButton(if (arabic) "أوافق وأفعّل DNS" else "Agree & enable DNS") { _, _ ->
+                requestSystemVpnConsent()
+            }
+            .setNegativeButton(if (arabic) "إلغاء" else "Cancel") { _, _ -> finish() }
+            .setOnCancelListener { finish() }
+            .show()
+    }
+
+    private fun requestSystemVpnConsent() {
+        runCatching {
+            val request = VpnService.prepare(this)
+            if (request == null) startFilter()
+            else startActivityForResult(request, vpnPermissionRequest)
+        }.onFailure { finish() }
     }
 
     private fun startFilter() {

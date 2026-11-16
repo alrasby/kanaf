@@ -26,6 +26,7 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import com.kanaf.alrasby.engine.LinkInspector
 import com.kanaf.alrasby.engine.KanafUrlAi
+import com.kanaf.alrasby.engine.KanafPrivacyDisclosure
 import com.kanaf.alrasby.engine.EncryptedVault
 import com.kanaf.alrasby.engine.InstalledAppInventory
 
@@ -117,6 +118,7 @@ fun KanafGlassHome(
     var confirmVaultSave by remember { mutableStateOf(false) }
     var confirmQuarantine by remember { mutableStateOf(false) }
     var confirmVpn by remember { mutableStateOf(false) }
+    var showPrivacyPolicy by remember { mutableStateOf(false) }
     var customPrivateDns by rememberSaveable { mutableStateOf("") }
     var sectionsOpen by rememberSaveable { mutableStateOf(false) }
     var detailsOpen by rememberSaveable { mutableStateOf(false) }
@@ -206,18 +208,37 @@ fun KanafGlassHome(
     if (confirmVpn) {
         AlertDialog(
             onDismissRequest = { confirmVpn = false },
-            title = { Text(tr("تفعيل مرشح إعلانات DNS", "Enable DNS ad filter")) },
-            text = { Text(tr(
-                "يعمل مرشح كنف مع DNS الخاص «متوقف» أو «تلقائي»، ويستخدم HTTPS مشفرًا للمزوّد المحدد. يحتاج إلى موافقتك على VPN ولا يمكن تشغيل VPN آخر معه. عند استخدام مزوّد DNS صارم في النظام افتح إعدادات أندرويد أولًا. هل توافق؟",
-                "Kanaf works with Android Private DNS Off or Automatic and sends DNS requests over encrypted HTTPS to the selected provider. VPN permission is required, and another VPN cannot be active. Strict Android Private DNS requires changing system settings first. Continue?"
-            )) },
+            title = { Text(tr(KanafPrivacyDisclosure.VPN_TITLE_AR,
+                KanafPrivacyDisclosure.VPN_TITLE_EN)) },
+            text = {
+                Column(Modifier.heightIn(max = 340.dp).verticalScroll(rememberScrollState())) {
+                    Text(tr(KanafPrivacyDisclosure.VPN_AR, KanafPrivacyDisclosure.VPN_EN))
+                }
+            },
             confirmButton = {
                 TextButton(onClick = { confirmVpn = false; onVpnToggle(true) }) {
-                    Text(tr("المتابعة", "Continue"))
+                    Text(tr("أوافق وأفعّل DNS", "Agree & enable DNS"))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { confirmVpn = false }) { Text(tr("إلغاء", "Cancel")) }
+            }
+        )
+    }
+    if (showPrivacyPolicy) {
+        AlertDialog(
+            onDismissRequest = { showPrivacyPolicy = false },
+            title = { Text(tr("سياسة خصوصية كنف", "Kanaf privacy policy")) },
+            text = {
+                Column(Modifier.heightIn(max = 400.dp).verticalScroll(rememberScrollState())) {
+                    Text(tr(KanafPrivacyDisclosure.PRIVACY_AR,
+                        KanafPrivacyDisclosure.PRIVACY_EN))
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showPrivacyPolicy = false }) {
+                    Text(tr("إغلاق", "Close"))
+                }
             }
         )
     }
@@ -1000,6 +1021,12 @@ fun KanafGlassHome(
                     GlassPanel(card, stroke) {
                         Text(tr("إعدادات الخصوصية", "Privacy settings"), color = ink,
                             style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.height(8.dp))
+                        OutlinedButton(onClick = { showPrivacyPolicy = true },
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                                .testTag("kanaf_privacy_policy")) {
+                            Text(tr("قراءة سياسة الخصوصية", "Read privacy policy"))
+                        }
                         Spacer(Modifier.height(12.dp))
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween) {

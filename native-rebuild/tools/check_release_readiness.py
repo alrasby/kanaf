@@ -110,6 +110,18 @@ def validate(report, *, today=None):
              "play-sensitive-permissions-approval")
     required(release.get("vpn_service_policy_review") is True,
              "play-vpnservice-policy-review")
+    required(release.get("play_dns_cross_app_ad_policy_resolved") is True,
+             "play-cross-app-ad-blocking-policy")
+    required(release.get("vpn_explicit_disclosure_device_qa") is True,
+             "play-vpn-prominent-disclosure")
+    required(release.get("vpn_stop_and_dns_leak_device_qa") is True,
+             "physical-vpn-disconnect-and-dns-leak-qa")
+    required(release.get("live_privacy_policy_approved") is True,
+             "play-live-app-privacy-policy")
+    required(release.get("play_data_safety_verified") is True,
+             "play-data-safety-attestation")
+    required(release.get("play_fgs_special_use_approved") is True,
+             "play-special-use-fgs-approval")
     required(release.get("real_device_scan_and_dns_qa") is True,
              "physical-dns-and-scan-acceptance")
     required(is_digest(release.get("signed_apk_sha256")), "release-apk-digest")
