@@ -51,6 +51,27 @@ class NativeArm64EngineRuntimeTest {
         assertEquals(expected, yara.sha256)
     }
 
+    @Test fun oversizedSelectedFileMustFailClosedInBothNativeEngines() {
+        requireArm64()
+        val file = File.createTempFile("oversize-probe-", ".bin", appContext.cacheDir)
+        try {
+            java.io.RandomAccessFile(file, "rw").use {
+                it.setLength(16L * 1024 * 1024 + 1)
+            }
+            val result = NativeScannerBridge.scan(appContext, Uri.fromFile(file))
+            assertTrue("ClamAV must refuse an oversize source: $result",
+                result.clamav is AntivirusEngine.Verdict.Incomplete)
+            assertTrue("YARA-X must refuse an oversize source: $result",
+                result.yaraX is AntivirusEngine.Verdict.Incomplete)
+            assertEquals("copy-size-limit",
+                (result.clamav as AntivirusEngine.Verdict.Incomplete).reason)
+            assertEquals("copy-size-limit",
+                (result.yaraX as AntivirusEngine.Verdict.Incomplete).reason)
+        } finally {
+            file.delete()
+        }
+    }
+
     @Test fun actualArm64EnginesScanBothBenignAndEicarFiles() {
         requireArm64()
         fun scanBytes(bytes: ByteArray): NativeScannerBridge.Report {

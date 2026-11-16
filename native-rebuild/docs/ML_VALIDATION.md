@@ -65,3 +65,21 @@ samples and publisher-signed weights; these conditions are NOT bypassed.
 The actually real-data-trained URL phishing pilot based on PhiUSIIL remains
 separate (`docs/KANAF_AI_URL_PILOT.md`), and does not imply APK malware
 classification capability.
+
+## Added device/emulator end-to-end test gates (2026-11-16)
+
+- `RealApkPipelineAndroidTest` re-opens the **actual installed application
+  APK** using three independent bounded readers (APK structure, DEX headers,
+  ZIP); verifies consistent counts and feeds all seven measured observations
+  into `ExperimentalApkStructureModel` on Android 8/15/16 emulators.
+- A deliberately malformed APK-like ZIP with invalid DEX bytes and path
+  traversal verifies that the parsers surface structural anomalies. This
+  only tests formatting problems, **not actual malicious behavior**.
+- If one parser fails/is omitted, the model must return Unavailable rather
+  than scoring the missing measurements as zero.
+- ARM64 translated emulator also exercises the actual native scanner worker
+  with an over-16 MiB file. Both engines must return
+  `Incomplete("copy-size-limit")`, not a clean verdict.
+- These gates complement, but do **not replace**, device-level DNS/VPN,
+  16-KiB kernel pages, performance, signed production feed and
+  independent real-world malware corpus acceptance tests.
