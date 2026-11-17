@@ -73,13 +73,21 @@ jobs:
         working-directory: native-rebuild
         run: |
           set -euo pipefail
-          bash tools/gradle_retry_429.sh --no-daemon :app:testDebugUnitTest :app:assembleDebug :app:bundleDebug --stacktrace
+          feed=rules/eset-android-seed
+          python3 tools/signed_feed.py verify --zip "$feed/kanaf-feed-v1.zip" --public-key "$feed/feed-public.pem"
+          public_key=$(openssl pkey -pubin -in "$feed/feed-public.pem" -outform DER | openssl base64 -A)
+          install -m 644 "$feed/kanaf-feed-v1.zip" app/src/main/assets/production_signatures.zip
+          bash tools/gradle_retry_429.sh --no-daemon \
+            -PkanafArm64Runtime=true \
+            "-PkanafSignaturePublicKeyBase64=$public_key" -PkanafSignatureMinVersion=1 \
+            :app:testDebugUnitTest :app:assembleDebug :app:bundleDebug --stacktrace
       - name: Verify APK contains all native libraries
         shell: bash
         run: |
           set -euo pipefail
           apk=native-rebuild/app/build/outputs/apk/debug/app-debug.apk
           test -s "$apk"
+          unzip -p "$apk" assets/production_signatures.zip | cmp - native-rebuild/rules/eset-android-seed/kanaf-feed-v1.zip
           for so in libclamav.so libclammspack.so libyara_x_capi.so libkanaf_scan.so; do
             unzip -Z1 "$apk" | grep -Fx "lib/arm64-v8a/$so"
           done
