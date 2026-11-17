@@ -24,7 +24,16 @@ def intake(repo, plan):
             check=True, capture_output=True, text=True, timeout=15).stdout.strip()
     if git("rev-parse", "HEAD") != commit or git("status", "--porcelain"):
         raise IntakeError("source-not-pinned-and-clean")
-    license_file = (repo / "LICENSE").read_bytes()
+    def tracked_bytes(path):
+        entry = git("ls-tree", commit, "--", path)
+        if not entry.startswith(("100644 blob ", "100755 blob ")):
+            raise IntakeError("source-file-not-tracked-regular:" + path)
+        return subprocess.run(
+            ["git", "-C", str(repo), "show", f"{commit}:{path}"],
+            check=True, capture_output=True, timeout=15
+        ).stdout
+
+    license_file = tracked_bytes("LICENSE")
     if (b"Detection Rule License (DRL) 1.1" not in license_file or
             sha(license_file) != plan.get("license_sha256")):
         raise IntakeError("source-license-unverified")
@@ -49,7 +58,7 @@ def intake(repo, plan):
         file = repo.joinpath(*relative.parts)
         if file.is_symlink() or not file.is_file() or file.stat().st_size > 256 * 1024:
             raise IntakeError("rule-unavailable-or-oversize")
-        raw = file.read_bytes()
+        raw = tracked_bytes(relative.as_posix())
         if not raw or b"\x00" in raw or sha(raw) != entry.get("sha256"):
             raise IntakeError("rule-hash-unverified")
         try:
@@ -68,7 +77,8 @@ def intake(repo, plan):
         if len(author) != 1 or author[0] != entry.get("author"):
             raise IntakeError("attribution-not-verified")
         declared = re.findall(r'(?m)^\s*license\s*=\s*"([^"\n]+)"', header)
-        if any("Detection Rule License 1.1" not in value for value in declared):
+        if any(value not in {"Detection Rule License 1.1", "Detection Rule License (DRL) 1.1"}
+               for value in declared):
             raise IntakeError("rule-license-override")
         if "EICAR" in source.upper():
             raise IntakeError("test-rule-not-production")
