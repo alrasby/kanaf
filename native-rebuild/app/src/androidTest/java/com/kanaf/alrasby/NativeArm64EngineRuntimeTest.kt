@@ -51,12 +51,27 @@ class NativeArm64EngineRuntimeTest {
         assertEquals(expected, yara.sha256)
     }
 
+    @Test fun nativeEnginesAcceptSelectedFileLargerThanPreviousLimit() {
+        requireArm64()
+        val file = File.createTempFile("large-benign-", ".bin", appContext.cacheDir)
+        try {
+            java.io.RandomAccessFile(file, "rw").use { it.setLength(20L * 1024 * 1024) }
+            val result = NativeScannerBridge.scan(appContext, Uri.fromFile(file))
+            assertTrue("ClamAV must complete the 20 MiB fixture: $result",
+                result.clamav is AntivirusEngine.Verdict.NoKnownMatch)
+            assertTrue("YARA-X must complete the 20 MiB fixture: $result",
+                result.yaraX is AntivirusEngine.Verdict.NoKnownMatch)
+        } finally {
+            file.delete()
+        }
+    }
+
     @Test fun oversizedSelectedFileMustFailClosedInBothNativeEngines() {
         requireArm64()
         val file = File.createTempFile("oversize-probe-", ".bin", appContext.cacheDir)
         try {
             java.io.RandomAccessFile(file, "rw").use {
-                it.setLength(16L * 1024 * 1024 + 1)
+                it.setLength(64L * 1024 * 1024 + 1)
             }
             val result = NativeScannerBridge.scan(appContext, Uri.fromFile(file))
             assertTrue("ClamAV must refuse an oversize source: $result",

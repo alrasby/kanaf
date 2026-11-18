@@ -17,7 +17,7 @@ import java.security.MessageDigest
  * All failures and partial reads are INCOMPLETE, never clean.
  */
 object NativeScannerBridge {
-    private const val MAX_FILE_BYTES = 16L * 1024 * 1024
+    private const val MAX_FILE_BYTES = 64L * 1024 * 1024
     private const val CLAM_RULE_HASH = "f7a0ea8212c9251375ccf756743c34f59732e4edb29ee9cf58e48397c53c93be"
     private const val YARA_RULE_HASH = "6512c037bf11c594476492bd9e1cef968349a79a3a06f50aafa26e4ef3fc0993"
     // Scoped to this process lifetime. Never cache per-file detection verdicts,

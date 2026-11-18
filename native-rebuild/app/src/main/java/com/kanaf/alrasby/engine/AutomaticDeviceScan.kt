@@ -38,7 +38,7 @@ class AutomaticDeviceScan {
         private const val MAX_DEPTH = 12
         private const val MAX_RUNTIME_MS = 8 * 60_000L
         private const val MAX_HASH_BYTES = 256L * 1024 * 1024
-        private const val MAX_NATIVE_BYTES = 16L * 1024 * 1024
+        private const val MAX_NATIVE_BYTES = 64L * 1024 * 1024
         private const val MAX_NATIVE_CHECKS = 100
 
         fun sharedStorageGranted(): Boolean = if (Build.VERSION.SDK_INT >= 30) {

@@ -28,7 +28,7 @@ class ScopedDeviceScan {
         const val MAX_FILES = 24
         const val MAX_DIRECTORIES = 32
         const val MAX_DEPTH = 5
-        const val MAX_FILE_BYTES = 16L * 1024 * 1024
+        const val MAX_FILE_BYTES = 64L * 1024 * 1024
         const val MAX_DURATION_MS = 120_000L
     }
 

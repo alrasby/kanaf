@@ -162,7 +162,7 @@ std::string clamScan(const char* file, const char* database, bool useDefaultMatc
                 // Compare the same harmless fixture in memory to isolate
                 // Android file-mapping/descriptor behavior from signature matching.
                 // Never use this diagnostic result for any security verdict.
-                auto fixture = kanaf::readStableFile(file, 16U * 1024U * 1024U);
+                auto fixture = kanaf::readStableFile(file, 64U * 1024U * 1024U);
                 auto openMemory = symbol<void* (*)(const void*, size_t)>(
                     lib, "cl_fmap_open_memory");
                 auto closeMemory = symbol<void (*)(void*)>(lib, "cl_fmap_close");
@@ -217,7 +217,7 @@ std::string yaraScan(const char* file, const char* rulesSource) {
     if (!file || !rulesSource || !*rulesSource) return incomplete("missing-rules");
     // Always scan a complete, stable file snapshot. A growing, truncated,
     // substituted or non-regular file must never yield NO_MATCH.
-    auto snapshot = kanaf::readStableFile(file, 16U * 1024U * 1024U);
+    auto snapshot = kanaf::readStableFile(file, 64U * 1024U * 1024U);
     if (snapshot.status != kanaf::SnapshotStatus::Complete) {
         return incomplete(kanaf::snapshotFailureReason(snapshot.status));
     }

@@ -68,7 +68,7 @@ class ScopedFileCheckWorker(context: Context, params: WorkerParameters) :
                             continue
                         }
                         val size = if (cursor.isNull(sizeColumn)) -1L else cursor.getLong(sizeColumn)
-                        if (size > 16L * 1024 * 1024) { incomplete++; continue }
+                        if (size > 64L * 1024 * 1024) { incomplete++; continue }
                         val document = DocumentsContract.buildDocumentUriUsingTree(
                             tree, cursor.getString(idColumn)
                         )

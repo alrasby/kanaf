@@ -49,6 +49,11 @@ int main() {
     assert(empty.status == SnapshotStatus::Complete && empty.bytes.empty());
 
     assert(std::strcmp(snapshotFailureReason(SnapshotStatus::Changed), "yara-file-changed") == 0);
+    constexpr size_t largeSize = 20U * 1024U * 1024U;
+    assert(ftruncate(fd, largeSize) == 0);
+    const auto large = readStableFile(path, 64U * 1024U * 1024U);
+    assert(large.status == SnapshotStatus::Complete && large.bytes.size() == largeSize);
+    assert(readStableFile(path, 16U * 1024U * 1024U).status == SnapshotStatus::TooLarge);
     close(fd);
     unlink(path);
     return 0;

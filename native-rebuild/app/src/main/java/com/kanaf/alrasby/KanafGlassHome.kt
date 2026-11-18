@@ -938,8 +938,8 @@ fun KanafGlassHome(
                         Text(tr("حدود الإصدار التجريبي", "Preview limitations"), color = ink,
                             style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                         Text(tr(
-                            "فحص التطبيقات المثبتة والملفات المشتركة بطلب المستخدم متاح من الرئيسية، لكن المحركين الأصليين يفحصان الملفات حتى 16 ميجابايت وبقواعد اختبارية. لا تتوفر قاعدة فيروسات إنتاجية أو حماية فورية شاملة.",
-                            "On-demand scanning of installed APKs and accessible shared files is available on Home. Native checks are capped at 16 MiB and use test-only rules; no production malware database or full real-time protection."
+                            "فحص التطبيقات المثبتة والملفات المشتركة بطلب المستخدم متاح من الرئيسية، لكن المحركين الأصليين يفحصان الملفات حتى 64 ميجابايت وبقواعد اختبارية. لا تتوفر قاعدة فيروسات إنتاجية أو حماية فورية شاملة.",
+                            "On-demand scanning of installed APKs and accessible shared files is available on Home. Native checks are capped at 64 MiB and use test-only rules; no production malware database or full real-time protection."
                         ), color = secondary)
                     }
                 }
@@ -1150,7 +1150,7 @@ fun KanafGlassHome(
                                 "Quarantine selected document (may delete original)"))
                         }
                         Text(tr(
-                            "ملفات حتى 16 ميجابايت. يؤدي مسح بيانات التطبيق أو فقدان مفتاح Keystore إلى تعذر استعادة النسخ المشفرة.",
+                            "ملفات حتى 64 ميجابايت. يؤدي مسح بيانات التطبيق أو فقدان مفتاح Keystore إلى تعذر استعادة النسخ المشفرة.",
                             "Files up to 16 MiB. Clearing app data or losing the Android Keystore key makes vault files unrecoverable."
                         ), color = secondary, style = MaterialTheme.typography.bodySmall)
                         if (vaultStatus.isNotBlank()) {

@@ -59,8 +59,8 @@ struct ClamLimit {
 };
 inline constexpr long long MiB = 1024LL * 1024;
 inline constexpr std::array<ClamLimit, 5> kClamLimits{{
-    {0, 32 * MiB},  // CL_ENGINE_MAX_SCANSIZE: aggregate decompressed bytes
-    {1, 16 * MiB},  // CL_ENGINE_MAX_FILESIZE: per contained file
+    {0, 128 * MiB},  // CL_ENGINE_MAX_SCANSIZE: aggregate decompressed bytes
+    {1, 64 * MiB},  // CL_ENGINE_MAX_FILESIZE: per contained file
     {2, 8},         // CL_ENGINE_MAX_RECURSION
     {3, 512},       // CL_ENGINE_MAX_FILES
     {31, 20000},    // CL_ENGINE_MAX_SCANTIME, milliseconds

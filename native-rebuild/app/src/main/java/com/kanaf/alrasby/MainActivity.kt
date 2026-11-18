@@ -240,7 +240,7 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
                             "، تحذيرات بنيوية=" + scan.structuralWarnings +
                             "، حدود الفحص=" + scan.truncated + ".\n" +
                             noteAr + "\n" + evidenceAr.take(2200) +
-                            "\nالقواعد الحالية اختبارية (EICAR)، ولا تثبت خلو الجهاز من الفيروسات. لم يُحذف أي ملف.",
+                            "\nقواعد المحركين الأصليين اختبارية (EICAR). مطابقة SHA-256 تعتمد على قاعدة البصمات المحمّلة؛ عدم التطابق لا يثبت سلامة الجهاز. لم يُحذف أي ملف.",
                         "Attempted: installed apps=" + scan.installedApps +
                             ", APK files=" + scan.appApksAttempted +
                             ", shared files=" + scan.sharedFilesAttempted +
@@ -254,7 +254,7 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
                             ", archive warnings=" + scan.structuralWarnings +
                             ", limits reached=" + scan.truncated + ".\n" +
                             noteEn + "\n" + evidenceEn.take(2200) +
-                            "\nBundled rules are EICAR test-only; no-match is not proof the device is malware-free. Nothing was deleted."
+                            "\nNative engine rules are EICAR test-only. SHA-256 uses the loaded signature database; no match does not prove device safety. Nothing was deleted."
                     )
                 },
                 onFailure = { error -> KanafMessage(
