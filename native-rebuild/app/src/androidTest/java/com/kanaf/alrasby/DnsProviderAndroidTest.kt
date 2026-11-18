@@ -1,0 +1,43 @@
+package com.kanaf.alrasby
+
+import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
+import com.kanaf.alrasby.engine.DnsProviderStore
+import org.junit.Assert.*
+import org.junit.Test
+import org.junit.runner.RunWith
+
+@RunWith(AndroidJUnit4::class)
+class DnsProviderAndroidTest {
+    @Test fun selectedProviderPersistsAndLegacyAliasUsesModernEncryptedEndpoint() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val original = DnsProviderStore.selected(context)
+        try {
+            if (BuildConfig.KANAF_PLAY_DNS_SECURITY_ONLY) {
+                assertFalse(DnsProviderStore.choose(context, DnsProviderStore.FAMILY))
+                assertFalse(DnsProviderStore.choose(context, DnsProviderStore.STANDARD))
+                assertTrue(DnsProviderStore.choose(context, DnsProviderStore.PLAY_SECURITY))
+                assertEquals(DnsProviderStore.PLAY_SECURITY, DnsProviderStore.selected(context))
+                assertEquals("https://security.cloudflare-dns.com/dns-query",
+                    DnsProviderStore.endpoint(DnsProviderStore.selected(context)))
+                assertNull(DnsProviderStore.endpoint(DnsProviderStore.STANDARD))
+            } else {
+            assertTrue(DnsProviderStore.choose(context, DnsProviderStore.FAMILY))
+            assertEquals(DnsProviderStore.FAMILY, DnsProviderStore.selected(context))
+            assertEquals("https://family.adguard-dns.com/dns-query",
+                DnsProviderStore.endpoint(DnsProviderStore.selected(context)))
+
+            assertTrue(DnsProviderStore.choose(context, DnsProviderStore.LEGACY))
+            assertEquals(DnsProviderStore.LEGACY, DnsProviderStore.selected(context))
+            assertEquals("https://dns.adguard-dns.com/dns-query",
+                DnsProviderStore.endpoint(DnsProviderStore.selected(context)))
+
+            assertFalse(DnsProviderStore.choose(context, "attacker.invalid"))
+            assertEquals(DnsProviderStore.LEGACY, DnsProviderStore.selected(context))
+            }
+            assertFalse(DnsProviderStore.choose(context, "attacker.invalid"))
+        } finally {
+            assertTrue(DnsProviderStore.choose(context, original))
+        }
+    }
+}

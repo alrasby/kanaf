@@ -1,0 +1,127 @@
+name: Kanaf Android APK/AAB prototype with isolated native engines
+on:
+  push:
+    branches: [rebuild/kanaf-native-v1]
+    paths: ['.github/workflows/kanaf-package-native-engines.yml', 'native-rebuild/app/**', 'native-rebuild/build.gradle.kts', 'native-rebuild/settings.gradle.kts', 'native-rebuild/gradle.properties', 'native-rebuild/tools/verify_arm64_elf.py']
+  workflow_dispatch:
+  workflow_call:
+# Avoid parallel old-commit APKs consuming runner time during UI iterations.
+concurrency:
+  group: kanaf-native-apk-${{ github.ref_name }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+  actions: read
+jobs:
+  package:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Download verified native ARM64 artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Pinned successful upstream compilation runs, not latest unverified builds.
+          CLAM_RUN=43745138794
+          YARA_RUN=43745138817
+          # The ClamAV compilation job may finish before its independent
+          # APK smoke-test job. Only the successful compiler artifact is used.
+          test "$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$CLAM_RUN/jobs" --jq '.jobs[] | select(.name == "clamav") | .conclusion')" = success
+          test "$(gh run view "$YARA_RUN" --repo "$GITHUB_REPOSITORY" --json conclusion --jq .conclusion)" = success
+          mkdir -p /tmp/kanaf-clam /tmp/kanaf-yara
+          gh run download "$CLAM_RUN" --repo "$GITHUB_REPOSITORY" -n kanaf-clamav-arm64-diagnostics -D /tmp/kanaf-clam
+          test "$(tr -d '\n' < /tmp/kanaf-clam/revision.txt)" = "5853e1396777bae4d909cd3dd44f58352e7cf9b3"
+          gh run download "$YARA_RUN" --repo "$GITHUB_REPOSITORY" -n kanaf-yarax-arm64-diagnostics -D /tmp/kanaf-yara
+          mkdir -p native-rebuild/app/src/main/jniLibs/arm64-v8a
+          target=native-rebuild/app/src/main/jniLibs/arm64-v8a
+          cp /tmp/kanaf-clam/arm64-output/libclamav.so "$target/"
+          cp /tmp/kanaf-clam/arm64-output/libclammspack.so "$target/"
+          cp /tmp/kanaf-yara/libyara_x_capi.so "$target/"
+          for lib in "$target"/*.so; do
+            python3 native-rebuild/tools/verify_arm64_elf.py --require-16kb "$lib"
+            file "$lib"
+          done
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          report = Path("/tmp/kanaf-clam/dynamic-dependencies.txt").read_text()
+          required = set(re.findall(r"Shared library: \[([^\]]+)\]", report))
+          packaged = {p.name for p in Path("native-rebuild/app/src/main/jniLibs/arm64-v8a").glob("*.so")}
+          system = {"libc.so", "libm.so", "libdl.so", "libz.so", "liblog.so"}
+          assert required <= (packaged | system), f"Missing ClamAV dependencies: {required - packaged - system}"
+          assert {"libclamav.so", "libclammspack.so", "libyara_x_capi.so"} <= packaged
+          print("Native dependency closure verified")
+          PY
+      - name: Install Android SDK components
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager -print -quit)"
+          test -x "$SDKMANAGER"
+          "$SDKMANAGER" "platforms;android-36" "build-tools;35.0.0" "ndk;27.2.12479018" "cmake;3.22.1"
+      - name: Run app tests and assemble debug APK and debug AAB
+        working-directory: native-rebuild
+        run: |
+          set -euo pipefail
+          feed=rules/eset-android-seed
+          python3 tools/signed_feed.py verify --zip "$feed/kanaf-feed-v1.zip" --public-key "$feed/feed-public.pem"
+          public_key=$(openssl pkey -pubin -in "$feed/feed-public.pem" -outform DER | openssl base64 -A)
+          install -m 644 "$feed/kanaf-feed-v1.zip" app/src/main/assets/production_signatures.zip
+          bash tools/gradle_retry_429.sh --no-daemon \
+            -PkanafArm64Runtime=true \
+            "-PkanafSignaturePublicKeyBase64=$public_key" -PkanafSignatureMinVersion=1 \
+            :app:testDebugUnitTest :app:assembleDebug :app:bundleDebug --stacktrace
+      - name: Verify APK contains all native libraries
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk=native-rebuild/app/build/outputs/apk/debug/app-debug.apk
+          test -s "$apk"
+          unzip -p "$apk" assets/production_signatures.zip | cmp - native-rebuild/rules/eset-android-seed/kanaf-feed-v1.zip
+          for so in libclamav.so libclammspack.so libyara_x_capi.so libkanaf_scan.so; do
+            unzip -Z1 "$apk" | grep -Fx "lib/arm64-v8a/$so"
+          done
+          unzip -Z1 "$apk" | grep -Fx 'assets/kanaf_test.ndb'
+          unzip -Z1 "$apk" | grep -Fx 'assets/kanaf_test.yar'
+          unzip -p "$apk" lib/arm64-v8a/libkanaf_scan.so > /tmp/kanaf-scan-verified.so
+          python3 native-rebuild/tools/verify_arm64_elf.py /tmp/kanaf-scan-verified.so
+          readelf -Ws /tmp/kanaf-scan-verified.so | grep Java_com_kanaf_alrasby_engine_NativeScannerBridge_clamScanNative
+          readelf -Ws /tmp/kanaf-scan-verified.so | grep Java_com_kanaf_alrasby_engine_NativeScannerBridge_yaraScanNative
+          # Verify every packaged ARM64 library and its APK alignment.
+          mkdir -p /tmp/kanaf-16k-elf
+          unzip -q "$apk" 'lib/arm64-v8a/*.so' -d /tmp/kanaf-16k-elf
+          for so in /tmp/kanaf-16k-elf/lib/arm64-v8a/*.so; do
+            python3 native-rebuild/tools/verify_arm64_elf.py --require-16kb "$so"
+          done
+          "$ANDROID_HOME/build-tools/35.0.0/zipalign" -c -P 16 -v 4 "$apk"
+          echo "Verified 16 KiB native ELF PT_LOAD and APK ZIP alignment."
+      - name: Verify prototype Android App Bundle contains native engines
+        shell: bash
+        run: |
+          set -euo pipefail
+          aab=native-rebuild/app/build/outputs/bundle/debug/app-debug.aab
+          test -s "$aab"
+          for so in libclamav.so libclammspack.so libyara_x_capi.so libkanaf_scan.so; do
+            unzip -Z1 "$aab" | grep -Fx "base/lib/arm64-v8a/$so"
+          done
+          # App Bundle is a publishing input, not directly installable and
+          # NEVER a Play-ready release without publisher signing/QA.
+          sha256sum "$aab"
+          echo "Debug AAB structure verified; this is not a signed production artifact."
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kanaf-native-engines-packaging-prototype
+          path: |
+            native-rebuild/app/build/outputs/apk/debug/app-debug.apk
+            native-rebuild/app/build/outputs/bundle/debug/app-debug.aab
+          if-no-files-found: error

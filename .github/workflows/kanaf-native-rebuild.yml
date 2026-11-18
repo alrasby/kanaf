@@ -1,0 +1,283 @@
+name: Kanaf native rebuild
+on:
+  push:
+    branches: [rebuild/kanaf-native-v1]
+    paths: ['native-rebuild/**', '.github/workflows/kanaf-native-rebuild.yml', '.github/workflows/kanaf-native-engines-probe.yml', '.github/workflows/kanaf-yarax-arm64.yml', '.github/workflows/kanaf-clamav-arm64.yml', '.github/workflows/kanaf-package-native-engines.yml']
+  pull_request:
+    paths: ['native-rebuild/**', '.github/workflows/kanaf-native-rebuild.yml', '.github/workflows/kanaf-native-engines-probe.yml']
+  workflow_dispatch:
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+jobs:
+  package-test-apk:
+    permissions:
+      contents: read
+      actions: read
+    uses: ./.github/workflows/kanaf-package-native-engines.yml
+
+  # The packaged APK with verified native libraries is built by the dedicated
+  # kanaf-package-native-engines workflow; do not duplicate or upload a bare APK.
+  native:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: native-rebuild
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test native ELF validation
+        run: python3 -m unittest discover -s tools -p 'test_*.py' -v
+      - name: Inventory real release inputs (absence must never pass)
+        run: |
+          set -euo pipefail
+          mkdir -p app/build/reports
+          python3 tools/release_input_inventory.py --distribution play \
+            --output app/build/reports/kanaf-release-input-inventory.json
+          bash -n tools/build_approved_release.sh
+          bash -n tools/create_owner_signing_key.sh
+          # Prevent key-generation scripts from silently creating publisher keys
+          # on any non-interactive CI runner.
+          if KANAF_SIGNER_PRIVATE_DIR=/tmp/kanaf-test-key bash tools/create_owner_signing_key.sh play-upload > /tmp/kanaf-key-neg.log 2>&1; then
+            echo '::error::Publisher key created without owner interaction'
+            exit 1
+          fi
+          grep -q 'KANAF_KEY_CREATION_BLOCKED' /tmp/kanaf-key-neg.log
+          # A public CI runner intentionally has no production assets/keys.
+          if bash tools/build_approved_release.sh build > /tmp/kanaf-release-negative.log 2>&1; then
+            echo "::error::Unsafe: public CI created a production release without external evidence"
+            exit 1
+          fi
+          grep -q "KANAF_RELEASE_INPUTS_BLOCKED" /tmp/kanaf-release-negative.log ||
+            { tail -n 50 /tmp/kanaf-release-negative.log; exit 1; }
+      - name: Test ClamAV 1.4 scan resource policy
+        run: |
+          g++ -std=c++17 -Wall -Wextra -Werror -pedantic tools/clam_policy_smoke.cpp -o /tmp/kanaf-clam-policy-test
+          /tmp/kanaf-clam-policy-test
+      - name: Test YARA-X callback and timeout fail-closed policy
+        run: |
+          g++ -std=c++17 -Wall -Wextra -Werror -pedantic tests/yara_policy_smoke.cpp -o /tmp/kanaf-yara-policy-test
+          /tmp/kanaf-yara-policy-test
+      - name: Test stable native file snapshots (YARA-X I/O)
+        run: |
+          g++ -std=c++17 -Wall -Wextra -Werror -pedantic tests/file_snapshot_smoke.cpp -o /tmp/kanaf-file-snapshot-test
+          /tmp/kanaf-file-snapshot-test
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Locate Android SDK manager
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKMANAGER=""
+          for candidate in "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "$ANDROID_HOME/cmdline-tools/16.0/bin/sdkmanager"; do
+            if [[ -x "$candidate" ]]; then SDKMANAGER="$candidate"; break; fi
+          done
+          if [[ -z "$SDKMANAGER" ]]; then
+            SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager -print -quit 2>/dev/null || true)"
+          fi
+          if [[ -z "$SDKMANAGER" || ! -x "$SDKMANAGER" ]]; then
+            echo "::error::Android sdkmanager is not installed under ANDROID_HOME"
+            exit 1
+          fi
+          echo "SDKMANAGER=$SDKMANAGER" >> "$GITHUB_ENV"
+          echo "$(dirname "$SDKMANAGER")" >> "$GITHUB_PATH"
+          "$SDKMANAGER" --version
+      - name: Install Android SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$SDKMANAGER" "platforms;android-36" "build-tools;35.0.0" "ndk;27.2.12479018" "cmake;3.22.1"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Print toolchain versions
+        run: |
+          java -version
+          gradle --version
+          echo "ANDROID_HOME=$ANDROID_HOME"
+      - name: Run native unit tests and Android lint
+        run: bash tools/gradle_retry_429.sh --no-daemon :app:testDebugUnitTest :app:lintDebug :app:assembleDebug --stacktrace
+      - name: Verify separate security-only DNS build for future Google Play
+        run: |
+          set -euo pipefail
+          bash tools/gradle_retry_429.sh --no-daemon \
+            -PkanafPlayDnsSecurityOnly=true \
+            :app:testDebugUnitTest :app:assembleDebug :app:bundleDebug \
+            :app:verifyKanafPlayDnsPolicy --stacktrace
+      - name: Negative test - community DNS must not pass Play policy gate
+        run: |
+          set -euo pipefail
+          if gradle --no-daemon :app:verifyKanafPlayDnsPolicy > /tmp/kanaf-play-dns-negative.log 2>&1; then
+            echo "::error::Community ad DNS build accepted by Google Play DNS policy gate"
+            exit 1
+          fi
+          grep -q 'KANAF_PLAY_DNS_POLICY_BLOCKED' /tmp/kanaf-play-dns-negative.log ||
+            { tail -n 80 /tmp/kanaf-play-dns-negative.log; exit 1; }
+      - name: Enforce production release must fail closed without external evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gradle --no-daemon -PkanafReleaseDistribution=play :app:verifyKanafProductionInputs > /tmp/kanaf-play-channel-negative.log 2>&1; then
+            echo "::error::Unsafe: Play release accepted community ad-filter DNS"
+            exit 1
+          fi
+          grep -q 'play-distribution-requires-security-only-dns' /tmp/kanaf-play-channel-negative.log ||
+            { tail -n 80 /tmp/kanaf-play-channel-negative.log; exit 1; }
+          if gradle --no-daemon :app:verifyKanafProductionInputs > /tmp/kanaf-production-gate.log 2>&1; then
+            echo "::error::Unsafe: production preflight accepted missing publisher assets"
+            exit 1
+          fi
+          if ! grep -q 'KANAF_PRODUCTION_RELEASE_BLOCKED' /tmp/kanaf-production-gate.log; then
+            tail -n 85 /tmp/kanaf-production-gate.log
+            echo "::error::Production gate failed for a build error instead of security refusal"
+            exit 1
+          fi
+          gradle --no-daemon -m :app:preReleaseBuild > /tmp/kanaf-release-dry-run.log
+          grep -q 'verifyKanafProductionInputs' /tmp/kanaf-release-dry-run.log ||
+            { cat /tmp/kanaf-release-dry-run.log; exit 1; }
+          echo "Security gate verified: publishing cannot proceed without independent release inputs."
+      - name: Upload diagnostic reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kanaf-native-diagnostics
+          path: |
+            native-rebuild/app/build/reports/
+            native-rebuild/app/build/test-results/
+            native-rebuild/app/build/reports/kanaf-release-input-inventory.json
+          if-no-files-found: warn
+
+  arm64-probe:
+    # Legacy full-feasibility probe is expensive and is superseded by isolated engine CI.
+    if: github.event_name == 'workflow_dispatch'
+    continue-on-error: true
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Locate preinstalled Android SDK manager
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          if [[ ! -x "$SDKMANAGER" ]]; then
+            SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager -print -quit)"
+          fi
+          test -x "$SDKMANAGER"
+          echo "SDKMANAGER=$SDKMANAGER" >> "$GITHUB_ENV"
+          "$SDKMANAGER" --version
+      - name: Install Android NDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$SDKMANAGER" "ndk;27.2.12479018"
+      - name: Verify NDK toolchain and ABI
+        shell: bash
+        run: |
+          set -euo pipefail
+          NDK="$ANDROID_HOME/ndk/27.2.12479018"
+          test -x "$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang"
+          "$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang" --version
+      - name: Retrieve pinned engine source revisions
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch clamav-1.4.3 https://github.com/Cisco-Talos/clamav.git clamav-src
+          git clone --depth 1 --branch v0.13.0 https://github.com/VirusTotal/yara-x.git yarax-src
+          git -C clamav-src rev-parse HEAD | tee clamav-commit.txt
+          git -C yarax-src rev-parse HEAD | tee yarax-commit.txt
+      - name: Cross-compile minimal Android ARM64 NDK probe
+        shell: bash
+        run: |
+          set -euo pipefail
+          CLANG="$ANDROID_HOME/ndk/27.2.12479018/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang"
+          printf '%s\n' '#include <stdint.h>' 'int kanaf_arm64_probe(void) { return sizeof(uint64_t) == 8 ? 0 : 1; }' > probe.c
+          "$CLANG" -shared -fPIC probe.c -o libkanaf_arm64_probe.so
+          file libkanaf_arm64_probe.so
+          readelf -h libkanaf_arm64_probe.so | grep -E 'AArch64|ELF64'
+      - name: Install Android Rust target
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup target add aarch64-linux-android
+          rustc --version
+          cargo --version
+      - name: Attempt YARA-X Android ARM64 C API build
+        id: yara
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$ANDROID_HOME/ndk/27.2.12479018/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang"
+          export CC_aarch64_linux_android="$CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER"
+          cd yarax-src
+          CARGO_BUILD_JOBS=2 CARGO_INCREMENTAL=0 timeout 900 cargo build --locked --release --target aarch64-linux-android -p yara-x-capi 2>&1 | tee ../yara-build.log
+          find target/aarch64-linux-android/release -maxdepth 1 -name '*yara*' -type f -print | tee ../yara-output.txt
+          test -s target/aarch64-linux-android/release/libyara_x_capi.so
+          readelf -h target/aarch64-linux-android/release/libyara_x_capi.so | grep AArch64
+          cp target/aarch64-linux-android/release/libyara_x_capi.so ../libyara_x_capi-arm64.so
+      - name: Attempt ClamAV Android ARM64 CMake configure
+        id: clamav
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 360 cmake -S clamav-src -B clamav-build -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE="$ANDROID_HOME/ndk/27.2.12479018/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-26 \
+            -DENABLE_LIBCLAMAV_ONLY=ON -DENABLE_TESTS=OFF \
+            -DENABLE_MAN_PAGES=OFF -DENABLE_DOXYGEN=OFF 2>&1 | tee clamav-configure.log
+          timeout 600 cmake --build clamav-build --parallel 2 2>&1 | tee clamav-build.log
+          find clamav-build -type f \( -name "libclamav.so*" -o -name "libclamav.a" \) -print | tee clamav-output.txt
+          test -s clamav-output.txt
+          while IFS= read -r lib; do
+            file "$lib"
+            if [[ "$lib" == *.a ]]; then
+              member="$(ar t "$lib" | sed -n '1p')"
+              test -n "$member"
+              ar p "$lib" "$member" > /tmp/kanaf-clamav-member.o
+              readelf -h /tmp/kanaf-clamav-member.o | grep AArch64
+            else
+              readelf -h "$lib" | grep AArch64
+            fi
+          done < clamav-output.txt
+      - name: Summarize real engine build status
+        if: always()
+        shell: bash
+        run: |
+          echo "YARA-X build outcome: ${{ steps.yara.outcome }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "ClamAV configure outcome: ${{ steps.clamav.outcome }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Neither engine is enabled in the Android app by this workflow." >> "$GITHUB_STEP_SUMMARY"
+          if [[ -f libyara_x_capi-arm64.so ]]; then sha256sum libyara_x_capi-arm64.so >> "$GITHUB_STEP_SUMMARY"; fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: kanaf-arm64-probe
+          path: |
+            libkanaf_arm64_probe.so
+            libyara_x_capi-arm64.so
+            clamav-commit.txt
+            yarax-commit.txt
+            yara-build.log
+            yara-output.txt
+            clamav-configure.log
+            clamav-build.log
+            clamav-output.txt
+      - name: Enforce native engine build result
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ steps.yara.outcome }}" != "success" ]]; then
+            echo "::error::YARA-X ARM64 shared library build or ELF verification failed; inspect yara-build.log"
+            exit 1
+          fi
+          if [[ "${{ steps.clamav.outcome }}" != "success" ]]; then
+            echo "::error::ClamAV Android ARM64 build failed; inspect clamav-configure.log and clamav-build.log"
+            exit 1
+          fi
+          echo "YARA-X ARM64 library produced; ClamAV ARM64 library produced. Runtime detection and performance tests remain pending."
