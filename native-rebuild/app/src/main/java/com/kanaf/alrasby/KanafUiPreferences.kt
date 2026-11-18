@@ -98,7 +98,7 @@ data class KanafMessage(val ar: String, val en: String) {
                 return KanafMessage(
                     "فحص المجلد المحدد: فُحص $checked، تطابقات $matches، " +
                         "غير مكتمل $incomplete، " +
-                        if (truncated == "true") "تجاوز حد الملفات." else "لم يتجاوز حد الملفات.",
+                        if (truncated == "true") "توقف عند حد الملفات أو المجلدات أو الوقت." else "اكتمل النطاق المحدد.",
                     raw
                 )
             }

@@ -29,7 +29,8 @@ import android.graphics.drawable.Icon
 import android.Manifest
 import android.os.Build
 import android.content.pm.PackageManager
-import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkInfo
+import androidx.lifecycle.Observer
 import androidx.work.WorkManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -63,7 +64,6 @@ import com.kanaf.alrasby.engine.ZipInspector
 import com.kanaf.alrasby.engine.LinkInspector
 import com.kanaf.alrasby.engine.EncryptedVault
 import com.kanaf.alrasby.engine.ProtectionControl
-import com.kanaf.alrasby.engine.ScopedFileCheckWorker
 import com.kanaf.alrasby.engine.ScopedDeviceScan
 import com.kanaf.alrasby.engine.SafQuarantine
 import com.kanaf.alrasby.engine.ProductionFeedInstaller
@@ -133,9 +133,10 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
                 )
                 ProtectionControl.enableTreeChecks(activity, tree)
                 periodicChecks = true
+                ProtectionControl.checkNow(activity)
                 protectionStatus = KanafMessage(
-                    "تمت جدولة فحص بصمات SHA-256 للمجلد المختار كل 24 ساعة تقريبًا.",
-                    "Selected-folder SHA-256 checks scheduled approximately every 24 hours."
+                    "تم طلب فحص المجلد الآن وتفعيل الفحص الدوري كل 24 ساعة تقريبًا.",
+                    "Folder check requested now; periodic checks scheduled approximately every 24 hours."
                 )
             }.onFailure {
                 protectionStatus = KanafMessage(
@@ -403,6 +404,30 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
             "المرشح متوقف، والعدادات غير محفوظة.",
             "Filtering is stopped; no session counters are retained."
         )
+    }
+
+    DisposableEffect(activity) {
+        val owner = activity as? LifecycleOwner
+        val results = WorkManager.getInstance(activity)
+            .getWorkInfosForUniqueWorkLiveData(ProtectionControl.IMMEDIATE_CHECK)
+        val observer = Observer<List<WorkInfo>> { work ->
+            val latest = work.firstOrNull { !it.state.isFinished } ?: work.firstOrNull()
+            protectionStatus = when (latest?.state) {
+                WorkInfo.State.ENQUEUED, WorkInfo.State.BLOCKED ->
+                    KanafMessage("فحص المجلد في انتظار التنفيذ.", "Folder scan queued.")
+                WorkInfo.State.RUNNING ->
+                    KanafMessage("جارٍ فحص المجلد المختار…", "Scanning selected folder…")
+                WorkInfo.State.SUCCEEDED ->
+                    KanafMessage.fromScheduledStatus(ProtectionControl.lastResult(activity))
+                WorkInfo.State.FAILED ->
+                    KanafMessage("تعذر إكمال مهمة فحص المجلد.", "Folder scan task failed.")
+                WorkInfo.State.CANCELLED ->
+                    KanafMessage("أُلغي فحص المجلد.", "Folder scan cancelled.")
+                null -> protectionStatus
+            }
+        }
+        if (owner != null) results.observe(owner, observer)
+        onDispose { results.removeObserver(observer) }
     }
 
     // Android Settings may be changed outside Kanaf; refresh immediately on return.
@@ -1005,9 +1030,7 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
         },
         onRunScopedCheck = {
             if (periodicChecks && !busy) {
-                WorkManager.getInstance(activity).enqueue(
-                    OneTimeWorkRequestBuilder<ScopedFileCheckWorker>().build()
-                )
+                ProtectionControl.checkNow(activity)
                 protectionStatus = KanafMessage(
                     "طُلب فحص المجلد، وسيُنفّذ عندما يسمح نظام أندرويد.",
                     "Folder check requested; Android will execute it when allowed."

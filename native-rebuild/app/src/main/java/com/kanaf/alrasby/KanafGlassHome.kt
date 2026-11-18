@@ -1334,8 +1334,8 @@ fun KanafGlassHome(
                         Text(tr("الفحص الدوري للملفات", "Scheduled scoped file check"), color = ink,
                             style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                         Text(tr(
-                            "اختر مجلدًا محددًا تمنح كنف حق قراءته. يعمل الفحص كل 24 ساعة تقريبًا بحسب قيود البطارية، ويطابق بصمات SHA-256 لحد أقصى 32 ملفًا مباشرًا في الدورة. لا يفحص الجهاز كله ولا يعمل كحماية فورية.",
-                            "Choose a folder explicitly. Android schedules an approximate 24-hour check of up to 32 direct child files against local SHA-256 signatures. This is not a whole-device or realtime scan."
+                            "اختر مجلدًا محددًا تمنح كنف حق قراءته. يعمل الفحص كل 24 ساعة تقريبًا بحسب قيود البطارية، ويطابق بصمات SHA-256 لحد أقصى 32 ملفًا ضمن المجلد ومجلداته الفرعية في الدورة. لا يفحص الجهاز كله ولا يعمل كحماية فورية.",
+                            "Choose a folder explicitly. Android schedules an approximate 24-hour check of up to 32 files in the selected folder and its subfolders against local SHA-256 signatures. This is not a whole-device or realtime scan."
                         ), color = secondary, style = MaterialTheme.typography.bodyMedium)
                         Spacer(Modifier.height(12.dp))
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,

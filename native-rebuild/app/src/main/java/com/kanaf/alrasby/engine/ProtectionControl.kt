@@ -4,6 +4,8 @@ import android.content.Context
 import android.net.Uri
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.ExistingWorkPolicy
+import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import java.util.concurrent.TimeUnit
 
@@ -14,6 +16,7 @@ object ProtectionControl {
     private const val PERIODIC = "periodic_tree_checks"
     private const val TREE = "granted_tree_uri"
     private const val SUMMARY = "last_check_summary"
+    const val IMMEDIATE_CHECK = "kanaf_scoped_immediate_sha256_v1"
     private const val SCHEDULE = "kanaf_scoped_periodic_sha256_v1"
 
     private fun prefs(context: Context) =
@@ -66,12 +69,21 @@ object ProtectionControl {
         )
     }
 
+    fun checkNow(context: Context) {
+        check(periodicEnabled(context) && permittedTree(context) != null)
+        WorkManager.getInstance(context).enqueueUniqueWork(
+            IMMEDIATE_CHECK, ExistingWorkPolicy.KEEP,
+            OneTimeWorkRequestBuilder<ScopedFileCheckWorker>().build()
+        )
+    }
+
     fun disableTreeChecks(context: Context) {
         val previous = permittedTree(context)
         // Opt-out must be durable BEFORE cancellation; a queued worker checks
         // this flag even if WorkManager cancellation is delayed.
         prefs(context).edit().putBoolean(PERIODIC, false).remove(TREE).commit()
         runCatching { WorkManager.getInstance(context).cancelUniqueWork(SCHEDULE) }
+        runCatching { WorkManager.getInstance(context).cancelUniqueWork(IMMEDIATE_CHECK) }
         if (previous != null) runCatching {
             context.contentResolver.releasePersistableUriPermission(
                 previous, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
