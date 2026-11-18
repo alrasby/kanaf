@@ -13,7 +13,6 @@ permissions:
   contents: read
 jobs:
   package-test-apk:
-    if: github.event_name == 'push'
     permissions:
       contents: read
       actions: read
