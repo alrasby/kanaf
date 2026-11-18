@@ -268,8 +268,10 @@ fun KanafGlassHome(
     val background = if (dark) Night else Color(0xFFF2F7F7)
     val ink = if (dark) Color(0xFFF0FBFA) else Night
     val secondary = if (dark) Color(0xFFB4CDCF) else Color(0xFF47666C)
-    val card = if (dark) Color(0xFF1D3447).copy(alpha = 0.72f) else Color.White.copy(alpha = 0.68f)
-    val stroke = if (dark) Aqua.copy(alpha = 0.28f) else Color.White.copy(alpha = 0.90f)
+    val card = if (dark) Color(0xFF153F48).copy(alpha = 0.78f)
+        else Color(0xFFB9DDD5).copy(alpha = 0.55f)
+    val stroke = if (dark) Color(0xFF80D9C9).copy(alpha = 0.28f)
+        else Color(0xFF70ABA0).copy(alpha = 0.30f)
 
     CompositionLocalProvider(LocalLayoutDirection provides if (arabic) LayoutDirection.Rtl else LayoutDirection.Ltr) {
     MaterialTheme(colorScheme = if (dark) darkColorScheme(primary = Aqua, surface = Night, onSurface = ink)
@@ -1400,11 +1402,13 @@ private fun GlassPanel(
     Column(
         Modifier.fillMaxWidth()
             .shadow(6.dp, RoundedCornerShape(22.dp), clip = false,
-                ambientColor = Color(0xFF146C70).copy(alpha = 0.12f),
-                spotColor = Color(0xFF0A1729).copy(alpha = 0.10f))
+                ambientColor = Color(0xFF146C70).copy(alpha = 0.08f),
+                spotColor = Color(0xFF0A1729).copy(alpha = 0.07f))
             .clip(RoundedCornerShape(22.dp))
             .background(Brush.linearGradient(listOf(
-                fill.copy(alpha = (fill.alpha + 0.12f).coerceAtMost(1f)), fill
+                fill.copy(alpha = (fill.alpha + 0.06f).coerceAtMost(1f)),
+                fill,
+                fill.copy(alpha = (fill.alpha - 0.08f).coerceAtLeast(0f))
             )))
             .border(1.dp, outline, RoundedCornerShape(22.dp))
             .padding(horizontal = 14.dp, vertical = 12.dp),
