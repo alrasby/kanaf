@@ -12,6 +12,13 @@ concurrency:
 permissions:
   contents: read
 jobs:
+  package-test-apk:
+    if: github.event_name == 'push'
+    permissions:
+      contents: read
+      actions: read
+    uses: ./.github/workflows/kanaf-package-native-engines.yml
+
   # The packaged APK with verified native libraries is built by the dedicated
   # kanaf-package-native-engines workflow; do not duplicate or upload a bare APK.
   native:
