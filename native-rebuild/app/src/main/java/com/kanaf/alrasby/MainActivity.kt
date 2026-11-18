@@ -410,32 +410,19 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
         val owner = activity as? LifecycleOwner
         val listener = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_STOP) {
-                // Private scan reports are in-memory and cleared when leaving.
-                if (automaticScanActive) {
-                    automaticScanCancellation.set(true)
-                    autoScanSession.incrementAndGet()
-                    automaticScanActive = false
-                    autoScanProgress = ""
-                    busy = false
+                // Preserve active user-requested work across navigation and transient stops.
+                // Completed reports retain the existing clear-on-leave privacy behavior.
+                if (!automaticScanActive && !manualScanActive &&
+                    !scopedScanActive && !engineSelfTestActive) {
+                    hasScanReport = false
+                    status = KanafMessage(
+                        "استخدم زر الفحص لمراجعة الجهاز", "Tap Scan to inspect your device"
+                    )
+                    selfTestStatus = KanafMessage.EMPTY
+                    deviceScanStatus = KanafMessage.EMPTY
+                    scanHistoryArabic.clear()
+                    scanHistoryEnglish.clear()
                 }
-                manualScanSession.incrementAndGet()
-                scopedScanSession.incrementAndGet()
-                scopedScanCancellation.set(true)
-                selfTestSession.incrementAndGet()
-                if (manualScanActive || scopedScanActive || engineSelfTestActive) {
-                    manualScanActive = false
-                    scopedScanActive = false
-                    engineSelfTestActive = false
-                    busy = false
-                }
-                hasScanReport = false
-                status = KanafMessage(
-                    "استخدم زر الفحص لمراجعة الجهاز", "Tap Scan to inspect your device"
-                )
-                selfTestStatus = KanafMessage.EMPTY
-                deviceScanStatus = KanafMessage.EMPTY
-                scanHistoryArabic.clear()
-                scanHistoryEnglish.clear()
             }
             if (event == Lifecycle.Event.ON_RESUME) {
                 systemDns = PrivateDnsCompatibility.read(activity)

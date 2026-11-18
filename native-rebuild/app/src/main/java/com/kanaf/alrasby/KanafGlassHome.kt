@@ -5,6 +5,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
@@ -267,8 +268,8 @@ fun KanafGlassHome(
     val background = if (dark) Night else Color(0xFFF2F7F7)
     val ink = if (dark) Color(0xFFF0FBFA) else Night
     val secondary = if (dark) Color(0xFFB4CDCF) else Color(0xFF47666C)
-    val card = if (dark) Color(0xFF1D3447).copy(alpha = 0.85f) else Color.White.copy(alpha = 0.84f)
-    val stroke = if (dark) Aqua.copy(alpha = 0.24f) else Color.White.copy(alpha = 0.95f)
+    val card = if (dark) Color(0xFF1D3447).copy(alpha = 0.72f) else Color.White.copy(alpha = 0.68f)
+    val stroke = if (dark) Aqua.copy(alpha = 0.28f) else Color.White.copy(alpha = 0.90f)
 
     CompositionLocalProvider(LocalLayoutDirection provides if (arabic) LayoutDirection.Rtl else LayoutDirection.Ltr) {
     MaterialTheme(colorScheme = if (dark) darkColorScheme(primary = Aqua, surface = Night, onSurface = ink)
@@ -358,6 +359,26 @@ fun KanafGlassHome(
                                         fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium)
                                 }
                             }
+                    }
+                }
+                if (busy && page != 0) {
+                    Surface(
+                        color = card,
+                        shape = RoundedCornerShape(16.dp),
+                        tonalElevation = 2.dp
+                    ) {
+                        Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                            Text(tr("العملية مستمرة", "Operation in progress"),
+                                color = ink, style = MaterialTheme.typography.labelLarge)
+                            if (autoScanProgress.isNotBlank()) {
+                                Text(autoScanProgress, color = secondary,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    modifier = Modifier.weight(1f))
+                            }
+                        }
                     }
                 }
                 // Keep header and navigation reachable while lengthy cards scroll.
@@ -1378,8 +1399,14 @@ private fun GlassPanel(
 ) {
     Column(
         Modifier.fillMaxWidth()
+            .shadow(6.dp, RoundedCornerShape(22.dp), clip = false,
+                ambientColor = Color(0xFF146C70).copy(alpha = 0.12f),
+                spotColor = Color(0xFF0A1729).copy(alpha = 0.10f))
+            .clip(RoundedCornerShape(22.dp))
+            .background(Brush.linearGradient(listOf(
+                fill.copy(alpha = (fill.alpha + 0.12f).coerceAtMost(1f)), fill
+            )))
             .border(1.dp, outline, RoundedCornerShape(22.dp))
-            .background(fill, RoundedCornerShape(22.dp))
             .padding(horizontal = 14.dp, vertical = 12.dp),
         content = content
     )
