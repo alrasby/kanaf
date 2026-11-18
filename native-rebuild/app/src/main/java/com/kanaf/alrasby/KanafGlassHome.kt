@@ -11,6 +11,8 @@ import androidx.compose.material.icons.outlined.DateRange
 import androidx.compose.material.icons.outlined.Build
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.painterResource
@@ -148,6 +150,8 @@ fun KanafGlassHome(
             page = 1
         }
     }
+    var headerHeight by remember { mutableIntStateOf(0) }
+    val headerPadding = with(LocalDensity.current) { headerHeight.toDp() }
     val scrollState = rememberScrollState()
     LaunchedEffect(page) { scrollState.scrollTo(0) }
     // Refresh only while the DNS screen is visible, with no domain-history storage.
@@ -289,71 +293,16 @@ fun KanafGlassHome(
             ),
             contentAlignment = Alignment.TopCenter
         ) {
-            Column(
+            Box(
                 Modifier.widthIn(max = 680.dp).fillMaxWidth().fillMaxHeight()
                     .windowInsetsPadding(WindowInsets.safeDrawing)
-                    .padding(horizontal = 14.dp, vertical = 10.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
+                    .padding(horizontal = 14.dp, vertical = 10.dp)
             ) {
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        Modifier.size(48.dp).clip(RoundedCornerShape(14.dp))
-                            .background(Color(0xFFD4F0EB)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Image(painterResource(R.drawable.kanaf_launcher_foreground),
-                            contentDescription = null, modifier = Modifier.size(48.dp))
-                    }
-                    Spacer(Modifier.width(8.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text(tr("كنف", "Kanaf"), color = ink,
-                            style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                        Text(tr("مركز الأمان والخصوصية", "Security & privacy studio"),
-                            color = secondary, style = MaterialTheme.typography.labelSmall)
-                    }
-                    OutlinedButton(
-                        onClick = { page = if (page != 0) 0 else 5 },
-                        modifier = Modifier.testTag("settings_button"),
-                        shape = RoundedCornerShape(16.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            containerColor = if (page == 5) Teal.copy(alpha = 0.14f) else card,
-                            contentColor = if (dark) Aqua else Teal
-                        ),
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
-                    ) {
-                        Text(if (page != 0) "⌂" else "⚙",
-                            style = MaterialTheme.typography.titleMedium)
-                        Spacer(Modifier.width(5.dp))
-                        Text(if (page != 0) tr("الرئيسية", "Home")
-                            else tr("الإعدادات", "Settings"),
-                            style = MaterialTheme.typography.labelMedium)
-                    }
-                }
-                if (busy && page != 0) {
-                    Surface(
-                        color = card,
-                        shape = RoundedCornerShape(16.dp),
-                        tonalElevation = 2.dp
-                    ) {
-                        Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
-                            Text(tr("العملية مستمرة", "Operation in progress"),
-                                color = ink, style = MaterialTheme.typography.labelLarge)
-                            if (autoScanProgress.isNotBlank()) {
-                                Text(autoScanProgress, color = secondary,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    modifier = Modifier.weight(1f))
-                            }
-                        }
-                    }
-                }
                 // Keep header and navigation reachable while lengthy cards scroll.
                 Column(
-                    Modifier.fillMaxWidth().weight(1f)
+                    Modifier.fillMaxSize()
                         .verticalScroll(scrollState)
-                        .padding(bottom = 12.dp),
+                        .padding(top = headerPadding + 10.dp, bottom = 12.dp),
                     verticalArrangement = Arrangement.spacedBy(9.dp)
                 ) {
                 if (page == 0) {
@@ -374,32 +323,19 @@ fun KanafGlassHome(
                         ), color = secondary, style = MaterialTheme.typography.bodyMedium,
                             textAlign = TextAlign.Center)
                         Spacer(Modifier.height(14.dp))
-                        Row(Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically) {
-                            Button(onClick = onDeviceScan, enabled = !busy,
-                                modifier = Modifier.weight(1.6f).heightIn(min = 52.dp)
-                                    .testTag("device_scan_button"),
-                                shape = RoundedCornerShape(20.dp),
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = if (dark) Aqua else Teal,
-                                    contentColor = if (dark) Night else Color.White
-                                )
-                            ) {
-                                Text(if (busy) tr("جارٍ الفحص…", "Scanning…")
-                                    else tr("فحص الجهاز الآن", "Scan device now"),
-                                    style = MaterialTheme.typography.labelLarge,
-                                    fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
-                            }
-                            OutlinedButton(onClick = { page = 10 },
-                                modifier = Modifier.weight(1f).heightIn(min = 52.dp)
-                                    .testTag("open_scan_tools"),
-                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp),
-                                shape = RoundedCornerShape(18.dp)) {
-                                Text(tr("خيارات الفحص", "Scan options"),
-                                    textAlign = TextAlign.Center,
-                                    style = MaterialTheme.typography.labelLarge)
-                            }
+                        Button(onClick = onDeviceScan, enabled = !busy,
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)
+                                .testTag("device_scan_button"),
+                            shape = RoundedCornerShape(20.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (dark) Aqua else Teal,
+                                contentColor = if (dark) Night else Color.White
+                            )
+                        ) {
+                            Text(if (busy) tr("جارٍ الفحص…", "Scanning…")
+                                else tr("فحص الجهاز الآن", "Scan device now"),
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
                         }
                         if (busy) {
                             Spacer(Modifier.height(8.dp))
@@ -422,11 +358,12 @@ fun KanafGlassHome(
                             color = secondary, style = MaterialTheme.typography.bodySmall
                         )
                     }
-                    val homeSections = KanafSection.entries.filter { it.id !in hiddenSections }
-                    homeSections.chunked(3).forEach { row ->
+                    val homeSections = KanafSection.entries.filter { it.id !in hiddenSections } + listOf(null, null)
+                    homeSections.chunked(3).forEachIndexed { rowIndex, row ->
                         Row(Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            row.forEach { section ->
+                            row.forEachIndexed { columnIndex, section ->
+                                val action = rowIndex * 3 + columnIndex - (homeSections.size - 2)
                                 val title = when (section) {
                                     KanafSection.SCAN -> tr("الفحص", "Scan")
                                     KanafSection.LINKS -> tr("الروابط", "Links")
@@ -435,6 +372,7 @@ fun KanafGlassHome(
                                     KanafSection.PROTECTION -> tr("الحماية", "Protection")
                                     KanafSection.HISTORY -> tr("السجل", "History")
                                     KanafSection.ENGINES -> tr("المحركات", "Engines")
+                                    null -> if (action == 0) tr("خيارات الفحص", "Scan options") else tr("حماية DNS", "DNS protection")
                                 }
                                 val symbol = when (section) {
                                     KanafSection.SCAN -> Icons.Outlined.Search
@@ -444,10 +382,17 @@ fun KanafGlassHome(
                                     KanafSection.PROTECTION -> Icons.Outlined.Warning
                                     KanafSection.HISTORY -> Icons.Outlined.DateRange
                                     KanafSection.ENGINES -> Icons.Outlined.Build
+                                    null -> if (action == 0) Icons.Outlined.Search else Icons.Outlined.Share
                                 }
                                 Surface(
-                                    onClick = { page = if (section == KanafSection.SCAN) 10 else section.page },
-                                    modifier = Modifier.weight(1f).testTag("nav_" + section.id),
+                                    onClick = { page = when {
+                                        section == null -> if (action == 0) 10 else 9
+                                        section == KanafSection.SCAN -> 10
+                                        else -> section.page
+                                    } },
+                                    modifier = Modifier.weight(1f).testTag(
+                                        if (section != null) "nav_" + section.id
+                                        else if (action == 0) "open_scan_tools" else "open_dns_page"),
                                     shape = RoundedCornerShape(18.dp), color = card,
                                     border = androidx.compose.foundation.BorderStroke(1.dp, stroke)
                                 ) {
@@ -468,14 +413,6 @@ fun KanafGlassHome(
                             }
                             repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
                         }
-                    }
-                    OutlinedButton(onClick = { page = 9 },
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
-                            .testTag("open_dns_page"), shape = RoundedCornerShape(18.dp)) {
-                        Icon(Icons.Outlined.Share, contentDescription = null,
-                            modifier = Modifier.size(20.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Text(tr("حماية DNS", "DNS protection"))
                     }
                     if (deviceScanStatus.isNotBlank()) {
                         GlassPanel(card, stroke) {
@@ -1380,6 +1317,7 @@ fun KanafGlassHome(
                 Text(
                     "Made with ❤️ By NabdhServ.Net",
                     modifier = Modifier.fillMaxWidth()
+                        .clip(RoundedCornerShape(50))
                         .border(1.dp, stroke, RoundedCornerShape(50))
                         .background(card, RoundedCornerShape(50))
                         .clickable(onClick = onOpenWebsite)
@@ -1397,7 +1335,72 @@ fun KanafGlassHome(
                 )
                 }
                 } // scrollable page content
-            } // persistent header/navigation column
+                Column(
+                    Modifier.fillMaxWidth()
+                        .onSizeChanged { headerHeight = it.height }
+                        .clip(RoundedCornerShape(bottomStart = 20.dp, bottomEnd = 20.dp))
+                        .background(Brush.verticalGradient(listOf(
+                            card.copy(alpha = 0.88f), card.copy(alpha = 0.65f)
+                        )))
+                        .padding(horizontal = 8.dp, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        Modifier.size(48.dp).clip(RoundedCornerShape(14.dp))
+                            .background(Color(0xFFD4F0EB)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Image(painterResource(R.drawable.kanaf_launcher_foreground),
+                            contentDescription = null, modifier = Modifier.size(48.dp))
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(tr("كنف", "Kanaf"), color = ink,
+                            style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                        Text(tr("مركز الأمان والخصوصية", "Security & privacy studio"),
+                            color = secondary, style = MaterialTheme.typography.labelSmall)
+                    }
+                    OutlinedButton(
+                        onClick = { page = if (page != 0) 0 else 5 },
+                        modifier = Modifier.testTag("settings_button"),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            containerColor = if (page == 5) Teal.copy(alpha = 0.14f) else card,
+                            contentColor = if (dark) Aqua else Teal
+                        ),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                    ) {
+                        Text(if (page != 0) "⌂" else "⚙",
+                            style = MaterialTheme.typography.titleMedium)
+                        Spacer(Modifier.width(5.dp))
+                        Text(if (page != 0) tr("الرئيسية", "Home")
+                            else tr("الإعدادات", "Settings"),
+                            style = MaterialTheme.typography.labelMedium)
+                    }
+                }
+                if (busy && page != 0) {
+                    Surface(
+                        color = card,
+                        shape = RoundedCornerShape(16.dp),
+                        tonalElevation = 2.dp
+                    ) {
+                        Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                            Text(tr("العملية مستمرة", "Operation in progress"),
+                                color = ink, style = MaterialTheme.typography.labelLarge)
+                            if (autoScanProgress.isNotBlank()) {
+                                Text(autoScanProgress, color = secondary,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    modifier = Modifier.weight(1f))
+                            }
+                        }
+                    }
+                }
+                }
+            } // header overlays the scrolling cards
         }
     }
     }
