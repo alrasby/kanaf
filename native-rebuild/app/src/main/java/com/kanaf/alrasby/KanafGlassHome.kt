@@ -377,20 +377,20 @@ fun KanafGlassHome(
                         Row(Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalAlignment = Alignment.CenterVertically) {
-                        Button(onClick = onDeviceScan, enabled = !busy,
-                            modifier = Modifier.weight(1.6f).heightIn(min = 52.dp)
-                                .testTag("device_scan_button"),
-                            shape = RoundedCornerShape(20.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = if (dark) Aqua else Teal,
-                                contentColor = if (dark) Night else Color.White
-                            )
-                        ) {
-                            Text(if (busy) tr("جارٍ الفحص…", "Scanning…")
-                                else tr("فحص الجهاز الآن", "Scan device now"),
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold)
-                        }
+                            Button(onClick = onDeviceScan, enabled = !busy,
+                                modifier = Modifier.weight(1.6f).heightIn(min = 52.dp)
+                                    .testTag("device_scan_button"),
+                                shape = RoundedCornerShape(20.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = if (dark) Aqua else Teal,
+                                    contentColor = if (dark) Night else Color.White
+                                )
+                            ) {
+                                Text(if (busy) tr("جارٍ الفحص…", "Scanning…")
+                                    else tr("فحص الجهاز الآن", "Scan device now"),
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+                            }
                             OutlinedButton(onClick = { page = 10 },
                                 modifier = Modifier.weight(1f).heightIn(min = 52.dp)
                                     .testTag("open_scan_tools"),

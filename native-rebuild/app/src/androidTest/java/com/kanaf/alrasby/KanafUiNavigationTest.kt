@@ -38,7 +38,6 @@ class KanafUiNavigationTest {
         rule.onNodeWithTag("lang_en").performScrollTo().performClick()
         rule.onNodeWithText("Language & display").assertExists()
         rule.onNodeWithTag("settings_button").performClick()
-        rule.onNodeWithTag("more_features").performClick()
         rule.onNodeWithTag("nav_scan").assertExists()
         rule.onNodeWithText("Made with ❤️ By NabdhServ.Net").assertDoesNotExist()
     }
@@ -47,7 +46,7 @@ class KanafUiNavigationTest {
         rule.onNodeWithTag("device_scan_button").assertExists()
         rule.onNodeWithTag("open_dns_page").assertExists()
         rule.onNodeWithTag("dns_filter_switch").assertDoesNotExist()
-        rule.onNodeWithTag("open_dns_page").performClick()
+        rule.onNodeWithTag("open_dns_page").performScrollTo().performClick()
         // Android 8 has no system Private DNS; it was added in Android 9.
         if (Build.VERSION.SDK_INT >= 28) {
             rule.onNodeWithTag("dns_system_off").assertExists()
@@ -93,7 +92,6 @@ class KanafUiNavigationTest {
         )
         assertFalse(settings.hiddenSections().isEmpty())
         rule.onNodeWithTag("settings_button").performClick()
-        rule.onNodeWithTag("more_features").performClick()
         rule.onNodeWithTag("nav_scan").assertExists()
         rule.onNodeWithTag("nav_links").assertDoesNotExist()
         rule.onNodeWithTag("settings_button").performClick()
