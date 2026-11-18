@@ -1,14 +1,19 @@
 package com.kanaf.alrasby
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.Share
+import androidx.compose.material.icons.outlined.List
+import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.Warning
+import androidx.compose.material.icons.outlined.DateRange
+import androidx.compose.material.icons.outlined.Build
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.selection.selectable
-import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -132,7 +137,6 @@ fun KanafGlassHome(
     var confirmVpn by remember { mutableStateOf(false) }
     var showPrivacyPolicy by remember { mutableStateOf(false) }
     var customPrivateDns by rememberSaveable { mutableStateOf("") }
-    var sectionsOpen by rememberSaveable { mutableStateOf(false) }
     var detailsOpen by rememberSaveable { mutableStateOf(false) }
     var dnsAdvanced by rememberSaveable { mutableStateOf(false) }
     var deleteVaultId by remember { mutableStateOf<String?>(null) }
@@ -308,7 +312,7 @@ fun KanafGlassHome(
                             color = secondary, style = MaterialTheme.typography.labelSmall)
                     }
                     OutlinedButton(
-                        onClick = { page = if (page == 5) 0 else 5 },
+                        onClick = { page = if (page != 0) 0 else 5 },
                         modifier = Modifier.testTag("settings_button"),
                         shape = RoundedCornerShape(16.dp),
                         colors = ButtonDefaults.outlinedButtonColors(
@@ -317,50 +321,12 @@ fun KanafGlassHome(
                         ),
                         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
                     ) {
-                        Text(if (page == 5) "⌂" else "⚙",
+                        Text(if (page != 0) "⌂" else "⚙",
                             style = MaterialTheme.typography.titleMedium)
                         Spacer(Modifier.width(5.dp))
-                        Text(if (page == 5) tr("الرئيسية", "Home")
+                        Text(if (page != 0) tr("الرئيسية", "Home")
                             else tr("الإعدادات", "Settings"),
                             style = MaterialTheme.typography.labelMedium)
-                    }
-                }
-                if ((page != 0 && page != 5 && page != 9 && page != 10) ||
-                    (page == 0 && sectionsOpen)) {
-                    FlowRow(
-                        modifier = Modifier.fillMaxWidth().selectableGroup(),
-                        horizontalArrangement = Arrangement.spacedBy(5.dp)
-                    ) {
-                        KanafSection.entries.filter { it.id !in hiddenSections }
-                            .forEach { section ->
-                                val label = when (section) {
-                                    KanafSection.SCAN -> tr("الفحص", "Scan")
-                                    KanafSection.LINKS -> tr("الروابط", "Links")
-                                    KanafSection.APPS -> tr("التطبيقات", "Apps")
-                                    KanafSection.VAULT -> tr("الخزنة", "Vault")
-                                    KanafSection.PROTECTION -> tr("الحماية", "Protection")
-                                    KanafSection.HISTORY -> tr("السجل", "History")
-                                    KanafSection.ENGINES -> tr("المحركات", "Engines")
-                                }
-                                val selected = page == section.page
-                                val shape = RoundedCornerShape(10.dp)
-                                Box(
-                                    Modifier.heightIn(min = 48.dp).clip(shape)
-                                        .selectable(selected, role = Role.Tab) { page = section.page }
-                                        .testTag("nav_" + section.id),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(label,
-                                        modifier = Modifier.background(
-                                            if (selected) {
-                                                if (dark) Color(0xFF185F65) else Teal
-                                            } else card, shape
-                                        ).padding(horizontal = 10.dp, vertical = 6.dp),
-                                        color = if (selected) Color.White else ink,
-                                        style = MaterialTheme.typography.labelMedium,
-                                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium)
-                                }
-                            }
                     }
                 }
                 if (busy && page != 0) {
@@ -408,8 +374,11 @@ fun KanafGlassHome(
                         ), color = secondary, style = MaterialTheme.typography.bodyMedium,
                             textAlign = TextAlign.Center)
                         Spacer(Modifier.height(14.dp))
+                        Row(Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically) {
                         Button(onClick = onDeviceScan, enabled = !busy,
-                            modifier = Modifier.fillMaxWidth().heightIn(min = 60.dp)
+                            modifier = Modifier.weight(1.6f).heightIn(min = 52.dp)
                                 .testTag("device_scan_button"),
                             shape = RoundedCornerShape(20.dp),
                             colors = ButtonDefaults.buttonColors(
@@ -421,6 +390,16 @@ fun KanafGlassHome(
                                 else tr("فحص الجهاز الآن", "Scan device now"),
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold)
+                        }
+                            OutlinedButton(onClick = { page = 10 },
+                                modifier = Modifier.weight(1f).heightIn(min = 52.dp)
+                                    .testTag("open_scan_tools"),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp),
+                                shape = RoundedCornerShape(18.dp)) {
+                                Text(tr("خيارات الفحص", "Scan options"),
+                                    textAlign = TextAlign.Center,
+                                    style = MaterialTheme.typography.labelLarge)
+                            }
                         }
                         if (busy) {
                             Spacer(Modifier.height(8.dp))
@@ -443,6 +422,61 @@ fun KanafGlassHome(
                             color = secondary, style = MaterialTheme.typography.bodySmall
                         )
                     }
+                    val homeSections = KanafSection.entries.filter { it.id !in hiddenSections }
+                    homeSections.chunked(3).forEach { row ->
+                        Row(Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            row.forEach { section ->
+                                val title = when (section) {
+                                    KanafSection.SCAN -> tr("الفحص", "Scan")
+                                    KanafSection.LINKS -> tr("الروابط", "Links")
+                                    KanafSection.APPS -> tr("التطبيقات", "Apps")
+                                    KanafSection.VAULT -> tr("الخزنة", "Vault")
+                                    KanafSection.PROTECTION -> tr("الحماية", "Protection")
+                                    KanafSection.HISTORY -> tr("السجل", "History")
+                                    KanafSection.ENGINES -> tr("المحركات", "Engines")
+                                }
+                                val symbol = when (section) {
+                                    KanafSection.SCAN -> Icons.Outlined.Search
+                                    KanafSection.LINKS -> Icons.Outlined.Share
+                                    KanafSection.APPS -> Icons.Outlined.List
+                                    KanafSection.VAULT -> Icons.Outlined.Lock
+                                    KanafSection.PROTECTION -> Icons.Outlined.Warning
+                                    KanafSection.HISTORY -> Icons.Outlined.DateRange
+                                    KanafSection.ENGINES -> Icons.Outlined.Build
+                                }
+                                Surface(
+                                    onClick = { page = if (section == KanafSection.SCAN) 10 else section.page },
+                                    modifier = Modifier.weight(1f).testTag("nav_" + section.id),
+                                    shape = RoundedCornerShape(18.dp), color = card,
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, stroke)
+                                ) {
+                                    Column(
+                                        Modifier.fillMaxWidth().heightIn(min = 78.dp)
+                                            .padding(horizontal = 6.dp, vertical = 12.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Icon(symbol, contentDescription = null,
+                                            tint = if (dark) Aqua else Teal,
+                                            modifier = Modifier.size(22.dp))
+                                        Text(title, color = ink,
+                                            style = MaterialTheme.typography.labelMedium,
+                                            textAlign = TextAlign.Center)
+                                    }
+                                }
+                            }
+                            repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
+                        }
+                    }
+                    OutlinedButton(onClick = { page = 9 },
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                            .testTag("open_dns_page"), shape = RoundedCornerShape(18.dp)) {
+                        Icon(Icons.Outlined.Share, contentDescription = null,
+                            modifier = Modifier.size(20.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(tr("حماية DNS", "DNS protection"))
+                    }
                     if (deviceScanStatus.isNotBlank()) {
                         GlassPanel(card, stroke) {
                             Text(tr("نتيجة الفحص", "Scan result"),
@@ -458,30 +492,6 @@ fun KanafGlassHome(
                                     else tr("عرض التقرير", "View report"))
                             }
                         }
-                    }
-                    Row(Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        OutlinedButton(onClick = { page = 9 },
-                            modifier = Modifier.weight(1f).heightIn(min = 48.dp)
-                                .testTag("open_dns_page"),
-                            shape = RoundedCornerShape(18.dp)) {
-                            Text(if (BuildConfig.KANAF_PLAY_DNS_SECURITY_ONLY)
-                                tr("حماية DNS", "DNS security") else
-                                tr("DNS وحجب الإعلانات", "DNS & ad blocking"),
-                                maxLines = 2, textAlign = TextAlign.Center)
-                        }
-                        OutlinedButton(onClick = { page = 10 },
-                            modifier = Modifier.weight(1f).heightIn(min = 48.dp)
-                                .testTag("open_scan_tools"),
-                            shape = RoundedCornerShape(18.dp)) {
-                            Text(tr("خيارات الفحص", "Scan options"),
-                                maxLines = 2, textAlign = TextAlign.Center)
-                        }
-                    }
-                    TextButton(onClick = { sectionsOpen = !sectionsOpen },
-                        modifier = Modifier.fillMaxWidth().testTag("more_features")) {
-                        Text(if (sectionsOpen) tr("إخفاء الأقسام", "Hide sections")
-                            else tr("المزيد من ميزات كنف", "More Kanaf features"))
                     }
                 }
                 if (page == 9) {
