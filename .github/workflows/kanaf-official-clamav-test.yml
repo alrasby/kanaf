@@ -50,12 +50,13 @@ jobs:
           export PATH="$RUNNER_TEMP/clam/usr/local/bin:$PATH"
           export LD_LIBRARY_PATH="$RUNNER_TEMP/clam/usr/local/lib"
           "$GITHUB_WORKSPACE/native-rebuild/tools/prepare_official_clamav.sh" "$RUNNER_TEMP/clamav-assets"
-      - uses: android-actions/setup-android@v3
       - name: Build, test, and verify APK
         run: |
           set -euo pipefail
-          sdkmanager 'platforms;android-36' 'build-tools;35.0.0' 'ndk;27.2.12479018' 'cmake;3.22.1'
-          gradle -p native-rebuild --no-daemon \
+          sdkmanager="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager -print -quit)"
+          test -x "$sdkmanager"
+          "$sdkmanager" 'platforms;android-36' 'build-tools;35.0.0' 'ndk;27.2.12479018' 'cmake;3.22.1'
+          bash native-rebuild/tools/gradle_retry_429.sh -p native-rebuild --no-daemon \
             -PkanafOfficialClamAssets="$RUNNER_TEMP/clamav-assets" -PkanafArm64Runtime=true \
             :app:assembleDebug :app:testDebugUnitTest :app:assembleDebugAndroidTest
           apk="Kanaf-Full-ClamAV-${GITHUB_SHA:0:7}-arm64.apk"
