@@ -225,6 +225,17 @@ public:
         options.general = 0x4;
         options.heuristic = 0x4;
         const int status = scan_(file, &name, &scanned, engine_, &options);
+        if (status == 1 && kanaf::isIncompleteLimitAlert(name)) {
+            constexpr const char* prefix = "Heuristics.Limits.Exceeded.";
+            if (std::strncmp(name, prefix, std::strlen(prefix)) == 0) {
+                const char* limit = name + std::strlen(prefix);
+                if (std::strcmp(limit, "MaxScanTime") == 0) return incomplete("clamav-scan-time-limit");
+                if (std::strcmp(limit, "MaxFiles") == 0) return incomplete("clamav-archive-entry-limit");
+                if (std::strcmp(limit, "MaxRecursion") == 0) return incomplete("clamav-archive-depth-limit");
+                if (std::strcmp(limit, "MaxScanSize") == 0 || std::strcmp(limit, "MaxFileSize") == 0)
+                    return incomplete("clamav-expanded-size-limit");
+            }
+        }
         return kanaf::classifyClamScan(status, name);
     }
 

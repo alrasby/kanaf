@@ -15,6 +15,14 @@ object ScanEvidenceText {
             if (arabic) "توقفت عملية الفحص عن الاستجابة" else "Scanner process stopped responding"
         "clamav-official-skipped-after-worker-exit" ->
             if (arabic) "استمر الفحص بالقواعد المحلية بعد توقف المحرك الكامل" else "Continued with local rules after the full engine stopped"
+        "clamav-scan-time-limit" ->
+            if (arabic) "بلغ فحص محتويات الملف الحد الزمني" else "Content inspection reached its time limit"
+        "clamav-archive-entry-limit" ->
+            if (arabic) "بلغ الفحص الحد الأقصى لعدد عناصر الأرشيف" else "Archive entry limit reached"
+        "clamav-archive-depth-limit" ->
+            if (arabic) "بلغ الفحص الحد الأقصى لعمق الأرشيف" else "Archive nesting limit reached"
+        "clamav-expanded-size-limit" ->
+            if (arabic) "بلغت محتويات الأرشيف حد الحجم بعد فك الضغط" else "Expanded archive size limit reached"
         "clamav-resource-limit" ->
             if (arabic) "بلغ المحرك أحد حدود فحص محتوى الملف" else "Engine reached a file inspection limit"
         "clamav-official-cvd-signature-invalid" ->
