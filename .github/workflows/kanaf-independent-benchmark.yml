@@ -73,6 +73,13 @@ jobs:
           export PATH="$RUNNER_TEMP/clam/usr/local/bin:$PATH"
           export LD_LIBRARY_PATH="$RUNNER_TEMP/clam/usr/local/lib"
           "$GITHUB_WORKSPACE/native-rebuild/tools/prepare_official_clamav.sh" "$RUNNER_TEMP/clamav-assets"
+      - name: Retrieve and verify the 109 already measured cases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh run download 44504845526 --repo alrasby/kanaf -n kanaf-independent-corpus-evidence -D "$RUNNER_TEMP/benchmark-prefix"
+          echo "4862866f6392268ee7a5db7b73acefef6751140254d8fe268520ba92d7ebb9f4  $RUNNER_TEMP/benchmark-prefix/android-results.json" | sha256sum -c
       - name: Compile the benchmark APKs before booting the emulator
         run: bash evaluation/android_baseline/run_android.sh build
       - name: Enable KVM access

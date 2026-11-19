@@ -31,6 +31,7 @@ adb shell run-as com.kanaf.alrasby.fulltest mkdir -p files/independent-evaluatio
 echo 'Transferring frozen samples as app-private data'
 tar -C /tmp/kanaf-evaluation-samples -cf - . | timeout 180 adb shell -T run-as com.kanaf.alrasby.fulltest tar -xf - -C files/independent-evaluation
 timeout 30 adb shell -T run-as com.kanaf.alrasby.fulltest tee files/independent-evaluation/corpus-manifest.json < evaluation/android_baseline/corpus-manifest.json > /dev/null
+timeout 30 adb shell -T run-as com.kanaf.alrasby.fulltest tee files/independent-evaluation/resume-results.json < "$RUNNER_TEMP/benchmark-prefix/android-results.json" > /dev/null
 echo 'Corpus transfer completed; starting offline static measurement'
 adb shell svc wifi disable
 adb shell svc data disable

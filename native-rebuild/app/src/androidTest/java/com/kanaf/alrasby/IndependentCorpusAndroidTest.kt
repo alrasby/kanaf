@@ -63,7 +63,21 @@ class IndependentCorpusAndroidTest {
         val repository = SignatureRepository(context)
         val hashEngine = HashSignatureEngine(repository.load())
         val status = repository.status()
-        val results = JSONArray()
+        val priorFile = File(folder, "resume-results.json")
+        val previous = JSONObject(priorFile.readText())
+        val results = previous.getJSONArray("cases")
+        assertFalse(previous.getBoolean("complete"))
+        assertEquals(109, results.length())
+        assertEquals(digest(manifestFile), previous.getString("manifest_sha256"))
+        assertEquals(Build.VERSION.SDK_INT, previous.getInt("api"))
+        assertEquals(clamRules, previous.getString("clamav_rules_version"))
+        assertEquals(JSONArray(BuildConfig.KANAF_OFFICIAL_CLAM_DIGESTS.split(',')).toString(),
+            previous.getJSONArray("official_cvd_sha256").toString())
+        assertEquals(status.sha256, previous.getString("signed_feed_sha256"))
+        for (i in 0 until results.length()) {
+            assertEquals(samples.getJSONObject(i).getString("sha256"), results.getJSONObject(i).getString("sha256"))
+            assertEquals(samples.getJSONObject(i).getString("label"), results.getJSONObject(i).getString("label"))
+        }
         val output = File(folder, "android-results.json")
         val report = JSONObject().put("format", 1).put("platform", "Android emulator ARM64 translation")
             .put("api", Build.VERSION.SDK_INT).put("abis", JSONArray(Build.SUPPORTED_ABIS.toList()))
@@ -73,7 +87,8 @@ class IndependentCorpusAndroidTest {
             .put("official_cvd_sha256", JSONArray(BuildConfig.KANAF_OFFICIAL_CLAM_DIGESTS.split(',')))
             .put("signed_feed_version", status.version).put("signed_feed_sha256", status.sha256)
             .put("cases", results).put("complete", false)
-        for (i in 0 until samples.length()) {
+            .put("resumed_cases", results.length()).put("prefix_run", 44504845526L)
+        for (i in results.length() until samples.length()) {
             val row = samples.getJSONObject(i)
             val sha = row.getString("sha256")
             assertTrue(sha.matches(Regex("[a-f0-9]{64}")))
