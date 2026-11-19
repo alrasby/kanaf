@@ -45,6 +45,7 @@ object ProtectionHealth {
             tr("تطابقات / فحوص غير مكتملة", "Matches / incomplete checks") + ": ${store.getInt("matches", 0)} / ${store.getInt("incomplete", 0)}",
             tr("حماية DNS تعمل الآن", "DNS protection currently running") + ": " + state(KanafDnsVpnService.isRunning()),
             tr("مراقبة التثبيت مفعلة", "Install scanning enabled") + ": " + state(ProtectionControl.installWatchEnabled(context)),
+            tr("مراجعة تغيّر التطبيقات في الخلفية", "Background installation inventory") + ": " + ProtectionControl.inventoryStatus(context),
             tr("فحص المجلد الدوري مفعل", "Scheduled folder check enabled") + ": " + state(ProtectionControl.periodicEnabled(context)),
             tr("إذن الإشعارات", "Notification permission") + ": " + state(notifications),
             tr("المراقبة والجدولة تخضعان لقيود أندرويد والبطارية.", "Android and battery restrictions apply to monitoring and scheduling.")

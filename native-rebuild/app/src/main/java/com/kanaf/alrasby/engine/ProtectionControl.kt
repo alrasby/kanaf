@@ -25,6 +25,11 @@ object ProtectionControl {
     fun installWatchEnabled(context: Context): Boolean =
         prefs(context).getBoolean(WATCH_INSTALLS, false)
 
+    fun inventoryStatus(context: Context): String = prefs(context).getString("install_inventory_status", "") ?: ""
+    fun saveInventoryStatus(context: Context, message: String) {
+        prefs(context).edit().putString("install_inventory_status", message.take(500)).apply()
+    }
+
     fun lastInstallResult(context: Context): String = prefs(context).getString("last_install_scan", "") ?: ""
 
     fun saveInstallResult(context: Context, report: String) {
@@ -40,9 +45,27 @@ object ProtectionControl {
     fun lastResult(context: Context): String =
         prefs(context).getString(SUMMARY, "No scheduled check has completed") ?: ""
 
+    fun installGeneration(context: Context): Long = prefs(context).getLong("install_generation", 0L)
+
+    @Synchronized
+    fun commitInventoryIfCurrent(context: Context, generation: Long, commit: () -> Unit): Boolean {
+        if (!installWatchEnabled(context) || installGeneration(context) != generation) return false
+        commit()
+        return true
+    }
+
+    @Synchronized
     fun setInstallWatch(context: Context, enabled: Boolean) {
-        prefs(context).edit().putBoolean(WATCH_INSTALLS, enabled).commit()
-        if (!enabled) WorkManager.getInstance(context).cancelAllWorkByTag(PackageReviewWorker.TAG)
+        check(prefs(context).edit().putBoolean(WATCH_INSTALLS, enabled)
+            .putLong("install_generation", installGeneration(context) + 1).commit())
+        if (enabled) InstallWatchScheduler.schedule(context)
+        else {
+            InstallWatchScheduler.cancel(context)
+            WorkManager.getInstance(context).cancelAllWorkByTag(PackageReviewWorker.TAG)
+            // Re-enabling monitoring establishes a fresh baseline; it does
+            // not retrospectively scan changes while the user opted out.
+            context.getSharedPreferences("kanaf_install_inventory", Context.MODE_PRIVATE).edit().clear().commit()
+        }
     }
 
     /** Only accept a URI grant actually persisted by Android. */

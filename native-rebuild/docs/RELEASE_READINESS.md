@@ -48,7 +48,7 @@ Release publisher inputs must be provided outside source control:
   `-PkanafSignatureFeedHttpsUrl=https://<publisher>/...zip`;
   `src/main/assets/production_signatures.zip` must be signed and contain
   **real independently audited** non-EICAR signatures.
-- `src/main/assets/production_clamav.ndb`,
+- `src/main/assets/production_clamav.hsb`,
   `src/main/assets/production_yara.yar`, and
   `-PkanafNativeClamRuleSha256=<lowercase SHA256>`,
   `-PkanafNativeYaraRuleSha256=<lowercase SHA256>`.

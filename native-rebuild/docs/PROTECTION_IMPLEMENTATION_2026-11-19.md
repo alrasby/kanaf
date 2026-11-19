@@ -36,7 +36,11 @@ Work branch: `feature/verified-protection`, PR #3. No changes to the old web app
 
 ## Practical features
 
-1. Opt-in install/update broadcasts enqueue unique package-specific workers.
+1. Opt-in dynamic install/update broadcasts enqueue unique package-specific workers.
+   Android 8+ does not reliably deliver these implicit broadcasts to manifest
+   receivers, so a 15-minute-or-later WorkManager delta inventory provides a
+   background fallback after process death. It seeds a baseline once and queues
+   changed packages in bounded batches; it never rescans unchanged APKs each cycle.
    Workers check the available base/split APKs, report partial coverage, and
    inspect permission and signing-certificate changes. Android controls timing.
 2. Local certificate/permission baselines recognise Android-verified signing
@@ -95,3 +99,10 @@ A preliminary YARA-X check of the prior self-owned APK found 0 matches in 1
 benign APK. This is not a representative false-positive estimate; real-malware
 recall remains unmeasured. Continue from the latest PR head, inspect failed job
 logs once, fix the cause, then fetch the exact successful APK and evidence.
+
+Additional checkpoint: PR head `4529c9c` passed packaging and all JVM/lint
+checks. Android instrumentation compilation rejected a test's direct protected
+onNewIntent call; the test now exercises the real singleTop Activity entry
+through startActivity. Android 8+ broadcast delivery restrictions prompted the
+addition of dynamic registration and an opt-in periodic delta-inventory
+fallback. Final Android checks must be read from the latest PR head.

@@ -34,7 +34,7 @@ https://docs.clamav.net/manual/Signatures.html
 Private mirrors: https://docs.clamav.net/appendix/CvdPrivateMirror.html
 
 The currently bundled Android bridge accepts a limited pinned
-production_clamav.ndb, NOT a full standard CVD database. The complete
+production_clamav.hsb, NOT a full standard CVD database. The complete
 CVD format can include many rule types and ClamAV's full-size standard
 database commonly requires multiple GiB of memory. Never replace the
 bridge with a full database or unpack random unsigned bytecode on device

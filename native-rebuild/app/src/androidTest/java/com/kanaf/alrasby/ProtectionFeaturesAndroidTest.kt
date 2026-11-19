@@ -79,7 +79,8 @@ class ProtectionFeaturesAndroidTest {
             type = "application/octet-stream"
             putExtra(Intent.EXTRA_STREAM, Uri.parse("content://com.kanaf.missing-provider/no-file"))
         }
-        rule.runOnUiThread { rule.activity.onNewIntent(intent) }
+        intent.setClass(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        rule.runOnUiThread { rule.activity.startActivity(intent) }
         rule.waitUntil(30_000) {
             rule.onAllNodesWithTag("file_scan_result").fetchSemanticsNodes().any { node ->
                 node.config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.Text)?.any {

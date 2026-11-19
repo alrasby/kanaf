@@ -30,6 +30,7 @@ class PackageReviewWorker(context: Context, params: WorkerParameters) : Worker(c
         if (stopped()) return Result.success()
         val name = inputData.getString("package") ?: return Result.failure()
         val lines = ArrayList<String>()
+        var retryNeeded = false
         try {
             val before = PackageBaseline.snapshot(context, name)
             val change = PackageBaseline.inspect(context, name, before)
@@ -55,8 +56,11 @@ class PackageReviewWorker(context: Context, params: WorkerParameters) : Worker(c
                 }
                 val file = File(path)
                 val hash = engine.scan({ file.inputStream() }, ::stopped)
+                if (stopped()) return Result.success()
                 val native = if (file.length() in 1L..(64L * 1024 * 1024))
                     NativeScannerBridge.scan(context, Uri.fromFile(file)) else null
+                if (native?.clamav == AntivirusEngine.Verdict.Incomplete("scanner-busy") ||
+                    native?.yaraX == AntivirusEngine.Verdict.Incomplete("scanner-busy")) retryNeeded = true
                 val result = AutomaticScanVerdicts.evaluate(hash,
                     native?.clamav ?: AntivirusEngine.Verdict.Incomplete("native-size-limit-or-unavailable"),
                     native?.yaraX ?: AntivirusEngine.Verdict.Incomplete("native-size-limit-or-unavailable"))
@@ -78,6 +82,7 @@ class PackageReviewWorker(context: Context, params: WorkerParameters) : Worker(c
             if (paths.isEmpty()) incomplete++
             if (stopped()) return Result.success()
             if (before != PackageBaseline.snapshot(context, name)) {
+                retryNeeded = true
                 lines += "INCOMPLETE: package changed during scan; rescan required"
                 incomplete++
             } else if (!change.unverifiedSignerChange) PackageBaseline.save(context, name, before)
@@ -92,6 +97,6 @@ class PackageReviewWorker(context: Context, params: WorkerParameters) : Worker(c
             if (!stopped()) ProtectionControl.saveInstallResult(context,
                 "INCOMPLETE: package unavailable, changed, or scan failed; no safety verdict")
         }
-        return Result.success()
+        return if (retryNeeded && runAttemptCount < 2 && !stopped()) Result.retry() else Result.success()
     }
 }

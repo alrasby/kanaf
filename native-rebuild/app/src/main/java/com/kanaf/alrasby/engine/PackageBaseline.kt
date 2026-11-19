@@ -21,6 +21,11 @@ object PackageBaseline {
         val flags = PackageManager.GET_PERMISSIONS or if (Build.VERSION.SDK_INT >= 28)
             PackageManager.GET_SIGNING_CERTIFICATES else PackageManager.GET_SIGNATURES
         val info = context.packageManager.getPackageInfo(name, flags)
+        return fromPackageInfo(info)
+    }
+
+    @Suppress("DEPRECATION")
+    fun fromPackageInfo(info: android.content.pm.PackageInfo): Snapshot {
         val certs = if (Build.VERSION.SDK_INT >= 28) info.signingInfo?.apkContentsSigners
             else info.signatures
         require(!certs.isNullOrEmpty()) { "signing-certificate-unavailable" }
@@ -52,13 +57,24 @@ object PackageBaseline {
         return compare(previous, current, lineage)
     }
 
+    private fun encode(snapshot: Snapshot) = JSONObject().put("version", snapshot.version)
+        .put("certificates", JSONArray(snapshot.certificates.sorted()))
+        .put("permissions", JSONArray(snapshot.permissions.sorted())).toString()
+
+    fun saveMissing(context: Context, snapshots: Map<String, Snapshot>) {
+        val store = prefs(context)
+        val existing = store.all.keys
+        val editor = store.edit()
+        snapshots.entries.filterNot { it.key in existing }.take((2500 - existing.size).coerceAtLeast(0))
+            .forEach { (name, snapshot) -> editor.putString(name, encode(snapshot)) }
+        check(editor.commit()) { "package-baseline-seed-failed" }
+    }
+
     fun save(context: Context, name: String, snapshot: Snapshot) {
         val store = prefs(context)
         // Bound local history. Never upload the user's app inventory.
         if (!store.contains(name) && store.all.size >= 2500) return
-        val value = JSONObject().put("version", snapshot.version)
-            .put("certificates", JSONArray(snapshot.certificates.sorted()))
-            .put("permissions", JSONArray(snapshot.permissions.sorted())).toString()
+        val value = encode(snapshot)
         check(store.edit().putString(name, value).commit()) { "package-baseline-save-failed" }
     }
 }

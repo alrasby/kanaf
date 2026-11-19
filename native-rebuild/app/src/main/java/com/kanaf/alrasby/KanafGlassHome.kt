@@ -1429,14 +1429,21 @@ fun KanafGlassHome(
                         if (installSummary.isNotBlank()) {
                             Text(tr("آخر فحص لتثبيت أو تحديث", "Last install/update scan"), color = ink, fontWeight = FontWeight.Bold)
                             Text(installSummary, color = secondary, style = MaterialTheme.typography.bodySmall)
+                            val packageName = installSummary.lineSequence().firstOrNull()
+                                ?.takeIf { it.startsWith("Package: ") }?.removePrefix("Package: ")?.substringBefore(';')
+                            if (packageName != null && packageName.matches(Regex("[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)+"))) {
+                                OutlinedButton(onClick = { onOpenAppDetails(packageName) }, modifier = Modifier.fillMaxWidth()) {
+                                    Text(tr("مراجعة التطبيق وأذوناته في أندرويد", "Review app and permissions in Android"))
+                                }
+                            }
                         }
                     }
                     GlassPanel(card, stroke) {
                         Text(tr("مراقبة التطبيقات بإذن المستخدم", "Opt-in app monitoring"), color = ink,
                             style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                         Text(tr(
-                            "يفحص كنف ملفات APK المتاحة للتطبيق الجديد أو المحدّث، ويقارن الصلاحيات وشهادة التوقيع عند وجود سجل سابق. قد يؤخر أندرويد التنفيذ، وتظهر حالات تعذر الفحص بوضوح.",
-                            "Kanaf scans accessible APKs after install/update broadcasts and compares permissions and signing certificates with an existing baseline. Android may delay execution; incomplete checks are reported."
+                            "يفحص كنف ملفات APK المتاحة للتطبيق الجديد أو المحدّث، ويقارن الصلاحيات وشهادة التوقيع عند وجود سجل سابق. يرصد الأحداث أثناء حياة العملية، ويستخدم مراجعة تغيّر التطبيقات في الخلفية كل 15 دقيقة تقريبًا أو لاحقًا وفق قيود أندرويد. تظهر حالات تعذر الفحص بوضوح.",
+                            "Kanaf scans accessible APKs after install/update broadcasts and compares permissions and signing certificates with an existing baseline. Live process broadcasts are backed by a delta inventory approximately every 15 minutes or later under Android limits; incomplete checks are reported."
                         ), color = secondary, style = MaterialTheme.typography.bodyMedium)
                         Spacer(Modifier.height(12.dp))
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,

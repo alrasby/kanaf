@@ -96,4 +96,11 @@ class ProtectionImprovementsTest {
         assertFalse(loop.complete)
         assertEquals("Redirect loop", loop.reason)
     }
+    @Test fun backgroundInventoryQueuesOnlyNewOrChangedPackages() {
+        val previous = mapOf("same.app" to "1:100", "updated.app" to "1:100", "removed.app" to "1:100")
+        val current = mapOf("same.app" to "1:100", "updated.app" to "2:101", "new.app" to "1:102")
+        assertEquals(listOf("new.app", "updated.app"), InstallWatchScheduler.changed(previous, current))
+        assertTrue(InstallWatchScheduler.changed(current, current).isEmpty())
+    }
+
 }

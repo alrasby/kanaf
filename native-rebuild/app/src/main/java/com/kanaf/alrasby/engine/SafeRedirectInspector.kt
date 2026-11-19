@@ -77,7 +77,8 @@ object SafeRedirectInspector {
                     serverNames = listOf(SNIHostName(uri.host))
                 }
                 tls.startHandshake()
-                val path = uri.rawPath.orEmpty().ifBlank { "/" } + (uri.rawQuery?.let { "?$it" } ?: "")
+                val ascii = URI(uri.toASCIIString())
+                val path = ascii.rawPath.orEmpty().ifBlank { "/" } + (ascii.rawQuery?.let { "?$it" } ?: "")
                 require(path.none { it == '\r' || it == '\n' })
                 tls.outputStream.write(("HEAD $path HTTP/1.1\r\nHost: ${uri.host}\r\n" +
                     "User-Agent: Kanaf-Link-Inspector/1\r\nConnection: close\r\n\r\n").toByteArray(Charsets.US_ASCII))
