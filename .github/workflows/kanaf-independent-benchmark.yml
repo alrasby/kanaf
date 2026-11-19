@@ -1,14 +1,14 @@
-name: Kanaf independent frozen corpus benchmark
+name: Kanaf full ClamAV Android benchmark
 on:
   push:
-    branches: [evaluation/independent-baseline]
+    branches: [evaluation/full-clamav-android]
     paths:
       - 'evaluation/android_baseline/**'
       - 'native-rebuild/app/src/androidTest/java/com/kanaf/alrasby/IndependentCorpusAndroidTest.kt'
       - '.github/workflows/kanaf-independent-benchmark.yml'
   workflow_dispatch:
 concurrency:
-  group: kanaf-independent-benchmark
+  group: kanaf-full-clamav-android-benchmark
   cancel-in-progress: true
 permissions:
   contents: read
@@ -16,7 +16,7 @@ permissions:
 jobs:
   arm64-native:
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 65
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -59,9 +59,20 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          git fetch origin 4cb2ea8366a6a39def42a33c0104dc144d905d46 --depth=1
-          git diff --exit-code 4cb2ea8366a6a39def42a33c0104dc144d905d46 -- native-rebuild/app/src/main native-rebuild/app/build.gradle.kts
+          git fetch origin e74bf681155ee1419b48881a1239a65c331a8f89 --depth=1
+          git diff --exit-code e74bf681155ee1419b48881a1239a65c331a8f89 -- native-rebuild/app/src/main native-rebuild/app/build.gradle.kts
           python3 evaluation/android_baseline/download_frozen.py evaluation/android_baseline/corpus-manifest.json /tmp/kanaf-evaluation-samples
+      - name: Prepare original Cisco signature databases
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP"
+          curl --fail --location --retry 2 -o clamav.deb \
+            https://github.com/Cisco-Talos/clamav/releases/download/clamav-1.4.6/clamav-1.4.6.linux.x86_64.deb
+          echo 'd3ee9e401974855a1edc1761b1425417d126de618d5f0c91cd51209f69f6fcc2  clamav.deb' | sha256sum -c
+          dpkg-deb -x clamav.deb clam
+          export PATH="$RUNNER_TEMP/clam/usr/local/bin:$PATH"
+          export LD_LIBRARY_PATH="$RUNNER_TEMP/clam/usr/local/lib"
+          "$GITHUB_WORKSPACE/native-rebuild/tools/prepare_official_clamav.sh" "$RUNNER_TEMP/clamav-assets"
       - name: Enable KVM access
         shell: bash
         run: |
@@ -75,7 +86,7 @@ jobs:
           target: google_apis
           arch: x86_64
           profile: pixel_6
-          ram-size: 3072M
+          ram-size: 6144M
           heap-size: 384M
           emulator-boot-timeout: 900
           disable-animations: true

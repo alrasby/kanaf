@@ -4,6 +4,7 @@ import android.net.Uri
 import android.os.Build
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import com.kanaf.alrasby.BuildConfig
 import com.kanaf.alrasby.engine.AntivirusEngine
 import com.kanaf.alrasby.engine.NativeScannerBridge
 import com.kanaf.alrasby.engine.HashSignatureEngine
@@ -57,6 +58,8 @@ class IndependentCorpusAndroidTest {
         assertTrue("ClamAV readiness failed: $selfTest", selfTest.clamav is AntivirusEngine.Verdict.Detected)
         assertTrue("YARA-X readiness failed: $selfTest", selfTest.yaraX is AntivirusEngine.Verdict.Detected)
         assertTrue(selfTest.gates.all { it.ready })
+        val clamRules = selfTest.gates.single { it.engineId == "clamav" }.rulesVersion.orEmpty()
+        assertTrue("Official ClamAV did not run: $selfTest", clamRules.startsWith("official-"))
         val repository = SignatureRepository(context)
         val hashEngine = HashSignatureEngine(repository.load())
         val status = repository.status()
@@ -66,6 +69,8 @@ class IndependentCorpusAndroidTest {
             .put("api", Build.VERSION.SDK_INT).put("abis", JSONArray(Build.SUPPORTED_ABIS.toList()))
             .put("manifest_sha256", digest(manifestFile)).put("rules_frozen_at", manifest.getString("rules_frozen_at"))
             .put("sample_execution", false).put("self_test_passed", true)
+            .put("clamav_rules_version", clamRules)
+            .put("official_cvd_sha256", JSONArray(BuildConfig.KANAF_OFFICIAL_CLAM_DIGESTS.split(',')))
             .put("signed_feed_version", status.version).put("signed_feed_sha256", status.sha256)
             .put("cases", results).put("complete", false)
         for (i in 0 until samples.length()) {
