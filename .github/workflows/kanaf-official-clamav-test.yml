@@ -1,0 +1,77 @@
+name: Kanaf official ClamAV test APK
+on:
+  push:
+    branches: [fix/official-clamav-android-stability]
+    paths:
+      - '.github/workflows/kanaf-official-clamav-test.yml'
+      - 'native-rebuild/**'
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  apk:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Stage verified ARM64 engines
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh run download 44451876867 --repo alrasby/kanaf \
+            -n kanaf-native-engines-packaging-prototype -D "$RUNNER_TEMP/pinned-kanaf"
+          apk="$RUNNER_TEMP/pinned-kanaf/outputs/apk/debug/app-debug.apk"
+          echo "19a166b6d397b59d51b2d6945e42acaf40004a9d4e786cc3fb690c11f2dedd11  $apk" | sha256sum -c
+          directory=native-rebuild/app/src/main/jniLibs/arm64-v8a
+          mkdir -p "$directory"
+          for library in libclamav.so libclammspack.so libyara_x_capi.so; do
+            unzip -p "$apk" "lib/arm64-v8a/$library" > "$directory/$library"
+            python3 native-rebuild/tools/verify_arm64_elf.py --require-16kb "$directory/$library"
+          done
+      - name: Prepare original Cisco signature databases
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP"
+          curl --fail --location --retry 2 -o clamav.deb \
+            https://github.com/Cisco-Talos/clamav/releases/download/clamav-1.4.6/clamav-1.4.6.linux.x86_64.deb
+          echo 'd3ee9e401974855a1edc1761b1425417d126de618d5f0c91cd51209f69f6fcc2  clamav.deb' | sha256sum -c
+          dpkg-deb -x clamav.deb clam
+          export PATH="$RUNNER_TEMP/clam/usr/local/bin:$PATH"
+          export LD_LIBRARY_PATH="$RUNNER_TEMP/clam/usr/local/lib"
+          "$GITHUB_WORKSPACE/native-rebuild/tools/prepare_official_clamav.sh" "$RUNNER_TEMP/clamav-assets"
+      - name: Build, test, and verify APK
+        run: |
+          set -euo pipefail
+          sdkmanager 'platforms;android-36' 'build-tools;35.0.0' 'ndk;27.2.12479018' 'cmake;3.22.1'
+          gradle -p native-rebuild --no-daemon \
+            -PkanafOfficialClamAssets="$RUNNER_TEMP/clamav-assets" -PkanafArm64Runtime=true \
+            :app:assembleDebug :app:testDebugUnitTest :app:assembleDebugAndroidTest
+          apk="Kanaf-Full-ClamAV-${GITHUB_SHA:0:7}-arm64.apk"
+          cp native-rebuild/app/build/outputs/apk/debug/app-debug.apk "$apk"
+          tools="$ANDROID_HOME/build-tools/35.0.0"
+          "$tools/apksigner" verify "$apk"
+          "$tools/zipalign" -c -P 16 4 "$apk"
+          for name in main daily bytecode; do
+            expected="$(sha256sum "$RUNNER_TEMP/clamav-assets/official-clamav/$name.cvd" | cut -d' ' -f1)"
+            unzip -p "$apk" "assets/official-clamav/$name.cvd" | sha256sum -c <<< "$expected  -"
+          done
+          sha256sum "$apk" > SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kanaf-full-clamav-arm64-test
+          if-no-files-found: error
+          compression-level: 0
+          path: |
+            Kanaf-Full-ClamAV-*-arm64.apk
+            SHA256SUMS.txt
