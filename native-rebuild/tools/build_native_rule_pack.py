@@ -19,6 +19,11 @@ def build(root=ROOT):
     seed = (root / "rules/eset-android-seed/signatures.tsv").read_bytes()
     if digest(seed) != SEED_SHA256:
         raise ValueError("Pinned ESET seed changed; review provenance before updating")
+    additions = (root / "rules/native-v1/eset-android-additions.tsv").read_bytes()
+    sources = (root / "rules/native-v1/eset-android-additions.json").read_bytes()
+    if digest(additions) != "40f53e78b98ad7d9089e4b8ab6ae16e664268619f5fc2ecd505fb2e7ef87fb66" or \
+            digest(sources) != "e82c18cb427e12da57f45875db5700c6d8fa4807fdaa44aa81406e76f9844820":
+        raise ValueError("Pinned ESET Android additions or source provenance changed")
     content = (root / "rules/native-v1/linux-moose.yar").read_bytes()
     # This hash pins the original upstream file, including its licence and author.
     if digest(content) != "600beb24cb82f01d145f7353f5eb081153dffcd7c31adcf940a66094fa19b28a":
@@ -29,7 +34,10 @@ def build(root=ROOT):
     rl_notice = (root / "app/src/main/assets/ReversingLabs-MIT.txt").read_text()
     if digest(rl_notice.encode()) != "8ac378a5a6716e1aef984c2ea50cbeb28d9a2f0a871846875245f71a02d023fc":
         raise ValueError("Pinned ReversingLabs licence notice changed")
-    rows = [line.split("\t") for line in seed.decode().splitlines() if line and not line.startswith("#")]
+    rows = sorted(line.split("\t") for line in (seed + additions).decode().splitlines()
+                  if line and not line.startswith("#"))
+    if len({row[0] for row in rows}) != len(rows):
+        raise ValueError("Duplicate Android SHA-256 indicators")
     clam = "".join(f"{sha}:*:{name}:73\n" for sha, name in rows).encode()
     yara = ('import "hash"\n' + content.decode() + "\n/*\n" + rl_notice + "\n" +
         "Source: https://github.com/reversinglabs/reversinglabs-yara-rules/blob/e0a0be54aa1e11ccfd6854e4f19e9476f328fd84/yara/trojan/Linux.Trojan.AcidRain.yara\n*/\n" + rl.decode() + "\n// KANAF_EXACT_HASH_RULES\n")
@@ -45,10 +53,11 @@ def build(root=ROOT):
     for name, data in files.items():
         (assets / name).write_bytes(data)
     manifest = dict(format=1, source_commit=SOURCE_COMMIT, license=["BSD-2-Clause", "MIT"],
-                    author=["ESET Research", "ReversingLabs"], android_exact_hashes=len(rows),
+                    author=["ESET Research", "ReversingLabs"], android_exact_hashes=len(rows), android_labels=sorted({name for _, name in rows}),
+                    supplemental_eset_sources=json.loads(sources),
                     linux_elf_content_rules=3, independent_detection_sources=2,
                     reversinglabs_source_commit="e0a0be54aa1e11ccfd6854e4f19e9476f328fd84",
-                    source_files={"signatures.tsv": digest(seed), "linux-moose.yar": digest(content), "reversinglabs-acidrain.yara": digest(rl)},
+                    source_files={"signatures.tsv": digest(seed), "eset-android-additions.tsv": digest(additions), "linux-moose.yar": digest(content), "reversinglabs-acidrain.yara": digest(rl)},
                     assets={name: digest(data) for name, data in files.items()})
     (assets / "native_rules_provenance.json").write_text(json.dumps(manifest, indent=2) + "\n")
     return manifest

@@ -2,9 +2,30 @@ package com.kanaf.alrasby.engine
 
 /** Consistent, localized evidence labels. Never upgrade UNKNOWN to safe. */
 object ScanEvidenceText {
-    fun reason(raw: String, arabic: Boolean): String = when (raw) {
+    fun reason(raw: String, arabic: Boolean): String = when (raw.removePrefix("INCOMPLETE:")) {
+        "scanner-process-disconnected", "scanner-binding-died" ->
+            if (arabic) "انقطع الاتصال بعملية الفحص" else "Scanner process disconnected"
+        "scanner-watchdog-timeout", "scanner-timeout" ->
+            if (arabic) "تجاوز محرك الفحص المهلة المحددة" else "Scanner timed out"
+        "scanner-native-crash", "scanner-worker-crash" ->
+            if (arabic) "توقفت عملية المحرك بسبب خطأ" else "Scanner process crashed"
+        "scanner-worker-out-of-memory", "clamav-official-device-memory" ->
+            if (arabic) "الذاكرة المتاحة لا تكفي لإكمال فحص المحرك" else "Insufficient memory for the engine"
+        "scanner-worker-unresponsive" ->
+            if (arabic) "توقفت عملية الفحص عن الاستجابة" else "Scanner process stopped responding"
+        "clamav-official-skipped-after-worker-exit" ->
+            if (arabic) "استمر الفحص بالقواعد المحلية بعد توقف المحرك الكامل" else "Continued with local rules after the full engine stopped"
+        "clamav-resource-limit" ->
+            if (arabic) "بلغ المحرك أحد حدود فحص محتوى الملف" else "Engine reached a file inspection limit"
+        "clamav-official-cvd-signature-invalid" ->
+            if (arabic) "تعذر التحقق من توقيع قاعدة ClamAV الرسمية" else "Official ClamAV database signature check failed"
+        "clamav-official-assets-unavailable", "clamav-official-database-load-failed",
+        "clamav-official-database-compile-failed" ->
+            if (arabic) "تعذر تحميل قاعدة ClamAV الرسمية" else "Official ClamAV database could not be loaded"
         "native-unavailable-or-limited" -> if (arabic) "لم يُفحص بهذا المحرك بسبب حدود التغطية أو عدم التوافر" else "Engine coverage limit reached or unavailable"
         "file-unreadable-empty-or-size-limit" -> if (arabic) "الملف غير متاح للقراءة أو فارغ أو يتجاوز حد الحجم" else "Unreadable, empty or over the size limit"
+        "file-read-failed" -> if (arabic) "تعذرت قراءة الملف" else "File could not be read"
+        "directory-read-failed" -> if (arabic) "تعذرت قراءة محتويات المجلد" else "Folder contents could not be read"
         "apk-structure-incomplete" -> if (arabic) "لم يكتمل تحليل بنية APK" else "APK structure analysis incomplete"
         "file-changed-between-engines" -> if (arabic) "تغير الملف بين قراءات المحركات؛ أعد الفحص" else "File changed between engine reads; rescan"
         "copy-size-limit" -> if (arabic) "حجم الملف يتجاوز حد الفحص الأصلي 64 ميجابايت" else "File exceeds the 64 MiB native scan limit"

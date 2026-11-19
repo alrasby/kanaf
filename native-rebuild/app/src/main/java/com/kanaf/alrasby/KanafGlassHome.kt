@@ -110,6 +110,8 @@ fun KanafGlassHome(
     deviceScanStatus: String,
     onDeviceScan: () -> Unit,
     onScanChosenFolder: () -> Unit,
+    fileScanSummary: String,
+    onRetryFileScan: (() -> Unit)?,
     onStopDeviceScan: () -> Unit,
     autoScanProgress: String,
     sharedStorageAccess: Boolean,
@@ -162,6 +164,7 @@ fun KanafGlassHome(
     var showPrivacyPolicy by remember { mutableStateOf(false) }
     var customPrivateDns by rememberSaveable { mutableStateOf("") }
     var detailsOpen by rememberSaveable { mutableStateOf(false) }
+    var fileDetailsOpen by remember(status) { mutableStateOf(false) }
     var dnsAdvanced by rememberSaveable { mutableStateOf(false) }
     var deleteVaultId by remember { mutableStateOf<String?>(null) }
     var appSearch by remember { mutableStateOf("") }
@@ -752,6 +755,28 @@ fun KanafGlassHome(
                     }
                 }
                 if (page == SCAN_TOOLS_PAGE) {
+                    if (hasScanReport && fileScanSummary.isNotBlank()) {
+                        GlassPanel(card, stroke) {
+                            Text(fileScanSummary, color = ink, modifier = Modifier.testTag("file_scan_result"),
+                                style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                            onRetryFileScan?.let { retry ->
+                                Button(onClick = retry, enabled = !busy) {
+                                    Text(tr("إعادة الفحص", "Scan again"))
+                                }
+                            }
+                            TextButton(onClick = { fileDetailsOpen = !fileDetailsOpen }) {
+                                Text(if (fileDetailsOpen) tr("إخفاء التفاصيل", "Hide details")
+                                    else tr("عرض التفاصيل", "View details"))
+                            }
+                            if (fileDetailsOpen) {
+                                Text(status, color = secondary, style = MaterialTheme.typography.bodySmall)
+                            }
+                            TextButton(onClick = onShareReport, enabled = !busy) {
+                                Text(tr("مشاركة التقرير", "Share report"))
+                            }
+                        }
+                    }
+
                     GlassPanel(card, stroke) {
                         Text(tr("خيارات الفحص والأذونات", "Scan options & permissions"),
                             color = ink, style = MaterialTheme.typography.titleLarge,
@@ -788,14 +813,9 @@ fun KanafGlassHome(
                             Text(selfTestStatus, color = secondary,
                                 style = MaterialTheme.typography.bodySmall)
                         }
-                        if (status.isNotBlank()) {
+                        if (!hasScanReport && status.isNotBlank()) {
                             Text(status, color = secondary, modifier = Modifier.testTag("file_scan_result"),
                                 style = MaterialTheme.typography.bodySmall)
-                        }
-                        if (hasScanReport) {
-                            TextButton(onClick = onShareReport, enabled = !busy) {
-                                Text(tr("مشاركة التقرير اختياريًا", "Share report manually"))
-                            }
                         }
                     }
                 }
@@ -1012,23 +1032,29 @@ fun KanafGlassHome(
                             "مكتبة ARM64 أصلية. لا تُعتمد نتائجها حتى تنجح قواعد الاختبار والفحص الذاتي.",
                             "Native ARM64 library. Results are accepted only after rule verification and self-tests."
                         ), color = secondary)
+                        if (com.kanaf.alrasby.engine.OfficialClamDatabase.bundled) {
+                            Text(tr(
+                                "ملفات ClamAV الرسمية مضمّنة: main وdaily وbytecode. يتحقق المحرك من توقيعاتها قبل تشغيلها.",
+                                "Official ClamAV main, daily and bytecode databases are included. The engine verifies their signatures before use."
+                            ), color = secondary)
+                        }
                         Spacer(Modifier.height(16.dp))
                         Text("YARA-X 0.13.0", color = if (dark) Aqua else Teal,
                             style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                         Text(tr(
-                            "مصادر مرخصة: 30 بصمة أندرويد من ESET وثلاث قواعد محتوى Linux/ELF من ESET وReversingLabs. تغطية محدودة وليست قاعدة شاملة.",
-                            "30 licensed ESET Android exact-file rules and three Linux/ELF content rules from ESET and ReversingLabs. Limited coverage, not a comprehensive database."
+                            "مصادر مرخصة: 149 بصمة أندرويد من ESET عبر 12 عائلة وحملة وثلاث قواعد محتوى Linux/ELF من ESET وReversingLabs. تغطية محدودة وليست قاعدة شاملة.",
+                            "149 licensed ESET Android exact-file rules across 12 families and campaigns and three Linux/ELF content rules from ESET and ReversingLabs. Limited coverage, not a comprehensive database."
                         ), color = secondary)
                     }
                     GlassPanel(card, stroke) {
                         Text(tr("مصادر القواعد وتراخيصها", "Rule sources and licences"), color = ink,
                             style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                        Text("ESET Research · BSD-2-Clause\nReversingLabs · MIT", color = secondary)
+                        Text("ClamAV · GPL-2.0\nESET Research · BSD-2-Clause\nReversingLabs · MIT", color = secondary)
                         TextButton(onClick = {
                             panelScope.launch {
                                 ruleLicenses = withContext(Dispatchers.IO) {
                                     runCatching {
-                                        listOf("ESET-BSD-2-Clause.txt", "ReversingLabs-MIT.txt").joinToString("\n\n") { name ->
+                                        listOf("ClamAV-GPL-2.0.txt", "ESET-BSD-2-Clause.txt", "ReversingLabs-MIT.txt").joinToString("\n\n") { name ->
                                             appContext.assets.open(name).bufferedReader().use { it.readText() }
                                         }
                                     }.getOrDefault("Licence notices unavailable")
@@ -1039,7 +1065,7 @@ fun KanafGlassHome(
                             style = MaterialTheme.typography.bodySmall)
                     }
                     GlassPanel(card, stroke) {
-                        Text(tr("اختبار الكشف الفعلي", "Live detection self-test"), color = ink,
+                        Text(tr("اختبار تشغيل المحركين", "Engine self-test"), color = ink,
                             style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                         Spacer(Modifier.height(8.dp))
                         Text(tr(
@@ -1505,7 +1531,7 @@ fun KanafGlassHome(
                     textAlign = TextAlign.Center
                 )
                 Text(
-                    tr("نسخة تطويرية · فحص تلقائي بطلب المستخدم وقواعد محدودة", "Preview build · on-demand automatic scanning, limited research rules"),
+                    tr("نسخة اختبارية · فحص الجهاز بطلب المستخدم", "Preview build · on-demand device scanning"),
                     modifier = Modifier.fillMaxWidth(),
                     color = secondary, style = MaterialTheme.typography.labelSmall,
                     textAlign = TextAlign.Center
@@ -1517,7 +1543,7 @@ fun KanafGlassHome(
                         .onSizeChanged { headerHeight = it.height }
                         .clip(RoundedCornerShape(bottomStart = 20.dp, bottomEnd = 20.dp))
                         .background(Brush.verticalGradient(listOf(
-                            card.copy(alpha = 0.88f), card.copy(alpha = 0.65f)
+                            card.copy(alpha = 0.98f), card.copy(alpha = 0.92f)
                         )))
                         .padding(horizontal = 8.dp, vertical = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)

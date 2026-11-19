@@ -42,6 +42,11 @@ class AutomaticDeviceScan {
         private const val MAX_HASH_BYTES = 256L * 1024 * 1024
         private const val MAX_NATIVE_BYTES = 64L * 1024 * 1024
         private const val MAX_NATIVE_CHECKS = 100
+        private val workerFailures = setOf(
+            "scanner-process-disconnected", "scanner-binding-died", "scanner-native-crash",
+            "scanner-worker-crash", "scanner-watchdog-timeout", "scanner-timeout",
+            "scanner-worker-out-of-memory", "scanner-worker-unresponsive"
+        )
 
         fun sharedStorageGranted(): Boolean = if (Build.VERSION.SDK_INT >= 30) {
             Environment.isExternalStorageManager()
@@ -98,6 +103,7 @@ class AutomaticDeviceScan {
         var sharedAttempted = 0
         var hashed = 0
         var nativeChecked = 0
+        var allowOfficial = true
         var storedApksAttempted = 0
         var matched = 0
         var testSamples = 0
@@ -144,7 +150,14 @@ class AutomaticDeviceScan {
                 !stopped() && allocation.reserve(installedApp, archived)
             val native = if (canNativeScan) {
                 nativeChecked++
-                runCatching { NativeScannerBridge.scan(context, Uri.fromFile(file)) }.getOrNull()
+                try {
+                    NativeScannerBridge.scan(context, Uri.fromFile(file), allowOfficial).also { report ->
+                        val failure = (report.clamav as? AntivirusEngine.Verdict.Incomplete)?.reason
+                        if (failure in workerFailures) allowOfficial = false
+                    }
+                } catch (_: Exception) {
+                    null
+                }
             } else null
             val clam = native?.clamav
                 ?: AntivirusEngine.Verdict.Incomplete("native-unavailable-or-limited")
@@ -191,6 +204,18 @@ class AutomaticDeviceScan {
             }
         }
 
+        fun recordOrCountFailure(file: File, display: String, installedApp: Boolean) {
+            try {
+                record(file, display, installedApp)
+            } catch (_: java.io.IOException) {
+                incomplete++
+                reason("file-read-failed")
+            } catch (_: SecurityException) {
+                incomplete++
+                reason("file-read-failed")
+            }
+        }
+
         for (app in packages) {
             if (stopped() || apkAttempted >= limits.apkFiles) {
                 truncated = true
@@ -209,7 +234,7 @@ class AutomaticDeviceScan {
                 }
                 if (!processed.add(path)) continue
                 apkAttempted++
-                record(File(path), app.packageName.take(96), true)
+                recordOrCountFailure(File(path), app.packageName.take(96), true)
                 notifyProgress("apps")
             }
         }
@@ -231,46 +256,55 @@ class AutomaticDeviceScan {
                     }
                     val (dir, depth) = queue.removeFirst()
                     dirs++
-                    val entries = runCatching { dir.listFiles() }.getOrNull()
-                    if (entries == null) {
-                        incomplete++
-                        continue
-                    }
-                    for (entry in entries) {
-                        if (stopped() || sharedAttempted >= limits.sharedFiles) {
-                            truncated = true
-                            break
-                        }
-                        if (runCatching { Files.isSymbolicLink(entry.toPath()) }.getOrDefault(true))
-                            continue
-                        val canonical = runCatching { entry.canonicalPath }.getOrNull()
-                        if (canonical == null ||
-                            !canonical.startsWith(rootCanonical + File.separator)) {
-                            incomplete++
-                            continue
-                        }
-                        if (entry.isDirectory) {
-                            if (depth == 0 && entry.name.equals("Android", true)) {
-                                // Android/data and obb are private/restricted.
-                                // Scanning everything else avoids false coverage.
-                                entry.listFiles()?.filterNot {
-                                    it.name.equals("data", true) ||
-                                        it.name.equals("obb", true)
-                                }?.forEach {
-                                    if (it.isDirectory && depth + 2 <= MAX_DEPTH)
-                                        queue.add(it to 2)
+                    try {
+                        Files.newDirectoryStream(dir.toPath()).use { entries ->
+                            for (path in entries) {
+                                val entry = path.toFile()
+                                if (stopped() || sharedAttempted >= limits.sharedFiles) {
+                                    truncated = true
+                                    break
                                 }
-                            } else if (depth < MAX_DEPTH) {
-                                queue.add(entry to (depth + 1))
-                            } else truncated = true
-                            continue
+                                if (runCatching { Files.isSymbolicLink(entry.toPath()) }.getOrDefault(true))
+                                    continue
+                                val canonical = runCatching { entry.canonicalPath }.getOrNull()
+                                if (canonical == null ||
+                                    !canonical.startsWith(rootCanonical + File.separator)) {
+                                    incomplete++
+                                    continue
+                                }
+                                if (entry.isDirectory) {
+                                    if (depth == 0 && entry.name.equals("Android", true)) {
+                                        // Android/data and obb are private/restricted.
+                                        // Scanning everything else avoids false coverage.
+                                        entry.listFiles()?.filterNot {
+                                            it.name.equals("data", true) ||
+                                                it.name.equals("obb", true)
+                                        }?.forEach {
+                                            if (it.isDirectory && depth + 2 <= MAX_DEPTH)
+                                                queue.add(it to 2)
+                                        }
+                                    } else if (depth < MAX_DEPTH) {
+                                        queue.add(entry to (depth + 1))
+                                    } else truncated = true
+                                    continue
+                                }
+                                if (!entry.isFile || !processed.add(canonical)) continue
+                                sharedAttempted++
+                                if (entry.name.endsWith(".apk", ignoreCase = true))
+                                    storedApksAttempted++
+                                recordOrCountFailure(entry, entry.name.replace('\n', ' ').take(90), false)
+                                notifyProgress("files")
+                            }
                         }
-                        if (!entry.isFile || !processed.add(canonical)) continue
-                        sharedAttempted++
-                        if (entry.name.endsWith(".apk", ignoreCase = true))
-                            storedApksAttempted++
-                        record(entry, entry.name.replace('\n', ' ').take(90), false)
-                        notifyProgress("files")
+                    } catch (_: java.io.IOException) {
+                        incomplete++
+                        reason("directory-read-failed")
+                    } catch (_: java.nio.file.DirectoryIteratorException) {
+                        incomplete++
+                        reason("directory-read-failed")
+                    } catch (_: SecurityException) {
+                        incomplete++
+                        reason("directory-read-failed")
                     }
                 }
             }

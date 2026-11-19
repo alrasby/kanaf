@@ -1,5 +1,7 @@
 package com.kanaf.alrasby
 
+import androidx.lifecycle.ViewModelProvider
+import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.kanaf.alrasby.engine.AutomaticDeviceScan
@@ -13,6 +15,23 @@ import org.junit.runner.RunWith
  */
 @RunWith(AndroidJUnit4::class)
 class AutomaticDeviceScanAndroidTest {
+    @Test fun activeDeviceScanKeepsItsOwnerAfterActivityRecreation() {
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            lateinit var session: DeviceScanSession
+            scenario.onActivity { activity ->
+                session = ViewModelProvider(activity)[DeviceScanSession::class.java]
+                session.start(includeSharedStorage = false)
+                assertTrue(session.state.value.active)
+            }
+            scenario.recreate()
+            scenario.onActivity { replacement ->
+                assertSame(session, ViewModelProvider(replacement)[DeviceScanSession::class.java])
+                assertTrue(session.state.value.active || session.state.value.result != null)
+                session.stop()
+            }
+        }
+    }
+
     @Test fun appOnlyScanIsBoundedAndHonestAboutUnavailableNativeChecks() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val started = android.os.SystemClock.elapsedRealtime()

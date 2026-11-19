@@ -12,6 +12,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.LifecycleOwner
 import com.kanaf.alrasby.engine.PrivateDnsCompatibility
@@ -98,7 +99,10 @@ class MainActivity : ComponentActivity() {
         incomingSharedFile = extractSharedFile(intent)
         shareRequest++
         PrivateDnsToggle.recoverIfStopped(this)
-        setContent { MaterialTheme { KanafScreen(this, incomingSharedText, incomingSharedFile, shareRequest) } }
+        val deviceScan = ViewModelProvider(this)[DeviceScanSession::class.java]
+        setContent {
+            MaterialTheme { KanafScreen(this, incomingSharedText, incomingSharedFile, shareRequest, deviceScan) }
+        }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -111,7 +115,10 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-private fun KanafScreen(activity: Activity, sharedText: String?, sharedFile: Uri?, shareRequest: Long) {
+private fun KanafScreen(
+    activity: Activity, sharedText: String?, sharedFile: Uri?, shareRequest: Long,
+    deviceScan: DeviceScanSession
+) {
     val scope = rememberCoroutineScope()
     val uiPreferences = remember(activity) { KanafUiPreferences(activity) }
     var uiLanguage by remember { mutableStateOf(uiPreferences.language()) }
@@ -119,9 +126,14 @@ private fun KanafScreen(activity: Activity, sharedText: String?, sharedFile: Uri
     var status by remember {
         mutableStateOf(KanafMessage("استخدم زر الفحص لمراجعة الجهاز", "Tap Scan to inspect your device"))
     }
-    var busy by remember { mutableStateOf(false) }
+    var otherTaskBusy by remember { mutableStateOf(false) }
+    val deviceScanState by deviceScan.state.collectAsState()
+    val automaticScanActive = deviceScanState.active
+    val busy = otherTaskBusy || automaticScanActive
     var selfTestStatus by remember { mutableStateOf(KanafMessage.EMPTY) }
     var hasScanReport by remember { mutableStateOf(false) }
+    var lastManualUri by remember { mutableStateOf<Uri?>(null) }
+    var manualScanSummary by remember { mutableStateOf(KanafMessage.EMPTY) }
     var watchNewApps by remember { mutableStateOf(ProtectionControl.installWatchEnabled(activity)) }
     var periodicChecks by remember { mutableStateOf(ProtectionControl.periodicEnabled(activity)) }
     var protectionStatus by remember {
@@ -158,7 +170,13 @@ private fun KanafScreen(activity: Activity, sharedText: String?, sharedFile: Uri
         }
     }
     var deviceScanStatus by remember { mutableStateOf(KanafMessage.EMPTY) }
-    var autoScanProgress by remember { mutableStateOf("") }
+    val autoScanProgress = deviceScanState.progress?.let { progress ->
+        when (progress.phase) {
+            "apps" -> "APK: " + progress.attempted
+            "files" -> "Files: " + progress.attempted
+            else -> ""
+        }
+    }.orEmpty()
     var scanAccessStatus by remember { mutableStateOf(KanafMessage.EMPTY) }
     var updateRulesStatus by remember { mutableStateOf(KanafMessage.EMPTY) }
     var sharedStorageAccess by remember {
@@ -167,9 +185,6 @@ private fun KanafScreen(activity: Activity, sharedText: String?, sharedFile: Uri
         else activity.checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) ==
             PackageManager.PERMISSION_GRANTED)
     }
-    val automaticScanCancellation = remember { AtomicBoolean(false) }
-    var automaticScanActive by remember { mutableStateOf(false) }
-    val autoScanSession = remember { AtomicLong(0) }
     val manualScanSession = remember { AtomicLong(0) }
     val scopedScanSession = remember { AtomicLong(0) }
     val scopedScanCancellation = remember { AtomicBoolean(false) }
@@ -182,45 +197,25 @@ private fun KanafScreen(activity: Activity, sharedText: String?, sharedFile: Uri
     var askFilesBeforeScan by rememberSaveable { mutableStateOf(false) }
     var scanOnFilesPermissionReturn by remember { mutableStateOf(false) }
     fun startAutomaticDeviceScan() {
-        if (busy) return
-        automaticScanCancellation.set(false)
-        val session = autoScanSession.incrementAndGet()
-        automaticScanActive = true
-        busy = true
-        autoScanProgress = "…"
-        deviceScanStatus = KanafMessage(
-            "بدأ فحص التطبيقات المثبتة والملفات المشتركة المتاحة. لا يتم حذف شيء.",
-            "Scanning installed applications and accessible shared files. Nothing will be deleted."
-        )
-        val scanShared = sharedStorageAccess
-        scope.launch {
-            val result = withContext(Dispatchers.IO) {
-                runCatching {
-                    AutomaticDeviceScan().run(
-                        activity,
-                        includeSharedStorage = scanShared,
-                        cancelled = { automaticScanCancellation.get() },
-                        progress = { tick ->
-                            activity.runOnUiThread {
-                                if (autoScanSession.get() != session) return@runOnUiThread
-                                autoScanProgress = when (tick.phase) {
-                                    "apps" -> "APK: " + tick.attempted
-                                    "files" -> "Files: " + tick.attempted
-                                    else -> ""
-                                }
-                            }
-                        }
-                    )
-                }
-            }
-            // Results from an Activity that was sent to the background must
-            // never re-appear after the user returns to a fresh Home screen.
-            if (autoScanSession.get() != session) return@launch
-            automaticScanActive = false
-            autoScanProgress = ""
+        if (!busy && !deviceScan.state.value.active) deviceScan.start(sharedStorageAccess)
+    }
+    LaunchedEffect(deviceScanState.active, deviceScanState.result, deviceScanState.interruptedAt) {
+        val interrupted = deviceScanState.interruptedAt
+        if (interrupted != null) {
+            deviceScanStatus = KanafMessage(
+                "توقفت جلسة الفحص السابقة. آخر تقدّم محفوظ: $interrupted. يمكنك بدء فحص جديد.",
+                "The previous scan was interrupted. Last saved progress: $interrupted. Start a new scan to retry."
+            )
+        }
+        if (automaticScanActive) {
+            deviceScanStatus = KanafMessage(
+                "جارٍ فحص التطبيقات والملفات المتاحة.",
+                "Scanning installed apps and accessible files."
+            )
+        }
+        deviceScanState.result?.let { result ->
             deviceScanStatus = result.fold(
                 onSuccess = { scan ->
-                    com.kanaf.alrasby.engine.ProtectionHealth.recordScan(activity, scan.matches, scan.incomplete)
                     val noteAr = if (scan.sharedStorageGranted)
                         "تمت مراجعة التخزين المشترك المتاح." else
                         "لم يُمنح الوصول للملفات المشتركة؛ فُحصت حزم التطبيقات فقط."
@@ -256,7 +251,7 @@ private fun KanafScreen(activity: Activity, sharedText: String?, sharedFile: Uri
                             "أسباب تعذر الفحص (قد تتعدد للملف الواحد):\n" + scan.incompleteReasons.entries.joinToString("\n") {
                                 com.kanaf.alrasby.engine.ScanEvidenceText.reason(it.key, true) + " × " + it.value
                             } + "\n" + evidenceAr.take(2200) +
-                            "\nقواعد حقيقية محدودة: بصمات أندرويد من ESET ومحتوى Linux/ELF من ESET وReversingLabs. تكرار البصمة في المحركات مصدر واحد. عدم التطابق لا يثبت السلامة. لم يُحذف أي ملف.",
+                            "\nبصمات أندرويد من ESET وقواعد محتوى Linux/ELF من ESET وReversingLabs. تكرار البصمة في المحركات مصدر واحد. عدم التطابق لا يثبت السلامة. لم يُحذف أي ملف.",
                         "Attempted: installed apps=" + scan.installedApps +
                             ", APK files=" + scan.appApksAttempted +
                             ", shared files=" + scan.sharedFilesAttempted +
@@ -273,7 +268,7 @@ private fun KanafScreen(activity: Activity, sharedText: String?, sharedFile: Uri
                             scan.incompleteReasons.entries.joinToString("\n") {
                                 com.kanaf.alrasby.engine.ScanEvidenceText.reason(it.key, false) + " × " + it.value
                             } + "\n" + evidenceEn.take(2200) +
-                            "\nLimited ESET Android exact-file and ESET/ReversingLabs Linux/ELF content rules. The same IOC across engines is one source. No match does not prove safety. Nothing deleted."
+                            "\nAndroid exact-file rules and ESET/ReversingLabs Linux/ELF content rules. The same IOC across engines is one source. No match does not prove safety. Nothing deleted."
                     )
                 },
                 onFailure = { error -> KanafMessage(
@@ -281,7 +276,6 @@ private fun KanafScreen(activity: Activity, sharedText: String?, sharedFile: Uri
                     "Device scan incomplete: " + error.javaClass.simpleName
                 ) }
             )
-            busy = false
         }
     }
     val sharedAccessLauncher = rememberLauncherForActivityResult(
@@ -320,7 +314,7 @@ private fun KanafScreen(activity: Activity, sharedText: String?, sharedFile: Uri
             scopedScanCancellation.set(false)
             val session = scopedScanSession.incrementAndGet()
             scopedScanActive = true
-            busy = true
+            otherTaskBusy = true
             deviceScanStatus = KanafMessage(
                 "جارٍ فحص الملفات التي أذنت بالوصول إليها، ومراجعة التطبيقات الظاهرة…",
                 "Scanning the permitted folder and auditing visible installed apps…"
@@ -387,7 +381,7 @@ private fun KanafScreen(activity: Activity, sharedText: String?, sharedFile: Uri
                         "Permitted device scan incomplete: " + failure.javaClass.simpleName
                     ) }
                 )
-                busy = false
+                otherTaskBusy = false
             }
         }
     }
@@ -459,6 +453,8 @@ private fun KanafScreen(activity: Activity, sharedText: String?, sharedFile: Uri
                 if (!automaticScanActive && !manualScanActive &&
                     !scopedScanActive && !engineSelfTestActive) {
                     hasScanReport = false
+                    lastManualUri = null
+                    manualScanSummary = KanafMessage.EMPTY
                     status = KanafMessage(
                         "استخدم زر الفحص لمراجعة الجهاز", "Tap Scan to inspect your device"
                     )
@@ -565,7 +561,7 @@ private fun KanafScreen(activity: Activity, sharedText: String?, sharedFile: Uri
     fun localized(ar: String, en: String) = if (arabic) ar else en
     val quarantinePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null && !busy) {
-            busy = true
+            otherTaskBusy = true
             scope.launch {
                 val result = withContext(Dispatchers.IO) {
                     runCatching { SafQuarantine(vault).isolateSelectedDocument(activity, uri) }
@@ -586,13 +582,13 @@ private fun KanafScreen(activity: Activity, sharedText: String?, sharedFile: Uri
                     null -> KanafMessage("فشلت العملية قبل اكتمالها.", "Quarantine operation failed.")
                 }
                 reloadVault()
-                busy = false
+                otherTaskBusy = false
             }
         }
     }
     val vaultPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null && !busy) {
-            busy = true
+            otherTaskBusy = true
             scope.launch {
                 val result = withContext(Dispatchers.IO) {
                     runCatching { vault.store(activity, uri) }
@@ -605,7 +601,7 @@ private fun KanafScreen(activity: Activity, sharedText: String?, sharedFile: Uri
                     KanafMessage("تعذر حفظ النسخة المشفرة: ", "Encrypted copy failed: ")
                         .append(result.exceptionOrNull()?.javaClass?.simpleName.orEmpty())
                 }
-                busy = false
+                otherTaskBusy = false
             }
         }
     }
@@ -615,7 +611,7 @@ private fun KanafScreen(activity: Activity, sharedText: String?, sharedFile: Uri
         val id = pendingRestoreId
         pendingRestoreId = null
         if (uri != null && id != null && !busy) {
-            busy = true
+            otherTaskBusy = true
             scope.launch {
                 val result = withContext(Dispatchers.IO) {
                     runCatching { vault.restore(activity, id, uri) }
@@ -629,7 +625,7 @@ private fun KanafScreen(activity: Activity, sharedText: String?, sharedFile: Uri
                         "Restore failed. The output may be partial; delete it before retrying: "
                     ).append(result.exceptionOrNull()?.javaClass?.simpleName.orEmpty())
                 }
-                busy = false
+                otherTaskBusy = false
             }
         }
     }
@@ -676,7 +672,7 @@ private fun KanafScreen(activity: Activity, sharedText: String?, sharedFile: Uri
             )
             return
         }
-        busy = true
+        otherTaskBusy = true
         updateRulesStatus = KanafMessage("جارٍ التحقق من تحديث قاعدة التوقيعات الموقعة…",
             "Checking publisher-signed threat-rule update…")
         scope.launch {
@@ -696,12 +692,12 @@ private fun KanafScreen(activity: Activity, sharedText: String?, sharedFile: Uri
                         e.javaClass.simpleName
                 ) }
             )
-            busy = false
+            otherTaskBusy = false
         }
     }
     val feedPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null && !busy) {
-            busy = true
+            otherTaskBusy = true
             scope.launch {
                 val outcome = withContext(Dispatchers.IO) {
                     runCatching { trustedFeed.importSignedZip(activity, uri) }
@@ -718,7 +714,7 @@ private fun KanafScreen(activity: Activity, sharedText: String?, sharedFile: Uri
                         "Untrusted or invalid feed rejected: "
                     ).append(outcome.exceptionOrNull()?.javaClass?.simpleName.orEmpty())
                 }
-                busy = false
+                otherTaskBusy = false
             }
         }
     }
@@ -726,7 +722,9 @@ private fun KanafScreen(activity: Activity, sharedText: String?, sharedFile: Uri
         if (!busy) {
             val session = manualScanSession.incrementAndGet()
             manualScanActive = true
-            busy = true
+            lastManualUri = uri
+            manualScanSummary = KanafMessage.EMPTY
+            otherTaskBusy = true
             hasScanReport = false
             status = KanafMessage("جارٍ الفحص...", "Scanning…")
             scope.launch {
@@ -949,6 +947,10 @@ private fun KanafScreen(activity: Activity, sharedText: String?, sharedFile: Uri
                 if (manualScanSession.get() != session) return@launch
                 manualScanActive = false
                 status = completed
+                manualScanSummary = KanafMessage(
+                    completed.ar.lineSequence().firstOrNull().orEmpty(),
+                    completed.en.lineSequence().firstOrNull().orEmpty()
+                )
                 hasScanReport = true
                 // Only a bounded, non-persistent summary; never retain file names or contents.
                 com.kanaf.alrasby.engine.SessionHistoryPolicy.record(
@@ -957,7 +959,7 @@ private fun KanafScreen(activity: Activity, sharedText: String?, sharedFile: Uri
                 com.kanaf.alrasby.engine.SessionHistoryPolicy.record(
                     scanHistoryEnglish, completed.en, keepSessionHistory
                 )
-                busy = false
+                otherTaskBusy = false
             }
         }
     }
@@ -1107,7 +1109,7 @@ private fun KanafScreen(activity: Activity, sharedText: String?, sharedFile: Uri
         appsStatus = appsStatus.displayed(uiLanguage),
         onLoadApps = {
             if (!busy) {
-                busy = true
+                otherTaskBusy = true
                 scope.launch {
                     val found = withContext(Dispatchers.IO) {
                         runCatching { inventory.load(activity) }
@@ -1122,14 +1124,14 @@ private fun KanafScreen(activity: Activity, sharedText: String?, sharedFile: Uri
                     } else {
                         appsStatus = KanafMessage("تعذر قراءة التطبيقات الظاهرة", "Could not list visible apps")
                     }
-                    busy = false
+                    otherTaskBusy = false
                 }
             }
         },
         apkAuditStatus = apkAuditStatus.displayed(uiLanguage),
         onAuditApps = {
             if (!busy) {
-                busy = true
+                otherTaskBusy = true
                 apkAuditStatus = KanafMessage("جارٍ فحص ملفات APK الظاهرة...",
                     "Auditing visible APK files...")
                 scope.launch {
@@ -1151,7 +1153,7 @@ private fun KanafScreen(activity: Activity, sharedText: String?, sharedFile: Uri
                     } else KanafMessage(
                         "تعذرت مراجعة APK: ", "APK audit failed: "
                     ).append(attempt.exceptionOrNull()?.javaClass?.simpleName.orEmpty())
-                    busy = false
+                    otherTaskBusy = false
                 }
             }
         },
@@ -1172,7 +1174,7 @@ private fun KanafScreen(activity: Activity, sharedText: String?, sharedFile: Uri
         },
         onDeleteVault = { id ->
             if (!busy) {
-                busy = true
+                otherTaskBusy = true
                 scope.launch {
                     val removed = withContext(Dispatchers.IO) {
                         runCatching { vault.delete(activity, id) }.getOrDefault(false)
@@ -1185,7 +1187,7 @@ private fun KanafScreen(activity: Activity, sharedText: String?, sharedFile: Uri
                         "تعذر حذف النسخة؛ تحقق من التخزين.",
                         "Could not delete the vault copy; check storage."
                     )
-                    busy = false
+                    otherTaskBusy = false
                 }
             }
         },
@@ -1206,7 +1208,7 @@ private fun KanafScreen(activity: Activity, sharedText: String?, sharedFile: Uri
             if (!busy) {
                 val session = selfTestSession.incrementAndGet()
                 engineSelfTestActive = true
-                busy = true
+                otherTaskBusy = true
                 scope.launch {
                     val completed = withContext(Dispatchers.IO) {
                         val testResult = NativeScannerBridge.selfTest(activity)
@@ -1243,7 +1245,7 @@ private fun KanafScreen(activity: Activity, sharedText: String?, sharedFile: Uri
                     if (selfTestSession.get() != session) return@launch
                     engineSelfTestActive = false
                     selfTestStatus = completed
-                    busy = false
+                    otherTaskBusy = false
                 }
             }
         },
@@ -1259,7 +1261,9 @@ private fun KanafScreen(activity: Activity, sharedText: String?, sharedFile: Uri
             else askFilesBeforeScan = true
         },
         onScanChosenFolder = { if (!busy) deviceScanPicker.launch(null) },
-        onStopDeviceScan = { automaticScanCancellation.set(true) },
+        fileScanSummary = localized(manualScanSummary.ar, manualScanSummary.en),
+        onRetryFileScan = lastManualUri?.let { uri -> { scanSelectedFile(uri) } },
+        onStopDeviceScan = deviceScan::stop,
         autoScanProgress = autoScanProgress,
         sharedStorageAccess = sharedStorageAccess,
         scanAccessStatus = scanAccessStatus.displayed(uiLanguage),

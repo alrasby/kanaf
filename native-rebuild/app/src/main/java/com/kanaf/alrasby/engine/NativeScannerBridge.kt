@@ -31,7 +31,8 @@ object NativeScannerBridge {
         val gates: List<NativeEngineGate>
     )
 
-    private external fun clamScanNative(path: String, database: String): String
+    private external fun clamOfficialScanNative(path: String, database: String, temporary: String): String
+    private external fun clamScanNative(path: String, database: String, exactFileOnly: Boolean = false): String
     // Only a debug-only comparison on the generated EICAR fixture; never a verdict.
     private external fun clamDefaultMatcherDiagnosticNative(path: String, database: String): String
     private external fun yaraScanNative(path: String, rules: String): String
@@ -69,19 +70,21 @@ object NativeScannerBridge {
      * Must be called on Dispatchers.IO, after the user selects one SAF file.
      * No file is deleted or modified at its original location.
      */
-    fun scan(context: Context, uri: Uri): Report =
-        NativeScanProcessClient.execute(context, NativeScanProtocol.REQUEST_FILE, uri)
+    fun scan(context: Context, uri: Uri): Report = scan(context, uri, true)
+
+    internal fun scan(context: Context, uri: Uri, allowOfficial: Boolean): Report =
+        NativeScanProcessClient.execute(context, NativeScanProtocol.REQUEST_FILE, uri, allowOfficial)
 
     /** Built-in harmless EICAR self-test, executed in a separate worker process. */
     fun selfTest(context: Context): Report =
         NativeScanProcessClient.execute(context, NativeScanProtocol.REQUEST_SELF_TEST, null)
 
     /** Only called by the scanner Service running in :scanner. Never call from the UI process. */
-    internal fun scanInWorker(context: Context, uri: Uri): Report =
-        scanSource(context, false) { context.contentResolver.openInputStream(uri) }
+    internal fun scanInWorker(context: Context, uri: Uri, allowOfficial: Boolean): Report =
+        scanSource(context, false, allowOfficial) { context.contentResolver.openInputStream(uri) }
 
     internal fun selfTestInWorker(context: Context): Report =
-        scanSource(context, true) { ByteArrayInputStream(eicar) }
+        scanSource(context, true, true) { ByteArrayInputStream(eicar) }
 
     private fun verifiedProductionAsset(context: Context, name: String,
                                         expectedSha: String, maxBytes: Int): ByteArray? {
@@ -103,7 +106,23 @@ object NativeScannerBridge {
         }
     }
 
-    private fun scanSource(context: Context, selfTestOnly: Boolean,
+    private val OFFICIAL_RULE_VERSION = "official-" +
+        BuildConfig.KANAF_OFFICIAL_CLAM_DIGESTS.split(',').getOrNull(1).orEmpty().take(12)
+
+    private fun scanOfficial(context: Context, file: File, sha: String): AntivirusEngine.Verdict {
+        val database = try {
+            OfficialClamDatabase.prepare(context)
+        } catch (failure: IllegalStateException) {
+            return incomplete(if (failure.message == "clamav-official-device-memory")
+                "clamav-official-device-memory" else "clamav-official-assets-unavailable")
+        } catch (_: Exception) {
+            return incomplete("clamav-official-assets-unavailable")
+        }
+        return verdict(clamOfficialScanNative(file.absolutePath, database.absolutePath,
+            context.cacheDir.absolutePath), sha)
+    }
+
+    private fun scanSource(context: Context, selfTestOnly: Boolean, allowOfficial: Boolean,
                            source: () -> InputStream?): Report {
         var clamGate = NativeEngineGate("clamav", false, false, false)
         var yaraGate = NativeEngineGate("yara-x", false, false, false)
@@ -230,7 +249,8 @@ object NativeScannerBridge {
             // exact hashes so a later signed feed can revoke an obsolete IOC.
             val trustedRows = if (production && realClam != null && realYara != null &&
                 BuildConfig.KANAF_SIGNATURE_MIN_VERSION > 0L)
-                SignatureRepository(context).load() else null
+                SignatureRepository(context).loadSnapshot()
+                    .takeIf { it.version > 1L }?.rows else null
             val activeClamBytes = (if (trustedRows != null) NativeHashRules.clam(trustedRows) else realClam)?.let { rules ->
                 // Standard harmless diagnostic remains identifiable as a TEST
                 // alongside real rules; it is never counted as malware evidence.
@@ -250,11 +270,11 @@ object NativeScannerBridge {
             clamGate = NativeEngineGate("clamav", libraries.clamavLoaded,
                 clamRulesOK && (!production || realClam != null), clamOK,
                 engineVersion = "1.4.6",
-                rulesVersion = if (production) "research-native-v1" else "EICAR-test-v1")
+                rulesVersion = if (production) "research-native-v2" else "EICAR-test-v1")
             yaraGate = NativeEngineGate("yara-x", libraries.yaraXLoaded,
                 yaraRulesOK && (!production || realYara != null), yaraOK,
                 engineVersion = "0.13.0",
-                rulesVersion = if (production) "research-native-v1" else "EICAR-test-v1")
+                rulesVersion = if (production) "research-native-v2" else "EICAR-test-v1")
 
             val selected = File.createTempFile("kanaf-scan-", ".bin", context.cacheDir)
             target = selected
@@ -285,15 +305,43 @@ object NativeScannerBridge {
                 return report(incomplete("staged-file-integrity-failed"),
                     incomplete("staged-file-integrity-failed"))
             }
-            val cacheKey = if (production && clamGate.ready && yaraGate.ready &&
+            // A cached mobile verdict does not record whether the full engine
+            // actually ran. Full builds reuse the compiled engine, not that verdict.
+            val cacheKey = if (production && !OfficialClamDatabase.bundled &&
+                clamGate.ready && yaraGate.ready &&
                 activeClamBytes != null && activeYara != null)
-                NativeVerdictCache.Key(sha256, digest(activeClamBytes), digest(activeYara.toByteArray())) else null
+                NativeVerdictCache.Key(
+                    sha256, digest(activeClamBytes),
+                    digest(activeYara.toByteArray())
+                ) else null
             val cachedVerdicts = cacheKey?.let(verdictCache::get)
-            val clamVerdict = cachedVerdicts?.first ?: if (clamGate.ready && activeClam != null) verdict(
-                clamScanNative(selected.absolutePath, activeClam.absolutePath), sha256
+            val localClam = cachedVerdicts?.first ?: if (clamGate.ready && activeClam != null) verdict(
+                clamScanNative(selected.absolutePath, activeClam.absolutePath,
+                    exactFileOnly = production && OfficialClamDatabase.bundled), sha256
             ) else incomplete(if (production && realClam == null)
                 "production-clamav-rules-unavailable"
             else clamGate.unavailableReason() ?: "clamav-not-ready")
+            val clamVerdict = when {
+                !OfficialClamDatabase.bundled -> localClam
+                selfTestOnly && localClam is AntivirusEngine.Verdict.Detected -> {
+                    clamGate = clamGate.copy(rulesVersion = OFFICIAL_RULE_VERSION)
+                    scanOfficial(context, selected, sha256).let { official ->
+                        if (official is AntivirusEngine.Verdict.Detected &&
+                            ThreatFamily.classify(official.threatName) != ThreatFamily.Kind.TEST_SAMPLE) {
+                            incomplete("clamav-official-self-test-unexpected-match")
+                        } else official
+                    }
+                }
+                selfTestOnly || localClam is AntivirusEngine.Verdict.Detected -> localClam
+                !allowOfficial -> incomplete("clamav-official-skipped-after-worker-exit")
+                else -> scanOfficial(context, selected, sha256).let { official ->
+                    val reason = (official as? AntivirusEngine.Verdict.Incomplete)?.reason.orEmpty()
+                    clamGate = clamGate.copy(rulesVersion = OFFICIAL_RULE_VERSION,
+                        rulesVerified = !reason.removePrefix("INCOMPLETE:").startsWith("clamav-official-"))
+                    // A missing supplemental engine still limits a negative result.
+                    if (official is AntivirusEngine.Verdict.NoKnownMatch) localClam else official
+                }
+            }
             val yaraVerdict = cachedVerdicts?.second ?: if (yaraGate.ready && activeYara != null) verdict(
                 yaraScanNative(selected.absolutePath, activeYara), sha256
             ) else incomplete(if (production && realYara == null)

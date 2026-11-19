@@ -8,6 +8,11 @@ internal object NativeScanProtocol {
     /** Debuggable builds only. Forces scanner worker death for instrumentation recovery tests. */
     const val REQUEST_DEBUG_CRASH = 4
     const val URI_KEY = "scan_uri"
+    const val ALLOW_OFFICIAL_KEY = "allow_official"
+
+    // The first official scan may verify, unpack and compile the full database.
+    fun watchdogMs(mode: Int, officialBundled: Boolean): Long =
+        if (mode != REQUEST_DEBUG_CRASH && officialBundled) 175_000L else 90_000L
 
     private val shaPattern = Regex("[0-9a-f]{64}")
     private val keys = listOf("kind", "detail", "sha", "loaded", "rules", "self", "engine", "db")

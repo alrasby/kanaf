@@ -11,6 +11,7 @@ import android.os.Looper
 import android.os.Message
 import android.os.Messenger
 import android.os.Process
+import android.util.Log
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -56,25 +57,35 @@ class NativeScannerService : Service() {
             }
             // Independent main-looper watchdog: kills only :scanner if JNI/IO hangs.
             // The bound client receives a disconnect or its own timeout; never CLEAN.
-            val watchdog = Runnable { Process.killProcess(Process.myPid()) }
-            mainHandler.postDelayed(watchdog, 90_000L)
             val requestType = message.what
+            val allowOfficial = message.data.getBoolean(NativeScanProtocol.ALLOW_OFFICIAL_KEY, true)
+            val deadlineMs = NativeScanProtocol.watchdogMs(requestType, allowOfficial && OfficialClamDatabase.bundled)
+            val watchdog = Runnable {
+                Log.w("KanafScanner", "Scanner watchdog expired for request type $requestType")
+                send(reply, NativeScanProtocol.unavailable("scanner-watchdog-timeout"))
+                Process.killProcess(Process.myPid())
+            }
+            mainHandler.postDelayed(watchdog, deadlineMs)
             Thread({
                 val result = try {
                     if (requestType == NativeScanProtocol.REQUEST_SELF_TEST) {
                         NativeScannerBridge.selfTestInWorker(this@NativeScannerService)
                     } else {
-                        NativeScannerBridge.scanInWorker(this@NativeScannerService, requireNotNull(uri))
+                        NativeScannerBridge.scanInWorker(this@NativeScannerService, requireNotNull(uri), allowOfficial)
                     }
-                } catch (_: Exception) {
+                } catch (failure: Exception) {
+                    Log.w("KanafScanner", "Worker exception: " + failure.javaClass.simpleName)
                     NativeScanProtocol.unavailable("worker-scan-failed")
+                } catch (_: OutOfMemoryError) {
+                    Log.e("KanafScanner", "Worker exhausted its Java heap")
+                    NativeScanProtocol.unavailable("scanner-worker-out-of-memory")
                 } catch (_: UnsatisfiedLinkError) {
                     NativeScanProtocol.unavailable("native-library-failed")
                 }
                 mainHandler.post {
                     mainHandler.removeCallbacks(watchdog)
-                    send(reply, result)
                     running.set(false)
+                    send(reply, result)
                 }
             }, "kanaf-scanner-worker").start()
         }

@@ -10,6 +10,12 @@ class NativeScanProtocolTest {
         NativeEngineGate("yara-x", true, true, true, "0.13.0", "EICAR-test-v1")
     )
 
+    @Test fun fullDatabaseStartupHasABoundedColdStartAllowance() {
+        assertEquals(90_000L, NativeScanProtocol.watchdogMs(NativeScanProtocol.REQUEST_FILE, false))
+        assertEquals(175_000L, NativeScanProtocol.watchdogMs(NativeScanProtocol.REQUEST_FILE, true))
+        assertEquals(90_000L, NativeScanProtocol.watchdogMs(NativeScanProtocol.REQUEST_DEBUG_CRASH, true))
+    }
+
     @Test fun validDetectionsAndNoMatchRoundTrip() {
         val report = NativeScannerBridge.Report(
             AntivirusEngine.Verdict.Detected("Kanaf.EICAR.Test", sha),

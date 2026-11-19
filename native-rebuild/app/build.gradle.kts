@@ -12,8 +12,32 @@ plugins {
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
 }
+val officialClamAssets = providers.gradleProperty("kanafOfficialClamAssets").orNull
+    ?.let { project.file(it) }
+val officialClamFiles = listOf("main.cvd", "daily.cvd", "bytecode.cvd")
+val officialClamDigests = officialClamAssets?.let { root ->
+    officialClamFiles.map { name ->
+        val file = root.resolve("official-clamav").resolve(name)
+        require(file.isFile && file.length() in 512L..256L * 1024 * 1024) {
+            "Missing or oversized official ClamAV asset: $name"
+        }
+        val digest = MessageDigest.getInstance("SHA-256")
+        file.inputStream().buffered().use { input ->
+            val buffer = ByteArray(64 * 1024)
+            while (true) {
+                val count = input.read(buffer)
+                if (count == -1) break
+                digest.update(buffer, 0, count)
+            }
+        }
+        digest.digest().joinToString("") { "%02x".format(it) }
+    }.joinToString(",")
+}.orEmpty()
+
 android {
     namespace = "com.kanaf.alrasby"
+    officialClamAssets?.let { sourceSets.getByName("main").assets.srcDir(it) }
+    androidResources.noCompress += "cvd"
     compileSdk = 36
     ndkVersion = "27.2.12479018"
     externalNativeBuild {
@@ -23,6 +47,7 @@ android {
         }
     }
     defaultConfig {
+        buildConfigField("String", "KANAF_OFFICIAL_CLAM_DIGESTS", "\"$officialClamDigests\"")
         applicationId = "com.kanaf.alrasby"
         minSdk = 26
         targetSdk = 36
@@ -73,8 +98,8 @@ android {
         // Missing/mismatched digests make native release scans INCOMPLETE;
         // debug builds continue to use EICAR-only self-test fixtures.
         val nativeHashPattern = Regex("[0-9a-f]{64}")
-        val clamHash = providers.gradleProperty("kanafNativeClamRuleSha256").orNull ?: "306d7093473d58b01f544fccd29c8a48618309aee657a2ec5f7d3ba959e30c81"
-        val yaraHash = providers.gradleProperty("kanafNativeYaraRuleSha256").orNull ?: "791d0bd4383d9104b1435c6feeb0345577b6e59d86bcaa46e95959ae6deb6531"
+        val clamHash = providers.gradleProperty("kanafNativeClamRuleSha256").orNull ?: "01ffb619ca82f9a3080ecec434b31bd9677460c749a522236a060c8bd13c1c3f"
+        val yaraHash = providers.gradleProperty("kanafNativeYaraRuleSha256").orNull ?: "0943fe73accf2a766ac69b08fa71a67306a97b702654d185cd9db64a4d98d8fc"
         require(clamHash.isEmpty() || nativeHashPattern.matches(clamHash)) {
             "Invalid pinned ClamAV production rule digest"
         }
@@ -118,6 +143,12 @@ android {
         }
     }
     buildTypes {
+        getByName("debug") {
+            if (officialClamAssets != null) {
+                applicationIdSuffix = ".fulltest"
+                versionNameSuffix = "-full-clamav-test"
+            }
+        }
         getByName("release") {
             signingConfig = signingConfigs.getByName("kanafPublisher")
         }
@@ -317,6 +348,7 @@ dependencies {
     implementation("androidx.compose.material:material-icons-core")
     implementation("androidx.activity:activity-compose:1.9.3")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.7")
     implementation("androidx.work:work-runtime-ktx:2.10.2")
     implementation("androidx.documentfile:documentfile:1.0.1")
     testImplementation("junit:junit:4.13.2")

@@ -44,7 +44,7 @@ private:
 
 // Diagnostic mode is only invoked on the app-generated harmless EICAR fixture.
 // Production scans still use the previously pinned configuration and fail closed.
-std::string clamScan(const char* file, const char* database, bool useDefaultMatcher = false) {
+std::string clamScan(const char* file, const char* database, bool useDefaultMatcher = false, bool exactFileOnly = false) {
     if (!file || !database) return incomplete("missing-path");
     void* lib = dlopen("libclamav.so", RTLD_NOW | RTLD_LOCAL);
     if (!lib) return incomplete("clamav-load-failed");
@@ -120,9 +120,11 @@ std::string clamScan(const char* file, const char* database, bool useDefaultMatc
             ClScanOptions options{};
             // ClamAV 1.4.6 parsers: archive, ELF, PDF, HTML, PE.
             // Alert on engine resource limit exhaustion; never label it malware or clean.
-            options.parse = 0x1 | 0x2 | 0x4 | 0x100 | 0x200;
-            options.general = 0x4;   // CL_SCAN_GENERAL_HEURISTICS
-            options.heuristic = 0x4; // CL_SCAN_HEURISTIC_EXCEEDS_MAX
+            if (!exactFileOnly) {
+                options.parse = 0x1 | 0x2 | 0x4 | 0x100 | 0x200;
+                options.general = 0x4;   // CL_SCAN_GENERAL_HEURISTICS
+                options.heuristic = 0x4; // CL_SCAN_HEURISTIC_EXCEEDS_MAX
+            }
             int verdict = scan(file, &name, &scanned, engine, &options);
 #ifndef NDEBUG
             __android_log_print(ANDROID_LOG_INFO, "KanafClamNative",
@@ -200,6 +202,94 @@ std::string clamScan(const char* file, const char* database, bool useDefaultMatc
     return answer;
 }
 
+// The scanner Service serializes requests. Retain the compiled official database
+// for that process lifetime so an inventory scan does not compile it per file.
+class OfficialClamEngine {
+public:
+    ~OfficialClamEngine() {
+        if (engine_) release_(engine_);
+        if (library_) dlclose(library_);
+    }
+
+    std::string scan(const char* file, const char* directory, const char* temp) {
+        if (!file || !directory || !temp) return incomplete("clamav-official-missing-path");
+        if (!initialized_) {
+            initialized_ = true;
+            error_ = initialize(directory, temp);
+        }
+        if (error_) return incomplete(error_);
+        const char* name = nullptr;
+        unsigned long scanned = 0;
+        ClScanOptions options{};
+        options.parse = 0x1fff;  // All standard 1.4.6 parsers.
+        options.general = 0x4;
+        options.heuristic = 0x4;
+        const int status = scan_(file, &name, &scanned, engine_, &options);
+        return kanaf::classifyClamScan(status, name);
+    }
+
+private:
+    const char* initialize(const char* directory, const char* temp) {
+        library_ = dlopen("libclamav.so", RTLD_NOW | RTLD_LOCAL);
+        if (!library_) return "clamav-official-library-unavailable";
+        auto version = symbol<const char* (*)()>(library_, "cl_retver");
+        if (!version || !kanaf::isPinnedClamRuntime(version())) return "clamav-version-mismatch";
+        auto init = symbol<int (*)(unsigned int)>(library_, "cl_init");
+        auto create = symbol<ClEngine* (*)()>(library_, "cl_engine_new");
+        auto verify = symbol<int (*)(const char*)>(library_, "cl_cvdverify");
+        auto load = symbol<int (*)(const char*, ClEngine*, unsigned int*, unsigned int)>(
+            library_, "cl_load");
+        auto compile = symbol<int (*)(ClEngine*)>(library_, "cl_engine_compile");
+        auto configure = symbol<int (*)(ClEngine*, int, long long)>(library_, "cl_engine_set_num");
+        auto configureString = symbol<int (*)(ClEngine*, int, const char*)>(
+            library_, "cl_engine_set_str");
+        release_ = symbol<int (*)(ClEngine*)>(library_, "cl_engine_free");
+        scan_ = symbol<Scan>(library_, "cl_scanfile");
+        if (!init || !create || !verify || !load || !compile || !configure ||
+            !configureString || !release_ || !scan_) return "clamav-official-api-unavailable";
+        if (init(0) != 0 || !(engine_ = create())) return "clamav-official-init-failed";
+        const char* failure = loadRules(directory, temp, verify, load, compile,
+            configure, configureString);
+        if (failure) {
+            release_(engine_);
+            engine_ = nullptr;
+        }
+        return failure;
+    }
+
+    const char* loadRules(const char* directory, const char* temp,
+        int (*verify)(const char*), int (*load)(const char*, ClEngine*, unsigned int*, unsigned int),
+        int (*compile)(ClEngine*), int (*configure)(ClEngine*, int, long long),
+        int (*configureString)(ClEngine*, int, const char*)) {
+        if (!kanaf::configureClamTempDirectory(engine_, configureString, temp) ||
+            !kanaf::configureClamLimits(engine_, configure) ||
+            !kanaf::disableClamCleanCache(engine_, configure) ||
+            configure(engine_, 3, 2048) != 0) return "clamav-official-limits-unavailable";
+
+        // CL_DB_STDOPT | CL_DB_OFFICIAL_ONLY. Never enable unsigned bytecode.
+        constexpr unsigned int flags = 0x200a | 0x1000;
+        unsigned int count = 0;
+        for (const char* name : {"main.cvd", "daily.cvd", "bytecode.cvd"}) {
+            std::string path = std::string(directory) + "/" + name;
+            if (verify(path.c_str()) != 0) return "clamav-official-cvd-signature-invalid";
+        }
+        // Directory loading preserves ClamAV's normal database ordering.
+        if (load(directory, engine_, &count, flags) != 0 || count == 0)
+            return "clamav-official-database-load-failed";
+        if (compile(engine_) != 0) return "clamav-official-database-compile-failed";
+        __android_log_print(ANDROID_LOG_INFO, "KanafScanner", "Official ClamAV signatures=%u", count);
+        return nullptr;
+    }
+
+    using Scan = int (*)(const char*, const char**, unsigned long*, const ClEngine*, ClScanOptions*);
+    void* library_ = nullptr;
+    ClEngine* engine_ = nullptr;
+    int (*release_)(ClEngine*) = nullptr;
+    Scan scan_ = nullptr;
+    bool initialized_ = false;
+    const char* error_ = nullptr;
+};
+
 struct YaraMatch {
     kanaf::YaraMatchState state;
     int (*identifier)(const void*, const uint8_t**, size_t*);
@@ -266,10 +356,20 @@ std::string yaraScan(const char* file, const char* rulesSource) {
 
 extern "C" JNIEXPORT jstring JNICALL
 Java_com_kanaf_alrasby_engine_NativeScannerBridge_clamScanNative(
-    JNIEnv* env, jobject, jstring filePath, jstring databasePath) {
+    JNIEnv* env, jobject, jstring filePath, jstring databasePath, jboolean exactFileOnly) {
     UtfChars file(env, filePath);
     UtfChars database(env, databasePath);
-    return result(env, clamScan(file.get(), database.get()));
+    return result(env, clamScan(file.get(), database.get(), false, exactFileOnly));
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_com_kanaf_alrasby_engine_NativeScannerBridge_clamOfficialScanNative(
+    JNIEnv* env, jobject, jstring filePath, jstring databasePath, jstring temporaryDirectory) {
+    UtfChars file(env, filePath);
+    UtfChars database(env, databasePath);
+    UtfChars temp(env, temporaryDirectory);
+    static OfficialClamEngine official;
+    return result(env, official.scan(file.get(), database.get(), temp.get()));
 }
 
 extern "C" JNIEXPORT jstring JNICALL

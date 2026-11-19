@@ -1,12 +1,16 @@
 package com.kanaf.alrasby.engine
 
+import android.app.ActivityManager
+import android.app.ApplicationExitInfo
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.content.ServiceConnection
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
@@ -18,7 +22,7 @@ import java.util.concurrent.atomic.AtomicReference
 
 /** Bounded synchronous IPC facade; MUST be invoked from Dispatchers.IO, never the UI thread. */
 internal object NativeScanProcessClient {
-    fun execute(context: Context, mode: Int, uri: Uri?): NativeScannerBridge.Report {
+    fun execute(context: Context, mode: Int, uri: Uri?, allowOfficial: Boolean = true): NativeScannerBridge.Report {
         if (Looper.myLooper() == Looper.getMainLooper()) {
             return NativeScanProtocol.unavailable("scanner-called-on-main-thread")
         }
@@ -31,6 +35,7 @@ internal object NativeScanProcessClient {
             mode != NativeScanProtocol.REQUEST_DEBUG_CRASH) {
             return NativeScanProtocol.unavailable("invalid-scan-request")
         }
+        val started = System.currentTimeMillis()
         val done = CountDownLatch(1)
         val response = AtomicReference<NativeScannerBridge.Report>()
         fun finish(result: NativeScannerBridge.Report) {
@@ -55,6 +60,7 @@ internal object NativeScanProcessClient {
                     request.replyTo = callback
                     request.data = Bundle().apply {
                         if (uri != null) putParcelable(NativeScanProtocol.URI_KEY, uri)
+                        putBoolean(NativeScanProtocol.ALLOW_OFFICIAL_KEY, allowOfficial)
                     }
                     Messenger(binder).send(request)
                 } catch (_: Exception) {
@@ -62,7 +68,8 @@ internal object NativeScanProcessClient {
                 }
             }
             override fun onServiceDisconnected(name: ComponentName) {
-                finish(NativeScanProtocol.unavailable("scanner-process-disconnected"))
+                val exitCause = if (mode == NativeScanProtocol.REQUEST_FILE) exitReason(context, started) else null
+                finish(NativeScanProtocol.unavailable(exitCause ?: "scanner-process-disconnected"))
             }
             override fun onBindingDied(name: ComponentName) {
                 finish(NativeScanProtocol.unavailable("scanner-binding-died"))
@@ -82,8 +89,9 @@ internal object NativeScanProcessClient {
                 NativeScanProtocol.unavailable("scanner-bind-failed")
             } else {
                 try {
-                    val waitSeconds = if (mode == NativeScanProtocol.REQUEST_DEBUG_CRASH) 20L else 100L
-                    if (!done.await(waitSeconds, TimeUnit.SECONDS)) {
+                    val waitMs = if (mode == NativeScanProtocol.REQUEST_DEBUG_CRASH) 20_000L
+                    else NativeScanProtocol.watchdogMs(mode, allowOfficial && OfficialClamDatabase.bundled) + 10_000L
+                    if (!done.await(waitMs, TimeUnit.MILLISECONDS)) {
                         NativeScanProtocol.unavailable("scanner-timeout")
                     } else {
                         response.get() ?: NativeScanProtocol.unavailable("scanner-missing-response")
@@ -97,6 +105,23 @@ internal object NativeScanProcessClient {
             NativeScanProtocol.unavailable("scanner-process-unavailable")
         } finally {
             if (bound) try { app.unbindService(connection) } catch (_: Exception) {}
+        }
+    }
+
+    private fun exitReason(context: Context, requestStarted: Long): String? {
+        if (Build.VERSION.SDK_INT < 30) return null
+        val manager = context.getSystemService(ActivityManager::class.java)
+        val exit = runCatching { manager.getHistoricalProcessExitReasons(null, 0, 8) }
+            .getOrNull()?.firstOrNull {
+                it.processName == context.packageName + ":scanner" && it.timestamp >= requestStarted
+            } ?: return null
+        Log.w("KanafScanner", "Scanner exit reason=${exit.reason} status=${exit.status}")
+        return when (exit.reason) {
+            ApplicationExitInfo.REASON_CRASH_NATIVE -> "scanner-native-crash"
+            ApplicationExitInfo.REASON_CRASH -> "scanner-worker-crash"
+            ApplicationExitInfo.REASON_LOW_MEMORY -> "scanner-worker-out-of-memory"
+            ApplicationExitInfo.REASON_ANR -> "scanner-worker-unresponsive"
+            else -> null
         }
     }
 }

@@ -71,7 +71,11 @@ class SignatureRepository(private val context: Context) {
         Status(record.version, record.sha256, rows.size)
     }
 
-    fun load(): Map<String, String> {
+    internal data class Snapshot(val version: Long, val rows: Map<String, String>)
+
+    fun load(): Map<String, String> = loadSnapshot().rows
+
+    internal fun loadSnapshot(): Snapshot {
         val minimum = BuildConfig.KANAF_SIGNATURE_MIN_VERSION
         if (minimum > 0L) {
             synchronized(bootstrapLock) {
@@ -98,7 +102,7 @@ class SignatureRepository(private val context: Context) {
                 SignatureIndex.parse(it)
             }
             require(parsed.isNotEmpty()) { "Verified database must not be empty" }
-            return parsed
+            return Snapshot(record.version, parsed)
         }
         // Previous versions committed these two values separately. Without a signed
         // manifest tying them together, their state cannot be trusted after a crash.
@@ -109,7 +113,7 @@ class SignatureRepository(private val context: Context) {
             "Production database unavailable: never fall back to test-only signatures"
         }
         return context.assets.open("signatures.tsv").use { input ->
-            InputStreamReader(input, Charsets.UTF_8).use { SignatureIndex.parse(it) }
+            InputStreamReader(input, Charsets.UTF_8).use { Snapshot(0, SignatureIndex.parse(it)) }
         }
     }
 

@@ -1,0 +1,52 @@
+{
+  "aridspy": {
+    "label": "Android.AridSpy",
+    "records": 15,
+    "sha256": "502a679a55bae4dda6004079c6a63068af19917877890d36460c041413d66c5f"
+  },
+  "callphantom": {
+    "label": "Android.CallPhantom",
+    "records": 28,
+    "sha256": "d4be23c5d9fd28b9119a28cc8755089d2063df7965f85cdc5dd2e917d2459a76"
+  },
+  "promptspy": {
+    "label": "Android.PromptSpy",
+    "records": 9,
+    "sha256": "0069af7209a245ea3491347d15246e7d195e962f38ecd7ce4cd237c05d2d5d59"
+  },
+  "ngate": {
+    "label": "Android.NGate",
+    "records": 25,
+    "sha256": "189f666874639eaf3a504617988a7a250534c24b922bddc2b38604757f4f70b8"
+  },
+  "kamran": {
+    "label": "Android.Kamran",
+    "records": 1,
+    "sha256": "682d7fe344531f782b95e5e455b0454cbba80eeecf114b8dda33168e42bdae48"
+  },
+  "hamkombat": {
+    "label": "Android.HamsterKombatCampaign",
+    "records": 19,
+    "sha256": "d9e9e08779f71f39a9b6200cb05dfd811b59ae4da458a3f06b8329918cb5dde6"
+  },
+  "gref": {
+    "label": "Android.BadBazaar",
+    "records": 5,
+    "sha256": "c3b26de62b04ec3a0d46087118ebc0f4b5b7728027236edf9e07f8b725200e80"
+  },
+  "ghostchat": {
+    "label": "Android.GhostSpy",
+    "records": 2,
+    "sha256": "794178d20cdda322c0bd858815494227596a63260df9275b17164a118de3a9f1"
+  },
+  "prospytospy": {
+    "label": "Android.ProSpyToSpyCampaign",
+    "records": 12,
+    "sha256": "dfafd8d7b1a2c1a1fcb2e41221dc7a933f335f369757b574f89b89f9dd89617c"
+  },
+  "gravityrat": {
+    "label": "Android.GravityRAT",
+    "records": 3,
+    "sha256": "859c4d1aca4bd0b3be121310b19206d59157687b6401ef388a2fc3ea34feb012"
+  }
+}
