@@ -220,6 +220,13 @@ public:
             error_ = initialize(directory, temp);
         }
         if (error_) return incomplete(error_);
+        struct stat input {};
+        if (stat(file, &input) != 0 || !S_ISREG(input.st_mode))
+            return incomplete("clamav-official-input-unavailable");
+        constexpr int maxScanTimeField = 31; // CL_ENGINE_MAX_SCANTIME, milliseconds.
+        const auto budgetMs = input.st_size > 64 * kanaf::MiB ? 90'000L : 20'000L;
+        if (configure_(engine_, maxScanTimeField, budgetMs) != 0)
+            return incomplete("clamav-official-limits-unavailable");
         const char* name = nullptr;
         unsigned long scanned = 0;
         ClScanOptions options{};
@@ -253,16 +260,16 @@ private:
         auto load = symbol<int (*)(const char*, ClEngine*, unsigned int*, unsigned int)>(
             library_, "cl_load");
         auto compile = symbol<int (*)(ClEngine*)>(library_, "cl_engine_compile");
-        auto configure = symbol<int (*)(ClEngine*, int, long long)>(library_, "cl_engine_set_num");
+        configure_ = symbol<int (*)(ClEngine*, int, long long)>(library_, "cl_engine_set_num");
         auto configureString = symbol<int (*)(ClEngine*, int, const char*)>(
             library_, "cl_engine_set_str");
         release_ = symbol<int (*)(ClEngine*)>(library_, "cl_engine_free");
         scan_ = symbol<Scan>(library_, "cl_scanfile");
-        if (!init || !create || !verify || !load || !compile || !configure ||
+        if (!init || !create || !verify || !load || !compile || !configure_ ||
             !configureString || !release_ || !scan_) return "clamav-official-api-unavailable";
         if (init(0) != 0 || !(engine_ = create())) return "clamav-official-init-failed";
         const char* failure = loadRules(directory, temp, verify, load, compile,
-            configure, configureString);
+            configure_, configureString);
         if (failure) {
             release_(engine_);
             engine_ = nullptr;
@@ -300,6 +307,7 @@ private:
     void* library_ = nullptr;
     ClEngine* engine_ = nullptr;
     int (*release_)(ClEngine*) = nullptr;
+    int (*configure_)(ClEngine*, int, long long) = nullptr;
     Scan scan_ = nullptr;
     bool initialized_ = false;
     const char* error_ = nullptr;
