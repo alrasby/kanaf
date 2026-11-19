@@ -2,7 +2,7 @@
 set -euo pipefail
 if [[ "${1:-}" == build ]]; then
     feed=native-rebuild/rules/eset-android-seed
-    python3 tools/signed_feed.py verify --zip "$feed/kanaf-feed-v1.zip" --public-key "$feed/feed-public.pem"
+    python3 native-rebuild/tools/signed_feed.py verify --zip "$feed/kanaf-feed-v1.zip" --public-key "$feed/feed-public.pem"
     public_key=$(openssl pkey -pubin -in "$feed/feed-public.pem" -outform DER | openssl base64 -A)
     install -m 644 "$feed/kanaf-feed-v1.zip" native-rebuild/app/src/main/assets/production_signatures.zip
     init_script="$RUNNER_TEMP/kanaf-central.init.gradle"
