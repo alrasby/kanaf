@@ -7,7 +7,7 @@ from pathlib import Path
 
 ASSETS = (
     "production_signatures.zip",
-    "production_clamav.ndb",
+    "production_clamav.hsb",
     "production_yara.yar",
     "validated_model.txt",
     "validated_model.sig",

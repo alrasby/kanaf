@@ -22,7 +22,7 @@
             <category android:name="android.intent.category.LAUNCHER" />
         </intent>
     </queries>
-    <application android:icon="@drawable/kanaf_launcher_legacy" android:roundIcon="@mipmap/ic_launcher" android:label="Kanaf" android:theme="@style/KanafTheme" android:usesCleartextTraffic="false"
+    <application android:name=".KanafApplication" android:icon="@drawable/kanaf_launcher_legacy" android:roundIcon="@mipmap/ic_launcher" android:label="Kanaf" android:theme="@style/KanafTheme" android:usesCleartextTraffic="false"
         android:allowBackup="false" android:fullBackupContent="false">
         <activity android:name=".MainActivity" android:exported="true" android:launchMode="singleTop">
             <intent-filter>
@@ -32,18 +32,12 @@
             <intent-filter>
                 <action android:name="android.intent.action.SEND"/>
                 <category android:name="android.intent.category.DEFAULT"/>
-                <data android:mimeType="text/plain"/>
+                <data android:mimeType="*/*"/>
             </intent-filter>
         </activity>
-        <!-- Opt-in best-effort package event prompt; not a persistent realtime scanner.
-             Protected Android package broadcasts; unavailable/hidden apps are not scanned. -->
-        <receiver android:name=".engine.PackageChangeReceiver" android:exported="false">
-            <intent-filter>
-                <action android:name="android.intent.action.PACKAGE_ADDED" />
-                <action android:name="android.intent.action.PACKAGE_REPLACED" />
-                <data android:scheme="package" />
-            </intent-filter>
-        </receiver>
+        <!-- Package events are dynamically registered by KanafApplication.
+             Android 8+ suppresses these implicit broadcasts in manifest receivers;
+             an opt-in WorkManager delta inventory covers background process death. -->
         <!-- Explicit user-approved DNS-only VPN; never activated automatically.
              Only one VPN can run on Android. Production Play/VpnService review required. -->
         <service android:name=".engine.KanafDnsVpnService"

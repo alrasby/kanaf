@@ -123,4 +123,42 @@ class NativeArm64EngineRuntimeTest {
         assertEquals(sha256(eicar),
             (positive.yaraX as AntivirusEngine.Verdict.Detected).sha256)
     }
+    @Test fun realYaraContentRuleRunsOnHarmlessControlAndRejectsNearMiss() {
+        requireArm64()
+        val parts = listOf("Modules are loaded", "--scrypt", "processor ", "cpu model ", "Host: www.challpok.cn")
+        val positive = byteArrayOf(0x7f, 0x45, 0x4c, 0x46) + parts.joinToString("\u0000").toByteArray()
+        val nearMiss = byteArrayOf(0x7f, 0x45, 0x4c, 0x46) + parts.take(4).joinToString("\u0000").toByteArray()
+        val file = File.createTempFile("real-rule-control-", ".bin", appContext.cacheDir)
+        try {
+            file.writeBytes(positive)
+            val detected = NativeScannerBridge.scan(appContext, Uri.fromFile(file))
+            assertTrue("Real ESET content rule did not run: $detected", detected.yaraX is AntivirusEngine.Verdict.Detected)
+            assertEquals("moose_2", (detected.yaraX as AntivirusEngine.Verdict.Detected).threatName)
+            file.writeBytes(nearMiss)
+            val negative = NativeScannerBridge.scan(appContext, Uri.fromFile(file))
+            assertTrue("Near-miss must not reuse an old verdict: $negative", negative.yaraX is AntivirusEngine.Verdict.NoKnownMatch)
+        } finally { file.delete() }
+        // Generated control bytes prove rule execution, not malware recall.
+    }
+
+    @Test fun reversingLabsContentRuleUsesTheActualArm64EngineOnSafeControls() {
+        requireArm64()
+        val fixtures = InstrumentationRegistry.getInstrumentation().context.assets
+        fun bytes(name: String): ByteArray {
+            val hex = fixtures.open(name).bufferedReader().use { it.readText().trim() }
+            return ByteArray(hex.length / 2) { hex.substring(it * 2, it * 2 + 2).toInt(16).toByte() }
+        }
+        val file = File.createTempFile("rl-safe-control-", ".bin", appContext.cacheDir)
+        try {
+            file.writeBytes(bytes("rl-positive-control.hex"))
+            val positive = NativeScannerBridge.scan(appContext, Uri.fromFile(file))
+            assertTrue("ReversingLabs rule did not execute: $positive", positive.yaraX is AntivirusEngine.Verdict.Detected)
+            assertEquals("Linux_Trojan_AcidRain", (positive.yaraX as AntivirusEngine.Verdict.Detected).threatName)
+            file.writeBytes(bytes("rl-near-miss-control.hex"))
+            val negative = NativeScannerBridge.scan(appContext, Uri.fromFile(file))
+            assertTrue("Partial pattern must not match: $negative", negative.yaraX is AntivirusEngine.Verdict.NoKnownMatch)
+        } finally { file.delete() }
+        // These are incomplete, non-executable ELF-shaped controls, not malware.
+    }
+
 }

@@ -62,6 +62,15 @@ class SignatureRepository(private val context: Context) {
         AtomicFile(verifiedBundle).openRead().use { VerifiedSignatureBundle.read(it).version }
     } else 0L
 
+    data class Status(val version: Long, val sha256: String, val count: Int)
+
+    fun status(): Status = synchronized(bootstrapLock) {
+        val rows = load()
+        check(hasCommittedState(verifiedBundle)) { "signed-database-unavailable" }
+        val record = AtomicFile(verifiedBundle).openRead().use { VerifiedSignatureBundle.read(it) }
+        Status(record.version, record.sha256, rows.size)
+    }
+
     fun load(): Map<String, String> {
         val minimum = BuildConfig.KANAF_SIGNATURE_MIN_VERSION
         if (minimum > 0L) {

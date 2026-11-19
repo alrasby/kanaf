@@ -4,10 +4,13 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class AutomaticDeviceScanMetadataTest {
-    @Test fun signaturesAreUnavailableWithoutPublisherProvisioning() {
+    @Test fun updateAvailabilityMatchesTheBuildsPublisherProvisioning() {
         val status = ThreatRuleUpdater().availability()
-        // CI intentionally has no production signing key or official feed.
-        assertFalse(status.configured)
+        // The downloadable test APK now has the publisher's PUBLIC key
+        // and HTTPS feed. A bare CI build still has neither.
+        val configured = com.kanaf.alrasby.BuildConfig.KANAF_SIGNATURE_PUBLIC_KEY_BASE64.isNotBlank() &&
+            com.kanaf.alrasby.BuildConfig.KANAF_SIGNATURE_FEED_URL.isNotBlank()
+        assertEquals(configured, status.configured)
         assertTrue(status.reason.isNotBlank())
     }
 }

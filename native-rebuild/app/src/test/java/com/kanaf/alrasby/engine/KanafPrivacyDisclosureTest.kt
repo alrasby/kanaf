@@ -11,14 +11,14 @@ class KanafPrivacyDisclosureTest {
         assertTrue(en.contains(if (com.kanaf.alrasby.BuildConfig.KANAF_PLAY_DNS_SECURITY_ONLY)
             "Cloudflare" else "AdGuard DNS"))
         assertTrue(en.contains("connecting IP"))
-        assertTrue(en.contains("no DNS domain history"))
+        assertTrue(en.contains("64 events in RAM until stop or disable"))
         assertTrue(en.contains("explicitly agree"))
         assertTrue(en.contains(if (com.kanaf.alrasby.BuildConfig.KANAF_PLAY_DNS_SECURITY_ONLY)
             "NOT ad or tracker blocking" else "other apps"))
         assertTrue(ar.contains(if (com.kanaf.alrasby.BuildConfig.KANAF_PLAY_DNS_SECURITY_ONLY)
             "Cloudflare" else "AdGuard DNS"))
         assertTrue(ar.contains("عنوان"))
-        assertTrue(ar.contains("لا يحتفظ"))
+        assertTrue(ar.contains("64 حدثًا في الذاكرة"))
         assertTrue(ar.contains("هل توافق صراحة"))
     }
 

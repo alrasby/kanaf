@@ -83,6 +83,7 @@ class KanafDnsVpnService : VpnService() {
 
     override fun onCreate() {
         super.onCreate()
+        DnsDiagnosticPreferences.initialize(this)
         if (Build.VERSION.SDK_INT >= 28) {
             for (name in listOf(
                 "private_dns_mode", "private_dns_default_mode", "private_dns_specifier"
@@ -128,6 +129,7 @@ class KanafDnsVpnService : VpnService() {
         tun = null
         try { current?.close() } catch (_: IOException) {}
         sessionCounters = null
+        DnsActivityLog.clear()
         currentProvider = null
         refreshTile()
     }

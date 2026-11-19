@@ -25,6 +25,15 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.11.1'
+      - name: Validate licensed rule formats and safe control semantics
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install yara-x==0.13.0
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends clamav
+          python3 native-rebuild/tools/validate_native_rules.py --clamscan "$(command -v clamscan)" \
+            --output native-rebuild/app/build/reports/native-rule-validation.json
       - name: Download verified native ARM64 artifacts
         env:
           GH_TOKEN: ${{ github.token }}
@@ -80,6 +89,7 @@ jobs:
           bash tools/gradle_retry_429.sh --no-daemon \
             -PkanafArm64Runtime=true \
             "-PkanafSignaturePublicKeyBase64=$public_key" -PkanafSignatureMinVersion=1 \
+            -PkanafSignatureFeedHttpsUrl=https://raw.githubusercontent.com/alrasby/kanaf/rebuild/kanaf-native-v1/native-rebuild/rules/eset-android-seed/kanaf-feed-v1.zip \
             :app:testDebugUnitTest :app:assembleDebug :app:bundleDebug --stacktrace
       - name: Verify APK contains all native libraries
         shell: bash
@@ -122,6 +132,7 @@ jobs:
         with:
           name: kanaf-native-engines-packaging-prototype
           path: |
+            native-rebuild/app/build/reports/native-rule-validation.json
             native-rebuild/app/build/outputs/apk/debug/app-debug.apk
             native-rebuild/app/build/outputs/bundle/debug/app-debug.aab
           if-no-files-found: error

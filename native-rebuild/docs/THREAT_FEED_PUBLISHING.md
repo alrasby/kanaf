@@ -49,7 +49,7 @@ Subsequent signed downloads/upgrades must be strictly newer; a corrupt ZIP,
 wrong signer, missing key, missing asset, or legacy unverified state cannot
 fall back to debug signatures. Test-only EICAR assets remain for debug engine
 self-tests, NOT actual production file scans. For native scanning, the APK
-requires separately hash-pinned `production_clamav.ndb` and
+requires separately hash-pinned `production_clamav.hsb` and
 `production_yara.yar` assets. Their content still needs external licensing,
 provenance, and accuracy audits before it can be designated production-ready.
 

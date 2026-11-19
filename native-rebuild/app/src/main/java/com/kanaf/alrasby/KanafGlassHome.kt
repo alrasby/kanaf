@@ -48,7 +48,16 @@ import com.kanaf.alrasby.engine.KanafPrivacyDisclosure
 import com.kanaf.alrasby.engine.DnsProviderStore
 import com.kanaf.alrasby.engine.EncryptedVault
 import com.kanaf.alrasby.engine.InstalledAppInventory
+import com.kanaf.alrasby.engine.PrivacyAudit
+import com.kanaf.alrasby.engine.ProtectionHealth
+import com.kanaf.alrasby.engine.ProtectionControl
+import com.kanaf.alrasby.engine.ThreatRuleUpdater
+import com.kanaf.alrasby.engine.DnsActivityLog
+import com.kanaf.alrasby.engine.DnsDiagnosticPreferences
+import com.kanaf.alrasby.engine.SafeRedirectInspector
+import androidx.compose.ui.platform.LocalContext
 
+private const val SCAN_TOOLS_PAGE = 10
 private val Teal = Color(0xFF146C70)
 private val Aqua = Color(0xFF3DDFB0)
 private val Night = Color(0xFF0A1729)
@@ -58,6 +67,7 @@ private val Night = Color(0xFF0A1729)
 fun KanafGlassHome(
     busy: Boolean,
     sharedText: String?,
+    sharedFileRequest: Long? = null,
     uiLanguage: KanafLanguage,
     hiddenSections: Set<String>,
     onLanguageChange: (KanafLanguage) -> Unit,
@@ -129,6 +139,18 @@ fun KanafGlassHome(
     onOpenSystemApps: () -> Unit,
     onOpenWebsite: () -> Unit
 ) {
+    val appContext = LocalContext.current.applicationContext
+    val panelScope = rememberCoroutineScope()
+    var healthSummary by remember { mutableStateOf("") }
+    var installSummary by remember { mutableStateOf("") }
+    var autoUpdates by remember { mutableStateOf(ProtectionHealth.autoUpdateEnabled(appContext)) }
+    var ruleLicenses by remember { mutableStateOf("") }
+    var healthError by remember { mutableStateOf("") }
+    var dnsLogEnabled by remember { mutableStateOf(false) }
+    var dnsLogEntries by remember { mutableStateOf(emptyList<DnsActivityLog.Entry>()) }
+    var localExceptions by remember { mutableStateOf(emptySet<String>()) }
+    var exceptionInput by remember { mutableStateOf("") }
+    var dnsLogError by remember { mutableStateOf("") }
     var page by remember { mutableIntStateOf(if (sharedText.isNullOrBlank()) 0 else 1) }
     // Android Back returns to the main screen instead of exiting from a subpage.
     BackHandler(enabled = page != 0) { page = 0 }
@@ -143,6 +165,9 @@ fun KanafGlassHome(
     var dnsAdvanced by rememberSaveable { mutableStateOf(false) }
     var deleteVaultId by remember { mutableStateOf<String?>(null) }
     var appSearch by remember { mutableStateOf("") }
+    LaunchedEffect(sharedFileRequest) {
+        if (sharedFileRequest != null) page = SCAN_TOOLS_PAGE
+    }
     LaunchedEffect(sharedText) {
         if (!sharedText.isNullOrBlank()) {
             linkInput = sharedText
@@ -153,7 +178,19 @@ fun KanafGlassHome(
     var headerHeight by remember { mutableIntStateOf(0) }
     val headerPadding = with(LocalDensity.current) { headerHeight.toDp() }
     val scrollState = rememberScrollState()
-    LaunchedEffect(page) { scrollState.scrollTo(0) }
+    LaunchedEffect(page, uiLanguage) {
+        scrollState.scrollTo(0)
+        if (page == 8) {
+            healthSummary = withContext(Dispatchers.IO) { ProtectionHealth.describe(appContext, uiLanguage.isArabic()) }
+            installSummary = ProtectionControl.lastInstallResult(appContext)
+        }
+        if (page == 9) {
+            DnsDiagnosticPreferences.initialize(appContext)
+            dnsLogEnabled = DnsActivityLog.enabled
+            localExceptions = DnsActivityLog.allowed()
+            dnsLogEntries = DnsActivityLog.snapshot()
+        }
+    }
     // Refresh only while the DNS screen is visible, with no domain-history storage.
     LaunchedEffect(page, vpnRequested) {
         if (page == 9 && vpnRequested) {
@@ -386,8 +423,8 @@ fun KanafGlassHome(
                                 }
                                 Surface(
                                     onClick = { page = when {
-                                        section == null -> if (action == 0) 10 else 9
-                                        section == KanafSection.SCAN -> 10
+                                        section == null -> if (action == 0) SCAN_TOOLS_PAGE else 9
+                                        section == KanafSection.SCAN -> SCAN_TOOLS_PAGE
                                         else -> section.page
                                     } },
                                     modifier = Modifier.weight(1f).testTag(
@@ -427,6 +464,9 @@ fun KanafGlassHome(
                                     .testTag("scan_report_details")) {
                                 Text(if (detailsOpen) tr("إخفاء التفاصيل", "Hide details")
                                     else tr("عرض التقرير", "View report"))
+                            }
+                            TextButton(onClick = onShareReport, enabled = !busy, modifier = Modifier.testTag("export_device_report")) {
+                                Text(tr("تصدير تقرير الفحص", "Export scan report"))
                             }
                         }
                     }
@@ -563,12 +603,62 @@ fun KanafGlassHome(
                     }
 
                     GlassPanel(card, stroke) {
+                        Text(tr("سجل DNS المحلي", "Local DNS diagnostics"), color = ink,
+                            style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        Text(tr("اختياري: آخر 64 حدثًا في الذاكرة فقط، ويمسح عند إيقاف DNS أو السجل. غياب النطاق قد يعني أنه غير موجود أو أن المزود حجبه؛ لا يجزم كنف بالسبب.",
+                            "Opt-in: last 64 events in RAM only, cleared on DNS stop or logging disable. NXDOMAIN may mean nonexistent or provider-blocked; Kanaf cannot determine which."),
+                            color = secondary, style = MaterialTheme.typography.bodySmall)
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Text(tr("تفعيل السجل المؤقت", "Enable temporary diagnostics"), color = ink, modifier = Modifier.weight(1f))
+                            Switch(checked = dnsLogEnabled, modifier = Modifier.testTag("dns_diagnostics_switch"), onCheckedChange = { enabled ->
+                                DnsDiagnosticPreferences.setEnabled(appContext, enabled)
+                                dnsLogEnabled = enabled
+                                dnsLogEntries = DnsActivityLog.snapshot()
+                            })
+                        }
+                        Row {
+                            TextButton(onClick = { dnsLogEntries = DnsActivityLog.snapshot() }) {
+                                Text(tr("تحديث السجل", "Refresh log"))
+                            }
+                            TextButton(onClick = { DnsActivityLog.clear(); dnsLogEntries = emptyList() }) {
+                                Text(tr("مسح السجل", "Clear log"))
+                            }
+                        }
+                        dnsLogEntries.take(16).forEach { entry ->
+                            Text(entry.host + " · " + entry.reason + " · " + entry.source,
+                                color = secondary, style = MaterialTheme.typography.bodySmall)
+                        }
+                        Text(tr("استثناء نطاق من قواعد الإعلانات المحلية فقط؛ لا يتجاوز حجب مزود DNS ولا قواعد التهديدات.",
+                            "Exact-domain exception for local ad rules only. Cannot override upstream or security blocking."),
+                            color = secondary, style = MaterialTheme.typography.bodySmall)
+                        OutlinedTextField(value = exceptionInput, onValueChange = { exceptionInput = it.take(253) },
+                            label = { Text("example.com") }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag("dns_exception_input"))
+                        TextButton(modifier = Modifier.testTag("dns_exception_add"), onClick = {
+                            val host = DnsActivityLog.validHost(exceptionInput)
+                            if (host == null || localExceptions.size >= 50) dnsLogError = tr("نطاق غير صالح أو تجاوز الحد", "Invalid domain or limit reached")
+                            else {
+                                val next = localExceptions + host
+                                DnsDiagnosticPreferences.setAllowed(appContext, next)
+                                localExceptions = next; exceptionInput = ""; dnsLogError = ""
+                            }
+                        }) { Text(tr("إضافة استثناء محلي", "Add local exception")) }
+                        if (dnsLogError.isNotBlank()) Text(dnsLogError, color = MaterialTheme.colorScheme.error)
+                        localExceptions.sorted().forEach { host ->
+                            TextButton(onClick = {
+                                val next = localExceptions - host
+                                DnsDiagnosticPreferences.setAllowed(appContext, next)
+                                localExceptions = next
+                            }) { Text(host + tr(" · إزالة", " · Remove")) }
+                        }
+                    }
+
+                    GlassPanel(card, stroke) {
                         Text(tr("اتصال DNS والتغطية", "DNS connection & coverage"),
                             color = ink, style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold)
                         Text(tr(
-                            "عدادات محلية دون سجل نطاقات. يدعم كنف طلبات DNS عبر IPv4 وIPv6 الموجهة إلى خادمه، لكن فحص الاتصال لا يثبت منع كل التجاوزات.",
-                            "Session-only counters without domain history. Kanaf handles IPv4 and IPv6 queries to its DNS servers, but this check cannot prove leak prevention."
+                            "عدادات مؤقتة وسجل تشخيص اختياري. يدعم كنف طلبات DNS عبر IPv4 وIPv6 الموجهة إلى خادمه، لكن فحص الاتصال لا يثبت منع كل التجاوزات.",
+                            "Session-only counters with optional temporary diagnostic history. Kanaf handles IPv4 and IPv6 queries to its DNS servers, but this check cannot prove leak prevention."
                         ), color = secondary, style = MaterialTheme.typography.bodySmall)
                         Text(dnsSessionStats, color = ink,
                             style = MaterialTheme.typography.bodyMedium,
@@ -661,7 +751,7 @@ fun KanafGlassHome(
                         }
                     }
                 }
-                if (page == 10) {
+                if (page == SCAN_TOOLS_PAGE) {
                     GlassPanel(card, stroke) {
                         Text(tr("خيارات الفحص والأذونات", "Scan options & permissions"),
                             color = ink, style = MaterialTheme.typography.titleLarge,
@@ -699,7 +789,7 @@ fun KanafGlassHome(
                                 style = MaterialTheme.typography.bodySmall)
                         }
                         if (status.isNotBlank()) {
-                            Text(status, color = secondary,
+                            Text(status, color = secondary, modifier = Modifier.testTag("file_scan_result"),
                                 style = MaterialTheme.typography.bodySmall)
                         }
                         if (hasScanReport) {
@@ -810,6 +900,25 @@ fun KanafGlassHome(
                                         }
                                     }
                                 }
+                                if (item.verdict != LinkInspector.Verdict.INVALID) key(report, item.url) {
+                                    val scope = rememberCoroutineScope()
+                                    var redirectBusy by remember { mutableStateOf(false) }
+                                    var redirects by remember { mutableStateOf<SafeRedirectInspector.Result?>(null) }
+                                    Text(tr("كشف الوجهة يتصل بالموقع ويرسل عنوان الرابط الكامل وعنوان IP لاتصالك، دون ملفات تعريف ارتباط. HTTPS فقط.",
+                                        "Destination inspection contacts the site with the full URL and your connection IP, without cookies. HTTPS only."),
+                                        color = secondary, style = MaterialTheme.typography.bodySmall)
+                                    TextButton(enabled = !redirectBusy, onClick = {
+                                        redirectBusy = true
+                                        scope.launch {
+                                            try { redirects = withContext(Dispatchers.IO) { SafeRedirectInspector.inspect(item.url) } }
+                                            finally { redirectBusy = false }
+                                        }
+                                    }) { Text(tr("كشف الوجهة وإعادة التوجيه", "Inspect destination and redirects")) }
+                                    redirects?.let { result ->
+                                        Text(result.chain.joinToString("\n→ ") + "\n" + result.reason,
+                                            color = secondary, style = MaterialTheme.typography.bodySmall)
+                                    }
+                                }
                                 Spacer(Modifier.height(8.dp))
                                 Text(when (item.verdict) {
                                     LinkInspector.Verdict.REVIEW ->
@@ -907,9 +1016,27 @@ fun KanafGlassHome(
                         Text("YARA-X 0.13.0", color = if (dark) Aqua else Teal,
                             style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                         Text(tr(
-                            "محرك قواعد أصلي. الكشف الحالي محصور في توقيع EICAR التجريبي.",
-                            "Native rule scanner. The current rule recognizes only the EICAR test pattern."
+                            "مصادر مرخصة: 30 بصمة أندرويد من ESET وثلاث قواعد محتوى Linux/ELF من ESET وReversingLabs. تغطية محدودة وليست قاعدة شاملة.",
+                            "30 licensed ESET Android exact-file rules and three Linux/ELF content rules from ESET and ReversingLabs. Limited coverage, not a comprehensive database."
                         ), color = secondary)
+                    }
+                    GlassPanel(card, stroke) {
+                        Text(tr("مصادر القواعد وتراخيصها", "Rule sources and licences"), color = ink,
+                            style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        Text("ESET Research · BSD-2-Clause\nReversingLabs · MIT", color = secondary)
+                        TextButton(onClick = {
+                            panelScope.launch {
+                                ruleLicenses = withContext(Dispatchers.IO) {
+                                    runCatching {
+                                        listOf("ESET-BSD-2-Clause.txt", "ReversingLabs-MIT.txt").joinToString("\n\n") { name ->
+                                            appContext.assets.open(name).bufferedReader().use { it.readText() }
+                                        }
+                                    }.getOrDefault("Licence notices unavailable")
+                                }
+                            }
+                        }) { Text(tr("عرض إشعارات الترخيص", "Read licence notices")) }
+                        if (ruleLicenses.isNotBlank()) Text(ruleLicenses, color = secondary,
+                            style = MaterialTheme.typography.bodySmall)
                     }
                     GlassPanel(card, stroke) {
                         Text(tr("اختبار الكشف الفعلي", "Live detection self-test"), color = ink,
@@ -938,8 +1065,8 @@ fun KanafGlassHome(
                         Text(tr("حدود الإصدار التجريبي", "Preview limitations"), color = ink,
                             style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                         Text(tr(
-                            "فحص التطبيقات المثبتة والملفات المشتركة بطلب المستخدم متاح من الرئيسية، لكن المحركين الأصليين يفحصان الملفات حتى 64 ميجابايت وبقواعد اختبارية. لا تتوفر قاعدة فيروسات إنتاجية أو حماية فورية شاملة.",
-                            "On-demand scanning of installed APKs and accessible shared files is available on Home. Native checks are capped at 64 MiB and use test-only rules; no production malware database or full real-time protection."
+                            "فحص التطبيقات المثبتة والملفات المشتركة بطلب المستخدم متاح من الرئيسية، لكن المحركين الأصليين يفحصان الملفات حتى 64 ميجابايت بقواعد حقيقية محدودة وموثقة. لم تُعتمد بعد فعالية شاملة ضد البرمجيات الخبيثة.",
+                            "On-demand scanning of installed APKs and accessible shared files is available on Home. Native checks are capped at 64 MiB with limited licensed real rules. Comprehensive malware effectiveness is not yet validated."
                         ), color = secondary)
                     }
                 }
@@ -959,8 +1086,8 @@ fun KanafGlassHome(
                         }
                         if (!canImportSignedFeed) {
                             Text(tr(
-                                "غير مفعّل: لم يُثبّت مفتاح توقيع إنتاجي موثوق في البناء. القواعد الحالية اختبارية.",
-                                "Disabled: no trusted production signing key is embedded in this build. Current signatures remain test-only."
+                                "غير مفعّل: لم يُثبّت مفتاح توقيع إنتاجي موثوق في البناء. تحديث البصمات الموقعة غير متاح.",
+                                "Disabled: no trusted production signing key is embedded in this build. Signed exact-file updates are unavailable."
                             ), color = secondary, style = MaterialTheme.typography.bodySmall)
                         }
                         if (signedFeedStatus.isNotBlank()) {
@@ -1204,7 +1331,7 @@ fun KanafGlassHome(
                         ), color = secondary, style = MaterialTheme.typography.bodyMedium)
                         Spacer(Modifier.height(12.dp))
                         Button(onClick = onLoadApps, enabled = !busy,
-                            modifier = Modifier.fillMaxWidth()) {
+                            modifier = Modifier.fillMaxWidth().testTag("privacy_load_apps")) {
                             Text(tr("عرض التطبيقات المتاحة", "List visible applications"))
                         }
                         Spacer(Modifier.height(8.dp))
@@ -1251,6 +1378,20 @@ fun KanafGlassHome(
                                         entry.requestedPermissionCount
                                 } else tr("بيانات الأذونات غير متاحة", "Permission data unavailable"),
                                     color = secondary, style = MaterialTheme.typography.bodySmall)
+                                val privacyText = PrivacyAudit.describe(entry.privacy, uiLanguage.isArabic())
+                                if (privacyText.isNotBlank()) Text(privacyText, color = secondary,
+                                    style = MaterialTheme.typography.bodySmall)
+                                if (entry.permissionChanges.isNotEmpty()) Text(
+                                    tr("أذونات أضيفت منذ المراجعة السابقة: ", "Permissions added since previous review: ") +
+                                        entry.permissionChanges.joinToString(), color = secondary,
+                                    style = MaterialTheme.typography.bodySmall)
+                                if (entry.signerChanged) Text(tr(
+                                    "تغيرت شهادة التوقيع ولم يُتحقق من تسلسلها؛ راجع المصدر.",
+                                    "Signing certificate changed without verified lineage; review the source."),
+                                    color = MaterialTheme.colorScheme.error)
+                                Text(tr("الأذونات الحساسة ليست دليل إصابة. المقارنة تبدأ من أول مراجعة.",
+                                    "Sensitive permissions are not proof of malware. Comparison starts after the first review."),
+                                    color = secondary, style = MaterialTheme.typography.labelSmall)
                                 Spacer(Modifier.height(8.dp))
                                 OutlinedButton(
                                     onClick = { onOpenAppDetails(entry.packageName) },
@@ -1263,16 +1404,52 @@ fun KanafGlassHome(
                 }
                 if (page == 8) {
                     GlassPanel(card, stroke) {
+                        Text(tr("حالة الحماية", "Protection health"), color = ink, modifier = Modifier.testTag("protection_health_title"),
+                            style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        Text(healthSummary, color = secondary, style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("protection_health_summary"))
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Text(tr("تحديثات موقعة يومية", "Daily signed updates"), modifier = Modifier.weight(1f), color = ink)
+                            Switch(checked = autoUpdates, modifier = Modifier.testTag("auto_rule_updates_switch"),
+                                enabled = ThreatRuleUpdater().availability().configured,
+                                onCheckedChange = { enabled ->
+                                    runCatching { ProtectionHealth.setAutoUpdate(appContext, enabled) }
+                                        .onSuccess { autoUpdates = enabled; healthError = "" }
+                                        .onFailure { healthError = tr("تعذر تغيير الجدولة", "Could not change scheduling") }
+                                })
+                        }
+                        Text(tr("تنزيل قاعدة البصمات عبر HTTPS والتحقق من توقيع الناشر؛ الجدولة تقريبية بحسب أندرويد.",
+                            "Downloads the hash feed over HTTPS and verifies the publisher signature; Android controls timing."),
+                            color = secondary, style = MaterialTheme.typography.bodySmall)
+                        TextButton(onClick = {
+                            panelScope.launch {
+                                healthSummary = withContext(Dispatchers.IO) { ProtectionHealth.describe(appContext, uiLanguage.isArabic()) }
+                                installSummary = ProtectionControl.lastInstallResult(appContext)
+                            }
+                        }) { Text(tr("تحديث الحالة", "Refresh health")) }
+                        if (healthError.isNotBlank()) Text(healthError, color = MaterialTheme.colorScheme.error)
+                        if (installSummary.isNotBlank()) {
+                            Text(tr("آخر فحص لتثبيت أو تحديث", "Last install/update scan"), color = ink, fontWeight = FontWeight.Bold)
+                            Text(installSummary, color = secondary, style = MaterialTheme.typography.bodySmall)
+                            val packageName = installSummary.lineSequence().firstOrNull()
+                                ?.takeIf { it.startsWith("Package: ") }?.removePrefix("Package: ")?.substringBefore(';')
+                            if (packageName != null && packageName.matches(Regex("[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)+"))) {
+                                OutlinedButton(onClick = { onOpenAppDetails(packageName) }, modifier = Modifier.fillMaxWidth()) {
+                                    Text(tr("مراجعة التطبيق وأذوناته في أندرويد", "Review app and permissions in Android"))
+                                }
+                            }
+                        }
+                    }
+                    GlassPanel(card, stroke) {
                         Text(tr("مراقبة التطبيقات بإذن المستخدم", "Opt-in app monitoring"), color = ink,
                             style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                         Text(tr(
-                            "يرصد كنف أحداث تثبيت/تحديث التطبيقات التي يرسلها أندرويد ويعرض تنبيهًا للمراجعة اليدوية فقط. لا يفحص التطبيقات تلقائيًا بحثًا عن الفيروسات.",
-                            "Kanaf observes Android package install/update broadcasts and prompts a manual review only. No automatic malware scanning of installed apps."
+                            "يفحص كنف ملفات APK المتاحة للتطبيق الجديد أو المحدّث، ويقارن الصلاحيات وشهادة التوقيع عند وجود سجل سابق. يرصد الأحداث أثناء حياة العملية، ويستخدم مراجعة تغيّر التطبيقات في الخلفية كل 15 دقيقة تقريبًا أو لاحقًا وفق قيود أندرويد. تظهر حالات تعذر الفحص بوضوح.",
+                            "Kanaf scans accessible APKs after install/update broadcasts and compares permissions and signing certificates with an existing baseline. Live process broadcasts are backed by a delta inventory approximately every 15 minutes or later under Android limits; incomplete checks are reported."
                         ), color = secondary, style = MaterialTheme.typography.bodyMedium)
                         Spacer(Modifier.height(12.dp))
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text(tr("تنبيهات تثبيت التطبيقات", "App-install review alerts"),
+                            Text(tr("فحص التثبيت والتحديث", "Scan installs and updates"),
                                 modifier = Modifier.weight(1f), color = ink)
                             Switch(checked = watchNewApps, onCheckedChange = onWatchNewApps)
                         }
@@ -1308,8 +1485,8 @@ fun KanafGlassHome(
                         Text(tr("حدود الحماية الحالية", "Protection scope and limits"), color = ink,
                             style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                         Text(tr(
-                            "قاعدة التوقيعات الافتراضية اختبارية. على أندرويد الحديث لا يمكن للتطبيق العادي قراءة ملفات جميع التطبيقات أو اعتراض استخدامها. لا يُصدر كنف حكم سلامة عند تعذر الفحص.",
-                            "Bundled signatures are test-only. Android limits inspection of unrelated apps and private files. Kanaf does not declare unchecked content safe."
+                            "بصمات ESET لأندرويد وقواعد محتوى ESET وReversingLabs لملفات Linux/ELF محدودة النطاق. على أندرويد الحديث لا يمكن للتطبيق العادي قراءة ملفات جميع التطبيقات أو اعتراض استخدامها. لا يُصدر كنف حكم سلامة عند تعذر الفحص.",
+                            "ESET Android file hashes and ESET/ReversingLabs Linux/ELF content rules have limited scope. Android limits inspection of unrelated apps and private files. Kanaf does not declare unchecked content safe."
                         ), color = secondary, style = MaterialTheme.typography.bodyMedium)
                     }
                 }
@@ -1328,7 +1505,7 @@ fun KanafGlassHome(
                     textAlign = TextAlign.Center
                 )
                 Text(
-                    tr("نسخة تطويرية · فحص تلقائي بطلب المستخدم وقواعد محدودة", "Preview build · on-demand automatic scanning, limited test rules"),
+                    tr("نسخة تطويرية · فحص تلقائي بطلب المستخدم وقواعد محدودة", "Preview build · on-demand automatic scanning, limited research rules"),
                     modifier = Modifier.fillMaxWidth(),
                     color = secondary, style = MaterialTheme.typography.labelSmall,
                     textAlign = TextAlign.Center

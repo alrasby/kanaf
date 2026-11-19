@@ -76,6 +76,14 @@ import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
     private var incomingSharedText by mutableStateOf<String?>(null)
+    private var incomingSharedFile by mutableStateOf<Uri?>(null)
+    private var shareRequest by mutableLongStateOf(0L)
+    private fun extractSharedFile(from: Intent?): Uri? = runCatching {
+        if (from?.action != Intent.ACTION_SEND) return@runCatching null
+        @Suppress("DEPRECATION")
+        val uri = from.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)
+        uri?.takeIf { it.scheme == "content" }
+    }.getOrNull()
 
     private fun extractSharedText(from: Intent?): String? {
         if (from?.action != Intent.ACTION_SEND || from.type != "text/plain") return null
@@ -87,19 +95,23 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         incomingSharedText = extractSharedText(intent)
+        incomingSharedFile = extractSharedFile(intent)
+        shareRequest++
         PrivateDnsToggle.recoverIfStopped(this)
-        setContent { MaterialTheme { KanafScreen(this, incomingSharedText) } }
+        setContent { MaterialTheme { KanafScreen(this, incomingSharedText, incomingSharedFile, shareRequest) } }
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
         incomingSharedText = extractSharedText(intent)
+        incomingSharedFile = extractSharedFile(intent)
+        shareRequest++
     }
 }
 
 @Composable
-private fun KanafScreen(activity: Activity, sharedText: String?) {
+private fun KanafScreen(activity: Activity, sharedText: String?, sharedFile: Uri?, shareRequest: Long) {
     val scope = rememberCoroutineScope()
     val uiPreferences = remember(activity) { KanafUiPreferences(activity) }
     var uiLanguage by remember { mutableStateOf(uiPreferences.language()) }
@@ -208,6 +220,7 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
             autoScanProgress = ""
             deviceScanStatus = result.fold(
                 onSuccess = { scan ->
+                    com.kanaf.alrasby.engine.ProtectionHealth.recordScan(activity, scan.matches, scan.incomplete)
                     val noteAr = if (scan.sharedStorageGranted)
                         "تمت مراجعة التخزين المشترك المتاح." else
                         "لم يُمنح الوصول للملفات المشتركة؛ فُحصت حزم التطبيقات فقط."
@@ -235,12 +248,15 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
                             "، محاولات فحص أصلية=" + scan.nativeChecked +
                             " (تطبيقات=" + scan.nativeInstalledAttempts +
                             "، ملفات مشتركة=" + scan.nativeSharedAttempts + ")" +
-                            "، تطابقات=" + scan.matches +
+                            "، تطابقات تهديد=" + scan.matches + "، عينات اختبار=" + scan.testSamples +
                             "، فحوص غير مكتملة=" + scan.incomplete +
                             "، تحذيرات بنيوية=" + scan.structuralWarnings +
                             "، حدود الفحص=" + scan.truncated + ".\n" +
-                            noteAr + "\n" + evidenceAr.take(2200) +
-                            "\nقواعد المحركين الأصليين اختبارية (EICAR). مطابقة SHA-256 تعتمد على قاعدة البصمات المحمّلة؛ عدم التطابق لا يثبت سلامة الجهاز. لم يُحذف أي ملف.",
+                            noteAr + "\n" +
+                            "أسباب تعذر الفحص (قد تتعدد للملف الواحد):\n" + scan.incompleteReasons.entries.joinToString("\n") {
+                                com.kanaf.alrasby.engine.ScanEvidenceText.reason(it.key, true) + " × " + it.value
+                            } + "\n" + evidenceAr.take(2200) +
+                            "\nقواعد حقيقية محدودة: بصمات أندرويد من ESET ومحتوى Linux/ELF من ESET وReversingLabs. تكرار البصمة في المحركات مصدر واحد. عدم التطابق لا يثبت السلامة. لم يُحذف أي ملف.",
                         "Attempted: installed apps=" + scan.installedApps +
                             ", APK files=" + scan.appApksAttempted +
                             ", shared files=" + scan.sharedFilesAttempted +
@@ -249,12 +265,15 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
                             ", native checks attempted=" + scan.nativeChecked +
                             " (installed=" + scan.nativeInstalledAttempts +
                             ", shared=" + scan.nativeSharedAttempts + ")" +
-                            ", signature matches=" + scan.matches +
+                            ", threat matches=" + scan.matches + ", harmless test samples=" + scan.testSamples +
                             ", incomplete checks=" + scan.incomplete +
                             ", archive warnings=" + scan.structuralWarnings +
                             ", limits reached=" + scan.truncated + ".\n" +
-                            noteEn + "\n" + evidenceEn.take(2200) +
-                            "\nNative engine rules are EICAR test-only. SHA-256 uses the loaded signature database; no match does not prove device safety. Nothing was deleted."
+                            noteEn + "\n" + "Incomplete reasons (may overlap per file):\n" +
+                            scan.incompleteReasons.entries.joinToString("\n") {
+                                com.kanaf.alrasby.engine.ScanEvidenceText.reason(it.key, false) + " × " + it.value
+                            } + "\n" + evidenceEn.take(2200) +
+                            "\nLimited ESET Android exact-file and ESET/ReversingLabs Linux/ELF content rules. The same IOC across engines is one source. No match does not prove safety. Nothing deleted."
                     )
                 },
                 onFailure = { error -> KanafMessage(
@@ -652,8 +671,8 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
         val availability = rulesUpdater.availability()
         if (!availability.configured) {
             updateRulesStatus = KanafMessage(
-                "تحديث قواعد الحماية غير متاح في هذا البناء: لم يُجهز الناشر مفتاح توقيع إنتاجيًا ورابط تحديث موثوقًا. لا تزال القواعد اختبارية.",
-                "Threat-rule updates unavailable: this build has no publisher-signed production key and official HTTPS feed. Rules remain test-only."
+                "تحديث قواعد الحماية غير متاح في هذا البناء: لم يُجهز الناشر مفتاح توقيع إنتاجيًا ورابط تحديث موثوقًا. تبقى قواعد المحركين المضمنة متاحة.",
+                "Authenticated online updates unavailable in this build; bundled native rules remain available."
             )
             return
         }
@@ -667,8 +686,8 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
             updateRulesStatus = result.fold(
                 onSuccess = { version ->
                     signatures = runCatching { SignatureRepository(activity).load() }.getOrNull()
-                    KanafMessage("تم تثبيت تحديث قواعد التوقيعات الموثوق، الإصدار " + version,
-                        "Verified threat-rule update installed, version " + version)
+                    KanafMessage("تم التحقق من قاعدة التوقيعات الموقعة، الإصدار " + version,
+                        "Authenticated threat feed is current, version " + version)
                 },
                 onFailure = { e -> KanafMessage(
                     "لم يُثبَّت تحديث. تعذّر التحقق أو لا يوجد إصدار أحدث: " +
@@ -703,8 +722,8 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
             }
         }
     }
-    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null && !busy) {
+    fun scanSelectedFile(uri: Uri) {
+        if (!busy) {
             val session = manualScanSession.incrementAndGet()
             manualScanActive = true
             busy = true
@@ -713,6 +732,9 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
             scope.launch {
                 val completed = withContext(Dispatchers.IO) {
                     try {
+                        // Background updates may have replaced the database
+                        // since this screen was composed. Read fresh trusted rows.
+                        val activeSignatures = runCatching { SignatureRepository(activity).load() }.getOrNull()
                         val mime = activity.contentResolver.getType(uri).orEmpty()
                         val archive = mime == "application/zip" ||
                             mime == "application/x-zip-compressed" ||
@@ -761,7 +783,7 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
                             } ?: KanafMessage("تعذر فتح الأرشيف", "Could not open archive")
                         } else KanafMessage.EMPTY
                         run {
-                            val scanResult = HashSignatureEngine(signatures).scan({
+                            val scanResult = HashSignatureEngine(activeSignatures).scan({
                                 activity.contentResolver.openInputStream(uri)
                             })
                             val native = NativeScannerBridge.scan(activity, uri)
@@ -776,12 +798,12 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
                             val snapshotConflict = ScanEvidenceText.hasConflict(consensus)
                             val nativeNote = KanafMessage(
                                 listOf(
-                                    "فحص أصلي محلي (لا تُثبت قواعد EICAR وحدها الحماية الشاملة):",
+                                    "فحص أصلي بقواعد بحثية مرخصة محدودة وموثقة؛ تكرار البصمة عبر المحركات مصدر واحد:",
                                     ScanEvidenceText.nativeLabel("ClamAV", native.clamav, snapshotConflict),
                                     ScanEvidenceText.nativeLabel("YARA-X", native.yaraX, snapshotConflict)
                                 ).joinToString("\n"),
                                 listOf(
-                                    "Local native engine scan (EICAR test rules do not establish comprehensive protection):",
+                                    "Local native scan with limited licensed research rules; the same hash across engines is one source:",
                                     ScanEvidenceText.nativeLabel("ClamAV", native.clamav, snapshotConflict, arabic = false),
                                     ScanEvidenceText.nativeLabel("YARA-X", native.yaraX, snapshotConflict, arabic = false)
                                 ).joinToString("\n")
@@ -815,10 +837,10 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
                             }
                             val verdict = KanafMessage(
                                 ScanEvidenceText.hashLabel(
-                                    scanResult, signatures?.size ?: 0, snapshotConflict
+                                    scanResult, activeSignatures?.size ?: 0, snapshotConflict
                                 ),
                                 ScanEvidenceText.hashLabel(
-                                    scanResult, signatures?.size ?: 0, snapshotConflict, arabic = false
+                                    scanResult, activeSignatures?.size ?: 0, snapshotConflict, arabic = false
                                 )
                             )
                             val features = ThreatFeatureVector.from(apkEvidence, dexEvidence, zipEvidence)
@@ -844,7 +866,7 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
                                     "EICAR is a harmless test sample. Detecting it does not prove real-world malware coverage."
                                 )
                             } else if (scanResult is AntivirusEngine.Verdict.Incomplete ||
-                                signatures == null || structuralIncomplete ||
+                                activeSignatures == null || structuralIncomplete ||
                                 consensus is EngineConsensus.Decision.Inconclusive) {
                                 KanafMessage(
                                     "تقييم الأدلة: الفحص غير مكتمل أو قاعدة التوقيعات غير متاحة",
@@ -871,7 +893,7 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
                             val journey = TrustJourney.build(
                                 assessment,
                                 scanCompleted = scanResult !is AntivirusEngine.Verdict.Incomplete && !structuralIncomplete && consensus !is EngineConsensus.Decision.Inconclusive,
-                                signaturesAvailable = signatures != null
+                                signaturesAvailable = activeSignatures != null
                             )
                             val decisionNote = if (eicarOnly) {
                                 KanafMessage(
@@ -939,6 +961,12 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
             }
         }
     }
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) scanSelectedFile(uri)
+    }
+    LaunchedEffect(sharedFile, shareRequest) {
+        sharedFile?.let { scanSelectedFile(it) }
+    }
     if (askFilesBeforeScan) {
         AlertDialog(
             onDismissRequest = { askFilesBeforeScan = false },
@@ -977,6 +1005,7 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
     KanafGlassHome(
         busy = busy,
         sharedText = sharedText,
+        sharedFileRequest = if (sharedFile != null) shareRequest else null,
         uiLanguage = uiLanguage,
         hiddenSections = hiddenSections,
         onLanguageChange = { selected ->
@@ -1008,7 +1037,7 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
             watchNewApps = enabled
             protectionStatus = if (enabled)
                 KanafMessage("فُعّلت تنبيهات تثبيت التطبيقات للمراجعة اليدوية فقط.",
-                    "App-install review alerts enabled; this does not scan for malware.")
+                    "Opt-in install/update scanning enabled; Android scheduling restrictions apply.")
             else KanafMessage("تم إيقاف تنبيهات التثبيت.", "Install review alerts disabled.")
             if (enabled && Build.VERSION.SDK_INT >= 33 &&
                 activity.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) !=
@@ -1048,16 +1077,27 @@ private fun KanafScreen(activity: Activity, sharedText: String?) {
         onImportSignedFeed = { if (!busy && trustedFeed.configured())
             feedPicker.launch(arrayOf("application/zip", "application/octet-stream")) },
         onShareReport = {
-            if (hasScanReport && !busy) runCatching {
-                val share = Intent(Intent.ACTION_SEND).apply {
-                    type = "text/plain"
-                    putExtra(Intent.EXTRA_TEXT, status.displayed(uiLanguage).take(15_000))
+            if ((hasScanReport || deviceScanStatus.ar.isNotBlank()) && !busy) {
+                val currentReport = if (deviceScanStatus.ar.isNotBlank()) deviceScanStatus.displayed(uiLanguage)
+                    else status.displayed(uiLanguage)
+                scope.launch {
+                    val report = withContext(Dispatchers.IO) {
+                        runCatching {
+                            "Kanaf " + BuildConfig.VERSION_NAME + " (" + BuildConfig.VERSION_CODE + ")\n" +
+                                java.util.Date().toString() + "\n" +
+                                com.kanaf.alrasby.engine.ProtectionHealth.describe(activity, arabic, includeDiagnostics = true) +
+                                "\n\n" + currentReport
+                        }
+                    }
+                    report.onSuccess { text ->
+                        runCatching {
+                            activity.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(Intent.EXTRA_TEXT, text.take(20_000))
+                            }, localized("مشاركة تقرير الفحص", "Share scan report")))
+                        }.onFailure { vaultStatus = KanafMessage("تعذر فتح واجهة المشاركة", "Sharing is unavailable") }
+                    }.onFailure { vaultStatus = KanafMessage("تعذر تجهيز التقرير", "Could not prepare report") }
                 }
-                activity.startActivity(Intent.createChooser(
-                    share, localized("مشاركة تقرير الفحص", "Share scan report")
-                ))
-            }.onFailure {
-                vaultStatus = KanafMessage("تعذر فتح واجهة المشاركة", "Sharing is unavailable")
             }
         },
         vaultItems = vaultEntries,

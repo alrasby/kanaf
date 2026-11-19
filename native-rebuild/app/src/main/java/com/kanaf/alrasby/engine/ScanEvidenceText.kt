@@ -2,7 +2,11 @@ package com.kanaf.alrasby.engine
 
 /** Consistent, localized evidence labels. Never upgrade UNKNOWN to safe. */
 object ScanEvidenceText {
-    private fun reason(raw: String, arabic: Boolean): String = when (raw) {
+    fun reason(raw: String, arabic: Boolean): String = when (raw) {
+        "native-unavailable-or-limited" -> if (arabic) "لم يُفحص بهذا المحرك بسبب حدود التغطية أو عدم التوافر" else "Engine coverage limit reached or unavailable"
+        "file-unreadable-empty-or-size-limit" -> if (arabic) "الملف غير متاح للقراءة أو فارغ أو يتجاوز حد الحجم" else "Unreadable, empty or over the size limit"
+        "apk-structure-incomplete" -> if (arabic) "لم يكتمل تحليل بنية APK" else "APK structure analysis incomplete"
+        "file-changed-between-engines" -> if (arabic) "تغير الملف بين قراءات المحركات؛ أعد الفحص" else "File changed between engine reads; rescan"
         "copy-size-limit" -> if (arabic) "حجم الملف يتجاوز حد الفحص الأصلي 64 ميجابايت" else "File exceeds the 64 MiB native scan limit"
         "time-limit", "copy-time-limit" -> if (arabic) "انتهت المهلة المحددة للفحص" else "Scan deadline exceeded"
         "cancelled" -> if (arabic) "أوقف المستخدم الفحص" else "Scan cancelled"
@@ -25,7 +29,7 @@ object ScanEvidenceText {
                 else "$name: تطابق توقيع ${verdict.threatName} — ${ThreatFamily.label(verdict.threatName, true)}"
             is AntivirusEngine.Verdict.NoKnownMatch -> if (conflict)
                 "$name: لم يظهر تطابق في قراءة منفصلة؛ النتيجة غير معتمدة للحكم على الملف الحالي."
-                else "$name: لا تطابق مع قاعدة EICAR الاختبارية"
+                else "$name: لا تطابق مع القواعد المحملة؛ السلامة غير مؤكدة"
             is AntivirusEngine.Verdict.Incomplete -> "$name: لم يكتمل الفحص (${reason(verdict.reason, arabic)})"
         } else when (verdict) {
             is AntivirusEngine.Verdict.Detected -> if (conflict)
@@ -35,7 +39,7 @@ object ScanEvidenceText {
                 else "$name: Signature match ${verdict.threatName} — ${ThreatFamily.label(verdict.threatName, false)}"
             is AntivirusEngine.Verdict.NoKnownMatch -> if (conflict)
                 "$name: No match appeared on a separate read; this does not certify the current file."
-                else "$name: No match in the limited EICAR test signatures"
+                else "$name: No match in the loaded rules; safety unverified"
             is AntivirusEngine.Verdict.Incomplete -> "$name: Scan incomplete (${reason(verdict.reason, arabic)})"
         }
 
