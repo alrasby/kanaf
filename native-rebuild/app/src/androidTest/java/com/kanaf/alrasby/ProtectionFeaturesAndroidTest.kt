@@ -79,21 +79,28 @@ class ProtectionFeaturesAndroidTest {
             type = "application/octet-stream"
             putExtra(Intent.EXTRA_STREAM, Uri.parse("content://com.kanaf.missing-provider/no-file"))
         }
-        // Exercise the framework callback on the scenario-owned Activity;
-        // opening another task would leave ActivityScenario tracking a paused parent.
-        rule.runOnUiThread {
-            InstrumentationRegistry.getInstrumentation().callActivityOnNewIntent(rule.activity, intent)
-        }
-        rule.waitUntil(30_000) {
-            rule.onAllNodesWithTag("file_scan_result").fetchSemanticsNodes().any { node ->
-                node.config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.Text)?.any {
-                    it.text.contains("incomplete", true) || it.text.contains("غير مكتمل") ||
-                        it.text.contains("Could not complete") || it.text.contains("تعذر إكمال")
-                } == true
+        val originalIntent = rule.activity.intent
+        try {
+            rule.runOnUiThread {
+                InstrumentationRegistry.getInstrumentation().callActivityOnNewIntent(rule.activity, intent)
             }
+            rule.waitUntil(30_000) {
+                rule.onAllNodesWithTag("file_scan_result").fetchSemanticsNodes().any { node ->
+                    node.config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.Text)?.any {
+                        it.text.contains("incomplete", true) || it.text.contains("غير مكتمل") ||
+                            it.text.contains("Could not complete") || it.text.contains("تعذر إكمال")
+                    } == true
+                }
+            }
+            rule.onNodeWithTag("file_scan_result").assertExists()
+        } finally {
+            // ActivityScenario matches lifecycle events against its launch
+            // Intent. MainActivity correctly replaces that Intent on sharing;
+            // restore the harness identity so teardown can observe DESTROYED.
+            rule.runOnUiThread { rule.activity.intent = originalIntent }
         }
-        rule.onNodeWithTag("file_scan_result").assertExists()
     }
+
     @Test fun installEventActuallyScansAccessiblePackageFilesAndWritesAReport() {
         val wasEnabled = ProtectionControl.installWatchEnabled(context)
         try {

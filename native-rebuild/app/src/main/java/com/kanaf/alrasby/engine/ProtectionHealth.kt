@@ -27,7 +27,7 @@ object ProtectionHealth {
                     .setRequiresBatteryNotLow(true).build()).build())
         else WorkManager.getInstance(context).cancelUniqueWork("kanaf-signed-rule-updates")
     }
-    fun describe(context: Context, arabic: Boolean): String {
+    fun describe(context: Context, arabic: Boolean, includeDiagnostics: Boolean = false): String {
         val store = prefs(context)
         fun tr(ar: String, en: String) = if (arabic) ar else en
         fun state(value: Boolean) = if (value) tr("مفعل", "On") else tr("متوقف", "Off")
@@ -37,7 +37,14 @@ object ProtectionHealth {
         } ?: tr("لم يُسجل بعد", "Not recorded")
         val repo = runCatching { SignatureRepository(context).status() }.getOrNull()
         val notifications = Build.VERSION.SDK_INT < 33 || context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+        val diagnostics = if (includeDiagnostics) "\n" + listOf(
+            "Signed feed SHA-256: " + (repo?.sha256 ?: "unavailable"),
+            "Bundled ClamAV rules SHA-256: " + com.kanaf.alrasby.BuildConfig.KANAF_NATIVE_CLAM_RULE_SHA256,
+            "Bundled YARA-X rules SHA-256: " + com.kanaf.alrasby.BuildConfig.KANAF_NATIVE_YARA_RULE_SHA256,
+            "Rule sources: ESET Research (BSD-2-Clause); ReversingLabs (MIT)"
+        ).joinToString("\n") else ""
         return listOf(
+            tr("إصدارات المحركات في هذا البناء", "Engine versions in this build") + ": ClamAV 1.4.6 · YARA-X 0.13.0",
             tr("قاعدة البصمات الموقعة", "Signed hash database") + ": " + (repo?.let { "v${it.version} · ${it.count}" } ?: tr("غير متاحة", "Unavailable")),
             tr("آخر تحقق ناجح من التحديثات", "Last successful update check") + ": " + date("last_update_check"),
             tr("التحديث اليومي بإذن المستخدم", "Opt-in daily updates") + ": " + state(autoUpdateEnabled(context)),
@@ -49,7 +56,7 @@ object ProtectionHealth {
             tr("فحص المجلد الدوري مفعل", "Scheduled folder check enabled") + ": " + state(ProtectionControl.periodicEnabled(context)),
             tr("إذن الإشعارات", "Notification permission") + ": " + state(notifications),
             tr("المراقبة والجدولة تخضعان لقيود أندرويد والبطارية.", "Android and battery restrictions apply to monitoring and scheduling.")
-        ).joinToString("\n")
+        ).joinToString("\n") + diagnostics
     }
 }
 

@@ -250,11 +250,11 @@ object NativeScannerBridge {
             clamGate = NativeEngineGate("clamav", libraries.clamavLoaded,
                 clamRulesOK && (!production || realClam != null), clamOK,
                 engineVersion = "1.4.6",
-                rulesVersion = if (production) "ESET-BSD-native-v1" else "EICAR-test-v1")
+                rulesVersion = if (production) "research-native-v1" else "EICAR-test-v1")
             yaraGate = NativeEngineGate("yara-x", libraries.yaraXLoaded,
                 yaraRulesOK && (!production || realYara != null), yaraOK,
                 engineVersion = "0.13.0",
-                rulesVersion = if (production) "ESET-BSD-native-v1" else "EICAR-test-v1")
+                rulesVersion = if (production) "research-native-v1" else "EICAR-test-v1")
 
             val selected = File.createTempFile("kanaf-scan-", ".bin", context.cacheDir)
             target = selected

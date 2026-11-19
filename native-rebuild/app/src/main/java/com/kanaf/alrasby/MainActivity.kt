@@ -1085,7 +1085,7 @@ private fun KanafScreen(activity: Activity, sharedText: String?, sharedFile: Uri
                         runCatching {
                             "Kanaf " + BuildConfig.VERSION_NAME + " (" + BuildConfig.VERSION_CODE + ")\n" +
                                 java.util.Date().toString() + "\n" +
-                                com.kanaf.alrasby.engine.ProtectionHealth.describe(activity, arabic) +
+                                com.kanaf.alrasby.engine.ProtectionHealth.describe(activity, arabic, includeDiagnostics = true) +
                                 "\n\n" + currentReport
                         }
                     }

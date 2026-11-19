@@ -115,3 +115,12 @@ Its harness now delivers onNewIntent through Instrumentation to the owned
 Activity instead of opening another task. Packaging at this checkpoint failed
 on transient Maven dependency lookup, while JVM/lint checks passed. Recheck
 all results on the final PR head; do not treat this checkpoint as acceptance.
+
+Final share-test harness diagnosis: AndroidX ActivityScenario filters lifecycle
+callbacks by the Activity's launch Intent. Kanaf's correct onNewIntent/setIntent
+handling changes that identity, hiding teardown transitions. The test now
+restores the original launch Intent in finally, keeping all share/report
+assertions and exposing any actual failure instead of masking it at teardown.
+Source verified in android/android-test ActivityScenario.activityMatchesIntent.
+Export diagnostics also include engine versions, signed feed digest and pinned
+native rule digests; the health panel keeps the large digests out of normal UI.
