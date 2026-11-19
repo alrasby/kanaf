@@ -29,7 +29,8 @@ class AutomaticDeviceScan {
         val storedApksAttempted: Int = 0,
         val nativeInstalledAttempts: Int = 0,
         val nativeSharedAttempts: Int = 0,
-        val incompleteReasons: Map<String, Int> = emptyMap()
+        val incompleteReasons: Map<String, Int> = emptyMap(),
+        val testSamples: Int = 0
     )
 
     companion object {
@@ -99,6 +100,7 @@ class AutomaticDeviceScan {
         var nativeChecked = 0
         var storedApksAttempted = 0
         var matched = 0
+        var testSamples = 0
         var incomplete = 0
         var structuralWarnings = 0
         var truncated = false
@@ -150,7 +152,10 @@ class AutomaticDeviceScan {
                 ?: AntivirusEngine.Verdict.Incomplete("native-unavailable-or-limited")
             when (val consensus = AutomaticScanVerdicts.evaluate(hashVerdict, clam, yara)) {
                 is EngineConsensus.Decision.Threat -> {
-                    matched++
+                    val diagnosticOnly = consensus.detections.all {
+                        ThreatFamily.classify((it.verdict as AntivirusEngine.Verdict.Detected).threatName) == ThreatFamily.Kind.TEST_SAMPLE
+                    }
+                    if (diagnosticOnly) testSamples++ else matched++
                     val match = consensus.detections.first().verdict
                         as AntivirusEngine.Verdict.Detected
                     if (findings.size < 20) findings.add(
@@ -276,7 +281,7 @@ class AutomaticDeviceScan {
             packages.size, apkAttempted, sharedAttempted, hashed, nativeChecked,
             matched, incomplete, structuralWarnings, truncated,
             canReadShared, signatures != null, findings,
-            storedApksAttempted, allocation.installedReserved, allocation.sharedReserved, incompleteReasons.toMap()
+            storedApksAttempted, allocation.installedReserved, allocation.sharedReserved, incompleteReasons.toMap(), testSamples
         )
     }
 }

@@ -245,7 +245,8 @@ object NativeScannerBridge {
                     check(pinned.contains("// KANAF_EXACT_HASH_RULES"))
                     pinned.substringBefore("// KANAF_EXACT_HASH_RULES") + NativeHashRules.yara(trustedRows)
                 } else pinned
-            }?.plus("\n" + yaraRules) else yaraRules
+            }?.plus("\nrule Kanaf_EICAR_Test { condition: filesize == 68 and hash.sha256(0, filesize) == \"" +
+                digest(eicar) + "\" }\n") else yaraRules
             clamGate = NativeEngineGate("clamav", libraries.clamavLoaded,
                 clamRulesOK && (!production || realClam != null), clamOK,
                 engineVersion = "1.4.6",

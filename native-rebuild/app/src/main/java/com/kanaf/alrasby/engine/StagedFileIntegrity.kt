@@ -12,7 +12,7 @@ internal object StagedFileIntegrity {
         file.isFile && !java.nio.file.Files.isSymbolicLink(file.toPath()) &&
             file.setReadOnly() && file.canRead() && !file.canWrite()
 
-    fun verify(file: File, sha256: String, bytesExpected: Long, maxBytes: Long = 16L * 1024 * 1024): Boolean {
+    fun verify(file: File, sha256: String, bytesExpected: Long, maxBytes: Long = 64L * 1024 * 1024): Boolean {
         if (!hashPattern.matches(sha256) || bytesExpected < 0 ||
             maxBytes <= 0 || bytesExpected > maxBytes) return false
         return try {

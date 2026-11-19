@@ -3,6 +3,10 @@ package com.kanaf.alrasby.engine
 /** Consistent, localized evidence labels. Never upgrade UNKNOWN to safe. */
 object ScanEvidenceText {
     fun reason(raw: String, arabic: Boolean): String = when (raw) {
+        "native-unavailable-or-limited" -> if (arabic) "لم يُفحص بهذا المحرك بسبب حدود التغطية أو عدم التوافر" else "Engine coverage limit reached or unavailable"
+        "file-unreadable-empty-or-size-limit" -> if (arabic) "الملف غير متاح للقراءة أو فارغ أو يتجاوز حد الحجم" else "Unreadable, empty or over the size limit"
+        "apk-structure-incomplete" -> if (arabic) "لم يكتمل تحليل بنية APK" else "APK structure analysis incomplete"
+        "file-changed-between-engines" -> if (arabic) "تغير الملف بين قراءات المحركات؛ أعد الفحص" else "File changed between engine reads; rescan"
         "copy-size-limit" -> if (arabic) "حجم الملف يتجاوز حد الفحص الأصلي 64 ميجابايت" else "File exceeds the 64 MiB native scan limit"
         "time-limit", "copy-time-limit" -> if (arabic) "انتهت المهلة المحددة للفحص" else "Scan deadline exceeded"
         "cancelled" -> if (arabic) "أوقف المستخدم الفحص" else "Scan cancelled"

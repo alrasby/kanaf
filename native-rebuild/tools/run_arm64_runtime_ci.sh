@@ -10,6 +10,12 @@ if ! [[ ",$abi," == *",arm64-v8a,"* ]]; then
   exit 1
 fi
 
+# Use the same authenticated feed configuration as the downloadable test APK.
+feed=rules/eset-android-seed
+python3 tools/signed_feed.py verify --zip "$feed/kanaf-feed-v1.zip" --public-key "$feed/feed-public.pem"
+public_key=$(openssl pkey -pubin -in "$feed/feed-public.pem" -outform DER | openssl base64 -A)
+install -m 644 "$feed/kanaf-feed-v1.zip" app/src/main/assets/production_signatures.zip
+
 adb logcat -c || true
 report_worker_diagnostics() {
   result=$?
@@ -26,7 +32,9 @@ for attempt in 1 2 3; do
   log="/tmp/kanaf-arm64-gradle-attempt-${attempt}.log"
   if gradle --no-daemon :app:connectedDebugAndroidTest \
     -PkanafArm64Runtime=true \
-    -Pandroid.testInstrumentationRunnerArguments.class=com.kanaf.alrasby.NativeArm64EngineRuntimeTest \
+    "-PkanafSignaturePublicKeyBase64=$public_key" -PkanafSignatureMinVersion=1 \
+    -PkanafSignatureFeedHttpsUrl=https://raw.githubusercontent.com/alrasby/kanaf/rebuild/kanaf-native-v1/native-rebuild/rules/eset-android-seed/kanaf-feed-v1.zip \
+    -Pandroid.testInstrumentationRunnerArguments.class=com.kanaf.alrasby.NativeArm64EngineRuntimeTest,com.kanaf.alrasby.ProtectionFeaturesAndroidTest \
     --stacktrace 2>&1 | tee "$log"; then
     exit 0
   fi

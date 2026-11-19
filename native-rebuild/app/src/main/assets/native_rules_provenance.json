@@ -1,17 +1,25 @@
 {
   "format": 1,
   "source_commit": "8921a81d245cce3f9b7a199b123d221ed8f1fe33",
-  "license": "BSD-2-Clause",
-  "author": "ESET Research",
+  "license": [
+    "BSD-2-Clause",
+    "MIT"
+  ],
+  "author": [
+    "ESET Research",
+    "ReversingLabs"
+  ],
   "android_exact_hashes": 30,
-  "linux_elf_content_rules": 2,
-  "independent_detection_sources": 1,
+  "linux_elf_content_rules": 3,
+  "independent_detection_sources": 2,
+  "reversinglabs_source_commit": "e0a0be54aa1e11ccfd6854e4f19e9476f328fd84",
   "source_files": {
     "signatures.tsv": "f9e2e00f5f8f442a60be9002b0a7fc11230bb0764f1948649680bd161b35f882",
-    "linux-moose.yar": "600beb24cb82f01d145f7353f5eb081153dffcd7c31adcf940a66094fa19b28a"
+    "linux-moose.yar": "600beb24cb82f01d145f7353f5eb081153dffcd7c31adcf940a66094fa19b28a",
+    "reversinglabs-acidrain.yara": "33416451fa8920e3a17f9844843dfb5173732c040a139f875558a0e8ab27024c"
   },
   "assets": {
     "production_clamav.hsb": "306d7093473d58b01f544fccd29c8a48618309aee657a2ec5f7d3ba959e30c81",
-    "production_yara.yar": "33a59ad16a3871fcb8e0ccfdcd5256610e7d73926c3cbe77957461b4adaeef29"
+    "production_yara.yar": "791d0bd4383d9104b1435c6feeb0345577b6e59d86bcaa46e95959ae6deb6531"
   }
 }

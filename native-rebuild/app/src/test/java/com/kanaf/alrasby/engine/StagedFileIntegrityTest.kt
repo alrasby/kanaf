@@ -63,4 +63,22 @@ class StagedFileIntegrityTest {
         val file = folder.newFile("empty.bin")
         assertTrue(StagedFileIntegrity.verify(file, digest(byteArrayOf()), 0))
     }
+    @Test fun snapshotAboveOld16MiBLimitIsAcceptedWithinCurrent64MiBPolicy() {
+        val file = folder.newFile("twenty-mebibytes.bin")
+        val size = 20L * 1024 * 1024
+        java.io.RandomAccessFile(file, "rw").use { it.setLength(size) }
+        val hasher = MessageDigest.getInstance("SHA-256")
+        file.inputStream().use { input ->
+            val block = ByteArray(64 * 1024)
+            while (true) {
+                val n = input.read(block)
+                if (n < 0) break
+                hasher.update(block, 0, n)
+            }
+        }
+        val sha = hasher.digest().joinToString("") { "%02x".format(it.toInt() and 255) }
+        assertTrue(StagedFileIntegrity.verify(file, sha, size))
+        assertFalse(StagedFileIntegrity.verify(file, sha, size, 16L * 1024 * 1024))
+    }
+
 }

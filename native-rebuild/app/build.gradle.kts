@@ -74,7 +74,7 @@ android {
         // debug builds continue to use EICAR-only self-test fixtures.
         val nativeHashPattern = Regex("[0-9a-f]{64}")
         val clamHash = providers.gradleProperty("kanafNativeClamRuleSha256").orNull ?: "306d7093473d58b01f544fccd29c8a48618309aee657a2ec5f7d3ba959e30c81"
-        val yaraHash = providers.gradleProperty("kanafNativeYaraRuleSha256").orNull ?: "33a59ad16a3871fcb8e0ccfdcd5256610e7d73926c3cbe77957461b4adaeef29"
+        val yaraHash = providers.gradleProperty("kanafNativeYaraRuleSha256").orNull ?: "791d0bd4383d9104b1435c6feeb0345577b6e59d86bcaa46e95959ae6deb6531"
         require(clamHash.isEmpty() || nativeHashPattern.matches(clamHash)) {
             "Invalid pinned ClamAV production rule digest"
         }

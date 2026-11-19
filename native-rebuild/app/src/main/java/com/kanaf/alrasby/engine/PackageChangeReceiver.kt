@@ -62,8 +62,11 @@ class PackageReviewWorker(context: Context, params: WorkerParameters) : Worker(c
                     native?.yaraX ?: AntivirusEngine.Verdict.Incomplete("native-size-limit-or-unavailable"))
                 when (result) {
                     is EngineConsensus.Decision.Threat -> {
-                        matched++
-                        lines += "MATCH: " + result.detections.joinToString { (it.verdict as AntivirusEngine.Verdict.Detected).threatName }
+                        val diagnosticOnly = result.detections.all {
+                            ThreatFamily.classify((it.verdict as AntivirusEngine.Verdict.Detected).threatName) == ThreatFamily.Kind.TEST_SAMPLE
+                        }
+                        if (!diagnosticOnly) matched++
+                        lines += (if (diagnosticOnly) "HARMLESS TEST: " else "MATCH: ") + result.detections.joinToString { (it.verdict as AntivirusEngine.Verdict.Detected).threatName }
                         if (result.incomplete.isNotEmpty()) incomplete++
                     }
                     is EngineConsensus.Decision.Inconclusive -> incomplete++

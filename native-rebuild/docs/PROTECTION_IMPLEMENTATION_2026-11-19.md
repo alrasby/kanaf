@@ -9,7 +9,11 @@ Work branch: `feature/verified-protection`, PR #3. No changes to the old web app
 - ClamAV `.hsb`: 30 exact Android file hashes from ESET Research (SpyLoan,
   VajraSpy), BSD-2-Clause. Exact hashes do not detect all members of a family.
 - YARA-X: the same 30 Android file hashes plus the original ESET Linux/Moose
-  ELF content rules. ELF rules do not establish Android-family detection and
+  ELF content rules and ReversingLabs Linux/Trojan/AcidRain (MIT), pinned
+  to source commit `e0a0be54aa1e11ccfd6854e4f19e9476f328fd84`. Original
+  source is unchanged and its MIT notice is reproduced in the generated pack
+  and app assets. These add Linux/ELF coverage, not new Android family claims.
+  ELF rules do not establish Android-family detection and
   are not recursively applied to compressed APK members by YARA-X.
 - Three matches for the same ESET file hash are one evidence source.
 - EICAR remains an explicitly labelled, harmless diagnostic alongside real
@@ -60,7 +64,7 @@ Work branch: `feature/verified-protection`, PR #3. No changes to the old web app
 
 ## Validation and remaining acceptance gates
 
-- Local Python suite: 54 tests, one pre-existing skip; YARA-X 0.13.0 installed.
+- Local Python suite: 55 tests, one pre-existing skip; YARA-X 0.13.0 installed.
 - Real YARA rules compile; harmless ELF positive/near-miss controls pass. These
   are rule semantics tests, not malware recall measurements.
 - CI adds host ClamAV format validation, safe HSB controls and an Android ARM64
@@ -82,5 +86,12 @@ Read this file and PR #3 checks before repeating work. Latest local changes
 include source-pinned native assets, protection workers, privacy/certificate
 review, DNS diagnostics, redirects, share/report flows, tests and CI wiring.
 First CI caught a permission-flag constant referenced on PackageManager;
-corrected to PackageInfo. Continue from the latest PR head, inspect failed job
+corrected to PackageInfo. Android runtime executed both real rule formats and
+content positive/near-miss controls. Its 20 MiB test exposed a remaining 16 MiB
+snapshot-integrity default from the previous build; corrected to 64 MiB and
+covered by a JVM regression. Packaging also exposed an old test assuming the
+HTTPS feed was always unconfigured; it now checks the actual build inputs.
+A preliminary YARA-X check of the prior self-owned APK found 0 matches in 1
+benign APK. This is not a representative false-positive estimate; real-malware
+recall remains unmeasured. Continue from the latest PR head, inspect failed job
 logs once, fix the cause, then fetch the exact successful APK and evidence.
