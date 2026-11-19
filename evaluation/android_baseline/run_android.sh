@@ -1,18 +1,21 @@
 #!/usr/bin/env bash
 set -euo pipefail
+if [[ "${1:-}" == build ]]; then
+    cd native-rebuild
+    feed=rules/eset-android-seed
+    python3 tools/signed_feed.py verify --zip "$feed/kanaf-feed-v1.zip" --public-key "$feed/feed-public.pem"
+    public_key=$(openssl pkey -pubin -in "$feed/feed-public.pem" -outform DER | openssl base64 -A)
+    install -m 644 "$feed/kanaf-feed-v1.zip" app/src/main/assets/production_signatures.zip
+    bash tools/gradle_retry_429.sh --no-daemon :app:assembleDebug :app:assembleDebugAndroidTest -PkanafArm64Runtime=true "-PkanafOfficialClamAssets=$RUNNER_TEMP/clamav-assets" \
+      "-PkanafSignaturePublicKeyBase64=$public_key" -PkanafSignatureMinVersion=1 \
+      -PkanafSignatureFeedHttpsUrl=https://raw.githubusercontent.com/alrasby/kanaf/rebuild/kanaf-native-v1/native-rebuild/rules/eset-android-seed/kanaf-feed-v1.zip
+    exit 0
+fi
+
 abi=$(adb shell getprop ro.product.cpu.abilist | tr -d '\r')
 [[ ",$abi," == *",arm64-v8a,"* ]] || { echo 'ARM64 translation unavailable'; exit 1; }
-cd native-rebuild
-feed=rules/eset-android-seed
-python3 tools/signed_feed.py verify --zip "$feed/kanaf-feed-v1.zip" --public-key "$feed/feed-public.pem"
-public_key=$(openssl pkey -pubin -in "$feed/feed-public.pem" -outform DER | openssl base64 -A)
-install -m 644 "$feed/kanaf-feed-v1.zip" app/src/main/assets/production_signatures.zip
-gradle --no-daemon :app:assembleDebug :app:assembleDebugAndroidTest -PkanafArm64Runtime=true "-PkanafOfficialClamAssets=$RUNNER_TEMP/clamav-assets" \
-  "-PkanafSignaturePublicKeyBase64=$public_key" -PkanafSignatureMinVersion=1 \
-  -PkanafSignatureFeedHttpsUrl=https://raw.githubusercontent.com/alrasby/kanaf/rebuild/kanaf-native-v1/native-rebuild/rules/eset-android-seed/kanaf-feed-v1.zip
-adb install -r -t app/build/outputs/apk/debug/app-debug.apk
-adb install -r -t app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
-cd ..
+adb install -r -t native-rebuild/app/build/outputs/apk/debug/app-debug.apk
+adb install -r -t native-rebuild/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
 adb shell run-as com.kanaf.alrasby.fulltest mkdir -p files/independent-evaluation
 # exec-in only forwards stdin and never drains remote stdout; combining it
 # with tee deadlocks on larger files. Shell-v2 -T preserves binary data, drains
