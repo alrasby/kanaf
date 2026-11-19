@@ -40,7 +40,6 @@ class AutomaticDeviceScan {
         private const val MAX_DEPTH = 12
         private const val MAX_RUNTIME_MS = 8 * 60_000L
         private const val MAX_HASH_BYTES = 256L * 1024 * 1024
-        private const val MAX_NATIVE_BYTES = 64L * 1024 * 1024
         private const val MAX_NATIVE_CHECKS = 100
         private val workerFailures = setOf(
             "scanner-process-disconnected", "scanner-binding-died", "scanner-native-crash",
@@ -146,7 +145,7 @@ class AutomaticDeviceScan {
                 hashVerdict is AntivirusEngine.Verdict.Detected) {
                 hashed++ // Number of successfully computed SHA-256 hashes.
             }
-            val canNativeScan = file.length() <= MAX_NATIVE_BYTES &&
+            val canNativeScan = file.length() <= NativeScannerBridge.inputLimit &&
                 !stopped() && allocation.reserve(installedApp, archived)
             val native = if (canNativeScan) {
                 nativeChecked++

@@ -796,12 +796,12 @@ private fun KanafScreen(
                             val snapshotConflict = ScanEvidenceText.hasConflict(consensus)
                             val nativeNote = KanafMessage(
                                 listOf(
-                                    "فحص أصلي بقواعد بحثية مرخصة محدودة وموثقة؛ تكرار البصمة عبر المحركات مصدر واحد:",
+                                    "نتائج كل محرك للملف. تُحسب البصمة المشتركة بين المحركات مصدرًا واحدًا.",
                                     ScanEvidenceText.nativeLabel("ClamAV", native.clamav, snapshotConflict),
                                     ScanEvidenceText.nativeLabel("YARA-X", native.yaraX, snapshotConflict)
                                 ).joinToString("\n"),
                                 listOf(
-                                    "Local native scan with limited licensed research rules; the same hash across engines is one source:",
+                                    "Per-engine results. A hash shared between engines counts as one source.",
                                     ScanEvidenceText.nativeLabel("ClamAV", native.clamav, snapshotConflict, arabic = false),
                                     ScanEvidenceText.nativeLabel("YARA-X", native.yaraX, snapshotConflict, arabic = false)
                                 ).joinToString("\n")

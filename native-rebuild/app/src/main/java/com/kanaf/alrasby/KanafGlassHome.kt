@@ -1088,11 +1088,19 @@ fun KanafGlassHome(
                         }
                     }
                     GlassPanel(card, stroke) {
-                        Text(tr("حدود الإصدار التجريبي", "Preview limitations"), color = ink,
+                        Text(tr("نطاق فحص الملفات", "File scanning coverage"), color = ink,
                             style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                        val officialIncluded = com.kanaf.alrasby.engine.OfficialClamDatabase.bundled
+                        Text(if (officialIncluded) tr(
+                            "يفحص ClamAV ملفات حتى 256 ميبيبايت عند توافر القاعدة الرسمية والذاكرة اللازمة. يفحص YARA-X ملفات حتى 64 ميبيبايت.",
+                            "ClamAV scans up to 256 MiB when the official database and sufficient memory are available. YARA-X scans up to 64 MiB."
+                        ) else tr(
+                            "تضم هذه النسخة قواعد محلية وتفحص المحركات ملفات حتى 64 ميبيبايت.",
+                            "This build includes local rules and scans files up to 64 MiB with its native engines."
+                        ), color = secondary)
                         Text(tr(
-                            "فحص التطبيقات المثبتة والملفات المشتركة بطلب المستخدم متاح من الرئيسية، لكن المحركين الأصليين يفحصان الملفات حتى 64 ميجابايت بقواعد حقيقية محدودة وموثقة. لم تُعتمد بعد فعالية شاملة ضد البرمجيات الخبيثة.",
-                            "On-demand scanning of installed APKs and accessible shared files is available on Home. Native checks are capped at 64 MiB with limited licensed real rules. Comprehensive malware effectiveness is not yet validated."
+                            "يوضح التقرير المحركات التي فحصت الملف وأي جزء تعذّر بسبب حد الحجم أو الوقت أو الوصول إلى الملف.",
+                            "The report shows which engines scanned the file and whether size, time, or file access limited the result."
                         ), color = secondary)
                     }
                 }

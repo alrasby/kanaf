@@ -6,10 +6,13 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.kanaf.alrasby.engine.AntivirusEngine
 import com.kanaf.alrasby.engine.NativeScannerBridge
+import com.kanaf.alrasby.engine.OfficialClamDatabase
+import com.kanaf.alrasby.engine.ThreatFamily
 import java.io.File
 import java.security.MessageDigest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -45,7 +48,12 @@ class NativeArm64EngineRuntimeTest {
         val expected = sha256(NativeScannerBridge.eicarReferenceForTests())
         val clam = report.clamav as AntivirusEngine.Verdict.Detected
         val yara = report.yaraX as AntivirusEngine.Verdict.Detected
-        assertEquals("Kanaf.EICAR.Test", clam.threatName.removeSuffix(".UNOFFICIAL"))
+        if (OfficialClamDatabase.bundled) {
+            assertTrue(report.gates.single { it.engineId == "clamav" }.rulesVersion.startsWith("official-"))
+            assertEquals(ThreatFamily.Kind.TEST_SAMPLE, ThreatFamily.classify(clam.threatName))
+        } else {
+            assertEquals("Kanaf.EICAR.Test", clam.threatName.removeSuffix(".UNOFFICIAL"))
+        }
         assertEquals("Kanaf_EICAR_Test", yara.threatName)
         assertEquals(expected, clam.sha256)
         assertEquals(expected, yara.sha256)
@@ -71,7 +79,7 @@ class NativeArm64EngineRuntimeTest {
         val file = File.createTempFile("oversize-probe-", ".bin", appContext.cacheDir)
         try {
             java.io.RandomAccessFile(file, "rw").use {
-                it.setLength(64L * 1024 * 1024 + 1)
+                it.setLength(NativeScannerBridge.inputLimit + 1)
             }
             val result = NativeScannerBridge.scan(appContext, Uri.fromFile(file))
             assertTrue("ClamAV must refuse an oversize source: $result",
@@ -82,6 +90,23 @@ class NativeArm64EngineRuntimeTest {
                 (result.clamav as AntivirusEngine.Verdict.Incomplete).reason)
             assertEquals("copy-size-limit",
                 (result.yaraX as AntivirusEngine.Verdict.Incomplete).reason)
+        } finally {
+            file.delete()
+        }
+    }
+
+    @Test fun officialClamAvCompletesSeventyMiBAndYaraReportsItsOwnLimit() {
+        requireArm64()
+        assumeTrue(OfficialClamDatabase.bundled)
+        val file = File.createTempFile("large-official-control-", ".bin", appContext.cacheDir)
+        try {
+            java.io.RandomAccessFile(file, "rw").use { it.setLength(70L * 1024 * 1024) }
+            val result = NativeScannerBridge.scan(appContext, Uri.fromFile(file))
+            assertTrue("The full database must actually scan the control: $result",
+                result.gates.single { it.engineId == "clamav" }.rulesVersion.startsWith("official-"))
+            assertTrue("ClamAV did not complete the 70 MiB control: $result",
+                result.clamav is AntivirusEngine.Verdict.NoKnownMatch)
+            assertEquals(AntivirusEngine.Verdict.Incomplete("yara-input-size-limit"), result.yaraX)
         } finally {
             file.delete()
         }

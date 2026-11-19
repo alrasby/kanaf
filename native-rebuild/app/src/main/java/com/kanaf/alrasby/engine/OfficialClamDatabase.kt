@@ -31,7 +31,7 @@ internal object OfficialClamDatabase {
         check(folder.isDirectory || folder.mkdirs())
         names.zip(digests).forEach { (name, sha) ->
             val file = File(folder, name)
-            if (file.isFile && StagedFileIntegrity.verify(file, sha, file.length())) return@forEach
+            if (file.isFile && StagedFileIntegrity.verify(file, sha, file.length(), limit)) return@forEach
             val partial = File(folder, "$name.partial")
             try {
                 val copied = context.assets.open("official-clamav/$name").use { input ->

@@ -57,7 +57,7 @@ class PackageReviewWorker(context: Context, params: WorkerParameters) : Worker(c
                 val file = File(path)
                 val hash = engine.scan({ file.inputStream() }, ::stopped)
                 if (stopped()) return Result.success()
-                val native = if (file.length() in 1L..(64L * 1024 * 1024))
+                val native = if (file.length() in 1L..NativeScannerBridge.inputLimit)
                     NativeScannerBridge.scan(context, Uri.fromFile(file)) else null
                 if (native?.clamav == AntivirusEngine.Verdict.Incomplete("scanner-busy") ||
                     native?.yaraX == AntivirusEngine.Verdict.Incomplete("scanner-busy")) retryNeeded = true

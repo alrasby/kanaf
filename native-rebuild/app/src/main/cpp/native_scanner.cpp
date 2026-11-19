@@ -110,7 +110,9 @@ std::string clamScan(const char* file, const char* database, bool useDefaultMatc
 #endif
         if (loading != 0 || count == 0) {
             answer = incomplete("clamav-rules-load-failed");
-        } else if (!kanaf::configureClamLimits(engine, setNum)) {
+        } else if (!kanaf::configureClamLimits(engine, setNum) ||
+                   (exactFileOnly && (setNum(engine, 0, 256 * kanaf::MiB) != 0 ||
+                                      setNum(engine, 1, 256 * kanaf::MiB) != 0))) {
             answer = incomplete("clamav-limits-unavailable");
         } else if (compile(engine) != 0) {
             answer = incomplete("clamav-compile-failed");
@@ -275,6 +277,8 @@ private:
         if (!kanaf::configureClamTempDirectory(engine_, configureString, temp) ||
             !kanaf::configureClamLimits(engine_, configure) ||
             !kanaf::disableClamCleanCache(engine_, configure) ||
+            configure(engine_, 0, 384 * kanaf::MiB) != 0 ||
+            configure(engine_, 1, 256 * kanaf::MiB) != 0 ||
             configure(engine_, 3, 2048) != 0) return "clamav-official-limits-unavailable";
 
         // CL_DB_STDOPT | CL_DB_OFFICIAL_ONLY. Never enable unsigned bytecode.

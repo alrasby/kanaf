@@ -17,7 +17,11 @@ import java.security.MessageDigest
  * All failures and partial reads are INCOMPLETE, never clean.
  */
 object NativeScannerBridge {
-    private const val MAX_FILE_BYTES = 64L * 1024 * 1024
+    internal const val MB = 1024L * 1024
+    internal const val YARA_INPUT_LIMIT = 64L * MB
+    internal const val OFFICIAL_CLAM_INPUT_LIMIT = 256L * MB
+    internal val inputLimit: Long
+        get() = if (OfficialClamDatabase.bundled) OFFICIAL_CLAM_INPUT_LIMIT else YARA_INPUT_LIMIT
     private const val CLAM_RULE_HASH = "f7a0ea8212c9251375ccf756743c34f59732e4edb29ee9cf58e48397c53c93be"
     private const val YARA_RULE_HASH = "6512c037bf11c594476492bd9e1cef968349a79a3a06f50aafa26e4ef3fc0993"
     // Scoped to this process lifetime. Never cache per-file detection verdicts,
@@ -284,7 +288,7 @@ object NativeScannerBridge {
                     ?: return report(incomplete("file-unavailable"), incomplete("file-unavailable"))
                 input.use { sourceStream ->
                     selected.outputStream().use { output ->
-                        when (val copied = BoundedStreamCopier(maxBytes = MAX_FILE_BYTES)
+                        when (val copied = BoundedStreamCopier(maxBytes = inputLimit)
                             .copy(sourceStream, output)) {
                             is BoundedStreamCopier.Result.Complete -> {
                                 copiedBytes = copied.bytesCopied
@@ -301,7 +305,7 @@ object NativeScannerBridge {
             // The source can change between reads. Seal the private snapshot and
             // verify that both engines receive the same bytes we hashed.
             if (!StagedFileIntegrity.seal(selected) ||
-                !StagedFileIntegrity.verify(selected, sha256, copiedBytes)) {
+                !StagedFileIntegrity.verify(selected, sha256, copiedBytes, inputLimit)) {
                 return report(incomplete("staged-file-integrity-failed"),
                     incomplete("staged-file-integrity-failed"))
             }
@@ -342,12 +346,13 @@ object NativeScannerBridge {
                     if (official is AntivirusEngine.Verdict.NoKnownMatch) localClam else official
                 }
             }
-            val yaraVerdict = cachedVerdicts?.second ?: if (yaraGate.ready && activeYara != null) verdict(
+            val yaraVerdict = if (copiedBytes > YARA_INPUT_LIMIT) incomplete("yara-input-size-limit")
+            else cachedVerdicts?.second ?: if (yaraGate.ready && activeYara != null) verdict(
                 yaraScanNative(selected.absolutePath, activeYara), sha256
             ) else incomplete(if (production && realYara == null)
                 "production-yara-rules-unavailable"
             else yaraGate.unavailableReason() ?: "yara-not-ready")
-            if (!StagedFileIntegrity.verify(selected, sha256, copiedBytes)) {
+            if (!StagedFileIntegrity.verify(selected, sha256, copiedBytes, inputLimit)) {
                 return report(incomplete("staged-file-changed-during-scan"),
                     incomplete("staged-file-changed-during-scan"))
             }
