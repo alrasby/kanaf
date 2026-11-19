@@ -35,3 +35,4 @@ p=json.load(open('/tmp/kanaf-evaluation-reports/android-results.json'))
 assert p['complete'] and len(p['cases'])==120 and p['self_test_passed']
 assert not p['sample_execution']
 PY
+python3 evaluation/android_baseline/summarize_results.py /tmp/kanaf-evaluation-reports/android-results.json evaluation/android_baseline/corpus-manifest.json /tmp/kanaf-evaluation-reports/android-summary.json
