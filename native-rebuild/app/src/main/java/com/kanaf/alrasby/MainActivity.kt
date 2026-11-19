@@ -48,7 +48,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.kanaf.alrasby.engine.ThreatFeatureVector
 import com.kanaf.alrasby.engine.VerifiedLinearThreatModel
-import com.kanaf.alrasby.engine.ExperimentalApkStructureModel
 import com.kanaf.alrasby.engine.KanafUrlAi
 import com.kanaf.alrasby.engine.ThreatModel
 import com.kanaf.alrasby.engine.TrustJourney
@@ -633,22 +632,14 @@ private fun KanafScreen(
     var signatures by remember {
         mutableStateOf(runCatching { SignatureRepository(activity).load() }.getOrNull())
     }
-    // Prefer independently validated, signed malware weights when available.
-    // Otherwise the clearly marked structural fixture pilot is advisory only.
-    val mlModel: ThreatModel = remember {
-        val trusted = VerifiedLinearThreatModel.load(activity)
-        if (trusted is VerifiedLinearThreatModel) trusted else ExperimentalApkStructureModel
-    }
+    val mlModel = remember { VerifiedLinearThreatModel.load(activity) as? VerifiedLinearThreatModel }
     val urlRiskModel = remember { KanafUrlAi.load(activity) }
-    val apkAiStatus = if (mlModel is VerifiedLinearThreatModel) KanafMessage(
-        "نموذج APK موقّع محمّل: " + mlModel.modelVersion +
-            "؛ درجته استشارية وليست حكم حماية.",
-        "Signed APK model loaded: " + mlModel.modelVersion +
-            "; advisory only, not an antivirus verdict."
-    ) else KanafMessage(
-        "نموذج Kanaf AI البنيوي التجريبي يعمل محليًا. أوزانه مدربة على أمثلة بنيوية مولّدة للاختبار وليس ملفات خبيثة حقيقية؛ لا يُعتبر كاشف فيروسات.",
-        "Experimental local Kanaf AI structural model is active. Weights were trained on generated structural fixtures, NOT real malware; this is not a malware detector."
-    )
+    val apkAiStatus = mlModel?.let { model ->
+        KanafMessage(
+            "نموذج APK موقّع محمّل: " + model.modelVersion,
+            "Signed APK advisory model: " + model.modelVersion
+        )
+    } ?: KanafMessage.EMPTY
     val urlAiStatus = if (urlRiskModel != null) KanafMessage(
         "تحليل روابط تجريبي فعّال محليًا بنموذج " + urlRiskModel.version +
             " مدرّب على بيانات PhiUSIIL التاريخية. النتائج تقديرية وليست تأكيدًا للسلامة.",
@@ -841,8 +832,9 @@ private fun KanafScreen(
                                     scanResult, activeSignatures?.size ?: 0, snapshotConflict, arabic = false
                                 )
                             )
-                            val features = ThreatFeatureVector.from(apkEvidence, dexEvidence, zipEvidence)
-                            val modelResult = mlModel.classify(features)
+                            val modelResult = mlModel?.classify(
+                                ThreatFeatureVector.from(apkEvidence, dexEvidence, zipEvidence)
+                            )
                             val nativeDetection = nativeReports.firstNotNullOfOrNull {
                                 (it.verdict as? AntivirusEngine.Verdict.Detected)?.threatName
                             }
@@ -917,23 +909,12 @@ private fun KanafScreen(
                                 KanafMessage("خطوتك التالية: ${journey.title} — ${journey.nextStep}",
                                     "Next step: $englishNext")
                             }
-                            val aiNote = when (modelResult) {
-                                is ThreatModel.Prediction.Unavailable -> KanafMessage(
-                                    "التحليل بالذكاء الاصطناعي غير متاح؛ لم يُشغَّل نموذج مدرّب ومعتمد.",
-                                    "AI risk analysis unavailable; no trained, validated model was run."
+                            val aiNote = (modelResult as? ThreatModel.Prediction.Scored)?.let { score ->
+                                KanafMessage(
+                                    "درجة النموذج الموقّع الاستشارية: ${score.riskProbability}",
+                                    "Signed model advisory score: ${score.riskProbability}"
                                 )
-                                is ThreatModel.Prediction.Scored ->
-                                    if (modelResult.modelVersion == ExperimentalApkStructureModel.modelVersion) {
-                                        val score = (modelResult.riskProbability * 100f).toInt()
-                                        KanafMessage(
-                                            "Kanaf AI: مؤشر شذوذ بنيوي تجريبي $score/100. النموذج مدرب على أمثلة مولّدة، وليس على برمجيات خبيثة فعلية؛ النتيجة لا تثبت العدوى أو السلامة.",
-                                            "Kanaf AI: experimental structural anomaly score $score/100. Trained on generated fixtures, NOT real malware; neither proof of infection nor safety."
-                                        )
-                                    } else KanafMessage(
-                                        "درجة ML استشارية: ${modelResult.riskProbability} (نموذج ${modelResult.modelVersion}). ليست إثباتًا لوجود تهديد.",
-                                        "Advisory ML score: ${modelResult.riskProbability} (model ${modelResult.modelVersion}). Not proof of malware."
-                                    )
-                            }
+                            } ?: KanafMessage.EMPTY
                             KanafMessage.combine(listOf(
                                 decisionNote, assessmentNote, consensusNote,
                                 nativeNote, aiNote, verdict, apkNote, dexNote, zipNote

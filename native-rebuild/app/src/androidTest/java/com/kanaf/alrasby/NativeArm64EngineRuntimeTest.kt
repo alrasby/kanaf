@@ -49,7 +49,7 @@ class NativeArm64EngineRuntimeTest {
         val clam = report.clamav as AntivirusEngine.Verdict.Detected
         val yara = report.yaraX as AntivirusEngine.Verdict.Detected
         if (OfficialClamDatabase.bundled) {
-            assertTrue(report.gates.single { it.engineId == "clamav" }.rulesVersion.startsWith("official-"))
+            assertTrue(report.gates.single { it.engineId == "clamav" }.rulesVersion?.startsWith("official-") == true)
             assertEquals(ThreatFamily.Kind.TEST_SAMPLE, ThreatFamily.classify(clam.threatName))
         } else {
             assertEquals("Kanaf.EICAR.Test", clam.threatName.removeSuffix(".UNOFFICIAL"))
@@ -103,7 +103,7 @@ class NativeArm64EngineRuntimeTest {
             java.io.RandomAccessFile(file, "rw").use { it.setLength(70L * 1024 * 1024) }
             val result = NativeScannerBridge.scan(appContext, Uri.fromFile(file))
             assertTrue("The full database must actually scan the control: $result",
-                result.gates.single { it.engineId == "clamav" }.rulesVersion.startsWith("official-"))
+                result.gates.single { it.engineId == "clamav" }.rulesVersion?.startsWith("official-") == true)
             assertTrue("ClamAV did not complete the 70 MiB control: $result",
                 result.clamav is AntivirusEngine.Verdict.NoKnownMatch)
             assertEquals(AntivirusEngine.Verdict.Incomplete("yara-input-size-limit"), result.yaraX)

@@ -1042,8 +1042,8 @@ fun KanafGlassHome(
                         Text("YARA-X 0.13.0", color = if (dark) Aqua else Teal,
                             style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                         Text(tr(
-                            "مصادر مرخصة: 149 بصمة أندرويد من ESET عبر 12 عائلة وحملة وثلاث قواعد محتوى Linux/ELF من ESET وReversingLabs. تغطية محدودة وليست قاعدة شاملة.",
-                            "149 licensed ESET Android exact-file rules across 12 families and campaigns and three Linux/ELF content rules from ESET and ReversingLabs. Limited coverage, not a comprehensive database."
+                            "القواعد المضمّنة تشمل 149 بصمة لملفات أندرويد عبر 12 عائلة وحملة، وثلاث قواعد محتوى لملفات Linux/ELF.",
+                            "Bundled rules include 149 Android exact-file hashes across 12 families and campaigns, plus three Linux/ELF content rules."
                         ), color = secondary)
                     }
                     GlassPanel(card, stroke) {
