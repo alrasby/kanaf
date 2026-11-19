@@ -1,12 +1,18 @@
 #!/usr/bin/env bash
 set -euo pipefail
 if [[ "${1:-}" == build ]]; then
-    cd native-rebuild
-    feed=rules/eset-android-seed
+    feed=native-rebuild/rules/eset-android-seed
     python3 tools/signed_feed.py verify --zip "$feed/kanaf-feed-v1.zip" --public-key "$feed/feed-public.pem"
     public_key=$(openssl pkey -pubin -in "$feed/feed-public.pem" -outform DER | openssl base64 -A)
-    install -m 644 "$feed/kanaf-feed-v1.zip" app/src/main/assets/production_signatures.zip
-    bash tools/gradle_retry_429.sh --no-daemon :app:assembleDebug :app:assembleDebugAndroidTest -PkanafArm64Runtime=true "-PkanafOfficialClamAssets=$RUNNER_TEMP/clamav-assets" \
+    install -m 644 "$feed/kanaf-feed-v1.zip" native-rebuild/app/src/main/assets/production_signatures.zip
+    init_script="$RUNNER_TEMP/kanaf-central.init.gradle"
+    cat > "$init_script" <<'GRADLE'
+settingsEvaluated { settings ->
+    settings.pluginManagement.repositories.maven { url = uri("https://repo1.maven.org/maven2") }
+    settings.dependencyResolutionManagement.repositories.maven { url = uri("https://repo1.maven.org/maven2") }
+}
+GRADLE
+    bash native-rebuild/tools/gradle_retry_429.sh -p native-rebuild --no-daemon -I "$init_script" :app:assembleDebug :app:assembleDebugAndroidTest -PkanafArm64Runtime=true "-PkanafOfficialClamAssets=$RUNNER_TEMP/clamav-assets" \
       "-PkanafSignaturePublicKeyBase64=$public_key" -PkanafSignatureMinVersion=1 \
       -PkanafSignatureFeedHttpsUrl=https://raw.githubusercontent.com/alrasby/kanaf/rebuild/kanaf-native-v1/native-rebuild/rules/eset-android-seed/kanaf-feed-v1.zip
     exit 0
