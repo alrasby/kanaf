@@ -57,6 +57,7 @@ import com.kanaf.alrasby.engine.DnsDiagnosticPreferences
 import com.kanaf.alrasby.engine.SafeRedirectInspector
 import androidx.compose.ui.platform.LocalContext
 
+private const val SCAN_TOOLS_PAGE = 10
 private val Teal = Color(0xFF146C70)
 private val Aqua = Color(0xFF3DDFB0)
 private val Night = Color(0xFF0A1729)
@@ -165,7 +166,7 @@ fun KanafGlassHome(
     var deleteVaultId by remember { mutableStateOf<String?>(null) }
     var appSearch by remember { mutableStateOf("") }
     LaunchedEffect(sharedFileRequest) {
-        if (sharedFileRequest != null) page = 4
+        if (sharedFileRequest != null) page = SCAN_TOOLS_PAGE
     }
     LaunchedEffect(sharedText) {
         if (!sharedText.isNullOrBlank()) {
@@ -422,8 +423,8 @@ fun KanafGlassHome(
                                 }
                                 Surface(
                                     onClick = { page = when {
-                                        section == null -> if (action == 0) 10 else 9
-                                        section == KanafSection.SCAN -> 10
+                                        section == null -> if (action == 0) SCAN_TOOLS_PAGE else 9
+                                        section == KanafSection.SCAN -> SCAN_TOOLS_PAGE
                                         else -> section.page
                                     } },
                                     modifier = Modifier.weight(1f).testTag(
@@ -750,7 +751,7 @@ fun KanafGlassHome(
                         }
                     }
                 }
-                if (page == 10) {
+                if (page == SCAN_TOOLS_PAGE) {
                     GlassPanel(card, stroke) {
                         Text(tr("خيارات الفحص والأذونات", "Scan options & permissions"),
                             color = ink, style = MaterialTheme.typography.titleLarge,

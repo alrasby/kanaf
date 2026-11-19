@@ -106,3 +106,12 @@ onNewIntent call; the test now exercises the real singleTop Activity entry
 through startActivity. Android 8+ broadcast delivery restrictions prompted the
 addition of dynamic registration and an opt-in periodic delta-inventory
 fallback. Final Android checks must be read from the latest PR head.
+
+Android checkpoint at `41d06af`: 11/12 Android tests passed, including actual
+ARM64 rule controls, large files, signed HTTPS updates, privacy, DNS controls
+and package scanning. The shared-file test exposed a stale page number (4,
+while scan tools are page 10); fixed using a shared SCAN_TOOLS_PAGE constant.
+Its harness now delivers onNewIntent through Instrumentation to the owned
+Activity instead of opening another task. Packaging at this checkpoint failed
+on transient Maven dependency lookup, while JVM/lint checks passed. Recheck
+all results on the final PR head; do not treat this checkpoint as acceptance.
