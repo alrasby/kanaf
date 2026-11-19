@@ -45,6 +45,7 @@ object DnsFilterCore {
             host == null -> { counters?.failed(); DnsPacketCodec.servfail(question) }
             policy.classify(host) != DnsRuleCategory.ALLOWED -> {
                 counters?.blocked()
+                DnsActivityLog.record(host, policy.classify(host).name, "Kanaf local rules")
                 DnsPacketCodec.nxdomain(question)
             }
             else -> {
@@ -52,9 +53,12 @@ object DnsFilterCore {
                 if (upstream != null &&
                     DnsPacketCodec.matchesResponse(question, upstream)) {
                     counters?.forwarded()
+                    if (upstream.size >= 4 && (upstream[3].toInt() and 15) == 3)
+                        DnsActivityLog.record(host, "NXDOMAIN; nonexistent or provider-blocked, unverified", "Upstream DNS")
                     upstream
                 } else {
                     counters?.failed()
+                    DnsActivityLog.record(host, "DNS request failed", "Upstream DNS")
                     DnsPacketCodec.servfail(question)
                 }
             }

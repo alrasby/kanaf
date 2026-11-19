@@ -16,7 +16,11 @@ class InstalledAppInventory {
     data class Entry(
         val packageName: String,
         val displayName: String,
-        val requestedPermissionCount: Int?
+        val requestedPermissionCount: Int?,
+        val privacy: List<PrivacyAudit.Permission> = emptyList(),
+        val permissionChanges: Set<String> = emptySet(),
+        val signerChanged: Boolean = false,
+        val baselineAvailable: Boolean = false
     )
 
     private val validPackage = Regex("[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)+")
@@ -43,7 +47,12 @@ class InstalledAppInventory {
                 .trim()
                 .take(80)
                 .ifBlank { name }
-            Entry(name, label, count)
+            val privacy = runCatching { PrivacyAudit.load(context, name) }.getOrDefault(emptyList())
+            val snapshot = runCatching { PackageBaseline.snapshot(context, name) }.getOrNull()
+            val change = snapshot?.let { runCatching { PackageBaseline.inspect(context, name, it) }.getOrNull() }
+            if (snapshot != null) runCatching { PackageBaseline.save(context, name, snapshot) }
+            Entry(name, label, count, privacy, change?.addedPermissions.orEmpty(),
+                change?.unverifiedSignerChange ?: false, change?.baselineExists ?: false)
         }.distinctBy { it.packageName }
             .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.displayName })
             .toList()

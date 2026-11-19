@@ -33,7 +33,7 @@ object KanafPrivacyDisclosure {
         "It does not inspect HTTPS content. Allowed DNS queries travel over encrypted HTTPS " +
         "to independent Cloudflare security DNS for malware and phishing protection only, " +
         "NOT ad or tracker blocking. Cloudflare may see queried domains and your connecting IP " +
-        "under its privacy policy. Kanaf stores no DNS domain history; session counters are " +
+        "under its privacy policy. Optional DNS diagnostics retain up to 64 events in RAM until stop or disable; session counters are " +
         "temporary. Other VPNs cannot operate simultaneously. You can stop Kanaf at any time. " +
         "Do you explicitly agree to use the local VPN and send DNS queries to Cloudflare?"
     } else "Kanaf DNS creates an Android local VPN for DNS queries addressed to its resolver only; " +
@@ -41,7 +41,7 @@ object KanafPrivacyDisclosure {
         "Kanaf checks DNS names locally for blocking and sends allowed queries over encrypted HTTPS " +
         "to your selected third-party AdGuard DNS provider. That provider may see queried domains " +
         "and your connecting IP address under its own privacy policy. " +
-        "Kanaf stores no DNS domain history; session counters are temporary. " +
+        "Optional DNS diagnostics retain up to 64 events in RAM until stop or disable; session counters are temporary. " +
         "The filter can block ad/tracker domains used by other apps, though some traffic may bypass it. " +
         "Another VPN cannot operate simultaneously. You can stop Kanaf DNS at any time. " +
         "Do you explicitly agree to enable the local VPN and send DNS queries to the selected provider?"
@@ -66,12 +66,12 @@ object KanafPrivacyDisclosure {
         "Scanning: files you select and Android-visible installed packages are inspected locally " +
         "under Android permissions; file contents are not uploaded to Kanaf servers. " +
         "Optional brief session history is cleared when disabled.\n\n" +
-        "DNS: Kanaf keeps no DNS domain history. When you enable optional VPN filtering, allowed " +
+        "DNS: DNS diagnostic history is optional, limited to 64 events in RAM, and cleared on stop or disable. Explicit local-rule exceptions are saved on device. When you enable optional VPN filtering, allowed " +
         (if (BuildConfig.KANAF_PLAY_DNS_SECURITY_ONLY)
             "queries are sent over HTTPS to Cloudflare security DNS for malware and phishing protection, not ad blocking. "
          else "queries are sent over HTTPS to your chosen independent AdGuard DNS provider. ") +
         "The provider may receive domain names and your connecting IP address, under its own privacy policy.\n\n" +
-        "Updates: when you request threat-rule updates, the app contacts the publisher-configured " +
+        "Updates: when you request threat-rule updates or enable daily signed updates, the app contacts the publisher-configured " +
         "HTTPS address for signed rules. The encrypted vault stores copies locally using Android " +
         "Keystore; you can remove them manually. Android deletes local app data on uninstall.\n\n" +
         "Permissions: app visibility, shared-file access and VPN are subject to user choices and " +

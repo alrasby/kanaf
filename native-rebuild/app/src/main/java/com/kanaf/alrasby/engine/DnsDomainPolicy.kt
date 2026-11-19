@@ -22,7 +22,7 @@ class DnsDomainPolicy(
             return DnsRuleCategory.ALLOWED
         if (verifiedThreatHosts.any { host == it || host.endsWith(".$it") })
             return DnsRuleCategory.SECURITY_THREAT
-        if (allowAdTrackerBlocking && AdDomainRules.isAdOrTracker(host))
+        if (allowAdTrackerBlocking && !DnsActivityLog.locallyAllowed(host) && AdDomainRules.isAdOrTracker(host))
             return DnsRuleCategory.AD_TRACKER
         return DnsRuleCategory.ALLOWED
     }

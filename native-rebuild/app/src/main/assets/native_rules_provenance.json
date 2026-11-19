@@ -1,0 +1,17 @@
+{
+  "format": 1,
+  "source_commit": "8921a81d245cce3f9b7a199b123d221ed8f1fe33",
+  "license": "BSD-2-Clause",
+  "author": "ESET Research",
+  "android_exact_hashes": 30,
+  "linux_elf_content_rules": 2,
+  "independent_detection_sources": 1,
+  "source_files": {
+    "signatures.tsv": "f9e2e00f5f8f442a60be9002b0a7fc11230bb0764f1948649680bd161b35f882",
+    "linux-moose.yar": "600beb24cb82f01d145f7353f5eb081153dffcd7c31adcf940a66094fa19b28a"
+  },
+  "assets": {
+    "production_clamav.hsb": "306d7093473d58b01f544fccd29c8a48618309aee657a2ec5f7d3ba959e30c81",
+    "production_yara.yar": "33a59ad16a3871fcb8e0ccfdcd5256610e7d73926c3cbe77957461b4adaeef29"
+  }
+}

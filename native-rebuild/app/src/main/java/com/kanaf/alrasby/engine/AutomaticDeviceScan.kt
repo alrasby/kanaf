@@ -28,7 +28,8 @@ class AutomaticDeviceScan {
         val signaturesReady: Boolean, val findings: List<Finding>,
         val storedApksAttempted: Int = 0,
         val nativeInstalledAttempts: Int = 0,
-        val nativeSharedAttempts: Int = 0
+        val nativeSharedAttempts: Int = 0,
+        val incompleteReasons: Map<String, Int> = emptyMap()
     )
 
     companion object {
@@ -102,6 +103,11 @@ class AutomaticDeviceScan {
         var structuralWarnings = 0
         var truncated = false
         val findings = ArrayList<Finding>(16)
+        val incompleteReasons = linkedMapOf<String, Int>()
+        fun reason(text: String) { incompleteReasons[text.take(120)] = (incompleteReasons[text.take(120)] ?: 0) + 1 }
+        fun reasons(reports: List<EngineConsensus.Report>) = reports.forEach {
+            (it.verdict as? AntivirusEngine.Verdict.Incomplete)?.let { verdict -> reason(verdict.reason) }
+        }
         val processed = HashSet<String>()
         var notifiedAt = 0
 
@@ -120,6 +126,7 @@ class AutomaticDeviceScan {
             if (!file.isFile || !file.canRead() || file.length() <= 0 ||
                 file.length() > limits.hashBytes) {
                 incomplete++
+                reason("file-unreadable-empty-or-size-limit")
                 return
             }
             // All three engines must describe the same immutable file snapshot.
@@ -150,11 +157,13 @@ class AutomaticDeviceScan {
                         Finding(display, match.threatName, true))
                     // A confirmed detection may coexist with an unavailable engine.
                     // The report should still expose the incomplete coverage.
-                    if (consensus.incomplete.isNotEmpty()) incomplete++
+                    if (consensus.incomplete.isNotEmpty()) { incomplete++; reasons(consensus.incomplete) }
                 }
                 is EngineConsensus.Decision.NoKnownMatch -> Unit
                 is EngineConsensus.Decision.Inconclusive -> {
                     incomplete++
+                    reasons(consensus.incomplete)
+                    if (consensus.reason != "scan-incomplete") reason(consensus.reason)
                     if (consensus.uncorroboratedDetections.isNotEmpty() &&
                         findings.size < 20) {
                         findings.add(Finding(
@@ -172,7 +181,7 @@ class AutomaticDeviceScan {
                             if (findings.size < 20) findings.add(
                                 Finding(display, "Unsafe APK archive paths", false))
                         }
-                    else -> incomplete++
+                    else -> { incomplete++; reason("apk-structure-incomplete") }
                 }
             }
         }
@@ -267,7 +276,7 @@ class AutomaticDeviceScan {
             packages.size, apkAttempted, sharedAttempted, hashed, nativeChecked,
             matched, incomplete, structuralWarnings, truncated,
             canReadShared, signatures != null, findings,
-            storedApksAttempted, allocation.installedReserved, allocation.sharedReserved
+            storedApksAttempted, allocation.installedReserved, allocation.sharedReserved, incompleteReasons.toMap()
         )
     }
 }

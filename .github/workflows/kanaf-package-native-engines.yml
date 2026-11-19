@@ -80,6 +80,7 @@ jobs:
           bash tools/gradle_retry_429.sh --no-daemon \
             -PkanafArm64Runtime=true \
             "-PkanafSignaturePublicKeyBase64=$public_key" -PkanafSignatureMinVersion=1 \
+            -PkanafSignatureFeedHttpsUrl=https://raw.githubusercontent.com/alrasby/kanaf/rebuild/kanaf-native-v1/native-rebuild/rules/eset-android-seed/kanaf-feed-v1.zip \
             :app:testDebugUnitTest :app:assembleDebug :app:bundleDebug --stacktrace
       - name: Verify APK contains all native libraries
         shell: bash

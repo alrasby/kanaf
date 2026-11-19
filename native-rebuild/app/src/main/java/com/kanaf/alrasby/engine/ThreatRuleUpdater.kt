@@ -37,10 +37,13 @@ class ThreatRuleUpdater {
         try {
             if (connection.responseCode != 200) throw IOException("feed-http-" + connection.responseCode)
             val output = ByteArrayOutputStream()
+            val started = System.nanoTime()
             connection.inputStream.use { input ->
                 val buffer = ByteArray(16 * 1024)
                 val limit = VerifiedSignatureBundle.MAX_DATABASE_BYTES + 16384
                 while (true) {
+                    if (System.nanoTime() - started > 30_000_000_000L || Thread.currentThread().isInterrupted)
+                        throw IOException("feed-download-deadline")
                     val n = input.read(buffer)
                     if (n < 0) break
                     if (n > limit - output.size()) throw IOException("feed-download-too-large")
@@ -50,7 +53,20 @@ class ThreatRuleUpdater {
             val parsed = SignedFeedPackage.parse(output.toByteArray().inputStream())
             val key = java.util.Base64.getDecoder()
                 .decode(BuildConfig.KANAF_SIGNATURE_PUBLIC_KEY_BASE64)
-            SignatureRepository(context).installVerified(parsed.bytes, parsed.manifest, key)
+            check(SignedSignatureUpdate.verify(parsed.manifest, key)) { "untrusted-feed-signature" }
+            val actual = java.security.MessageDigest.getInstance("SHA-256").digest(parsed.bytes)
+                .joinToString("") { "%02x".format(it.toInt() and 255) }
+            check(actual == parsed.manifest.sha256) { "feed-payload-digest-mismatch" }
+            val repository = SignatureRepository(context)
+            // An identical authenticated feed is a successful up-to-date check.
+            // A same-version replacement or an older feed still fails closed.
+            val current = runCatching { repository.status() }.getOrNull()
+            if (current?.version == parsed.manifest.version && current.sha256 == actual) {
+                ProtectionHealth.checkedUpdates(context)
+                return current.version
+            }
+            repository.installVerified(parsed.bytes, parsed.manifest, key)
+            ProtectionHealth.checkedUpdates(context)
             return parsed.manifest.version
         } finally { connection.disconnect() }
     }

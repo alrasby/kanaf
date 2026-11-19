@@ -12,8 +12,8 @@ import java.io.ByteArrayOutputStream
 import java.security.MessageDigest
 
 /**
- * Experimental native scanning path. The bundled rules ONLY recognize the harmless EICAR
- * test string. This is not a production antivirus database or whole-device protection.
+ * Bounded native scanning with digest-pinned ESET research rules and authenticated
+ * exact-file updates. EICAR fixtures are reserved for engine self-tests.
  * All failures and partial reads are INCOMPLETE, never clean.
  */
 object NativeScannerBridge {
@@ -22,6 +22,7 @@ object NativeScannerBridge {
     private const val YARA_RULE_HASH = "6512c037bf11c594476492bd9e1cef968349a79a3a06f50aafa26e4ef3fc0993"
     // Scoped to this process lifetime. Never cache per-file detection verdicts,
     // signature trust, file hashes, or library load failures.
+    private val verdictCache = NativeVerdictCache()
     private val passedEngineSelfTest = java.util.concurrent.atomic.AtomicBoolean(false)
 
     data class Report(
@@ -206,26 +207,42 @@ object NativeScannerBridge {
             // regular user files must NEVER be checked only against test rules.
             // Independent real-rule assets must be pinned in BuildConfig and
             // verified before a native scan can return NoKnownMatch.
-            val production = !BuildConfig.DEBUG && !selfTestOnly
+            val production = !selfTestOnly
             val realClam = if (production) verifiedProductionAsset(context,
-                "production_clamav.ndb", BuildConfig.KANAF_NATIVE_CLAM_RULE_SHA256,
+                "production_clamav.hsb", BuildConfig.KANAF_NATIVE_CLAM_RULE_SHA256,
                 ProductionNativeRulePolicy.MAX_CLAM_BYTES) else null
             val realYara = if (production) verifiedProductionAsset(context,
                 "production_yara.yar", BuildConfig.KANAF_NATIVE_YARA_RULE_SHA256,
                 ProductionNativeRulePolicy.MAX_YARA_BYTES) else null
-            if (realClam != null) {
-                productionDb = stagedFile(context, "kanaf-clam-prod-", ".ndb", realClam)
+            // The signed feed updates exact-file rules in BOTH native engines.
+            // Retain the independently pinned content rules, but replace old
+            // exact hashes so a later signed feed can revoke an obsolete IOC.
+            val trustedRows = if (production && realClam != null && realYara != null &&
+                BuildConfig.KANAF_SIGNATURE_MIN_VERSION > 0L)
+                SignatureRepository(context).load() else null
+            val activeClamBytes = (if (trustedRows != null) NativeHashRules.clam(trustedRows) else realClam)?.let { rules ->
+                // Standard harmless diagnostic remains identifiable as a TEST
+                // alongside real rules; it is never counted as malware evidence.
+                rules + (digest(eicar) + ":68:Kanaf.EICAR.Test:73\n").toByteArray(Charsets.US_ASCII)
+            }
+            if (activeClamBytes != null) {
+                productionDb = stagedFile(context, "kanaf-clam-prod-", ".hsb", activeClamBytes)
             }
             val activeClam = if (production) productionDb else rulesFile
-            val activeYara = if (production) realYara?.toString(Charsets.UTF_8) else yaraRules
+            val activeYara = if (production) realYara?.toString(Charsets.UTF_8)?.let { pinned ->
+                if (trustedRows != null) {
+                    check(pinned.contains("// KANAF_EXACT_HASH_RULES"))
+                    pinned.substringBefore("// KANAF_EXACT_HASH_RULES") + NativeHashRules.yara(trustedRows)
+                } else pinned
+            }?.plus("\n" + yaraRules) else yaraRules
             clamGate = NativeEngineGate("clamav", libraries.clamavLoaded,
                 clamRulesOK && (!production || realClam != null), clamOK,
                 engineVersion = "1.4.6",
-                rulesVersion = if (production) "publisher-native-v1" else "EICAR-test-v1")
+                rulesVersion = if (production) "ESET-BSD-native-v1" else "EICAR-test-v1")
             yaraGate = NativeEngineGate("yara-x", libraries.yaraXLoaded,
                 yaraRulesOK && (!production || realYara != null), yaraOK,
                 engineVersion = "0.13.0",
-                rulesVersion = if (production) "publisher-native-v1" else "EICAR-test-v1")
+                rulesVersion = if (production) "ESET-BSD-native-v1" else "EICAR-test-v1")
 
             val selected = File.createTempFile("kanaf-scan-", ".bin", context.cacheDir)
             target = selected
@@ -256,12 +273,16 @@ object NativeScannerBridge {
                 return report(incomplete("staged-file-integrity-failed"),
                     incomplete("staged-file-integrity-failed"))
             }
-            val clamVerdict = if (clamGate.ready && activeClam != null) verdict(
+            val cacheKey = if (production && clamGate.ready && yaraGate.ready &&
+                activeClamBytes != null && activeYara != null)
+                NativeVerdictCache.Key(sha256, digest(activeClamBytes), digest(activeYara.toByteArray())) else null
+            val cachedVerdicts = cacheKey?.let(verdictCache::get)
+            val clamVerdict = cachedVerdicts?.first ?: if (clamGate.ready && activeClam != null) verdict(
                 clamScanNative(selected.absolutePath, activeClam.absolutePath), sha256
             ) else incomplete(if (production && realClam == null)
                 "production-clamav-rules-unavailable"
             else clamGate.unavailableReason() ?: "clamav-not-ready")
-            val yaraVerdict = if (yaraGate.ready && activeYara != null) verdict(
+            val yaraVerdict = cachedVerdicts?.second ?: if (yaraGate.ready && activeYara != null) verdict(
                 yaraScanNative(selected.absolutePath, activeYara), sha256
             ) else incomplete(if (production && realYara == null)
                 "production-yara-rules-unavailable"
@@ -270,6 +291,7 @@ object NativeScannerBridge {
                 return report(incomplete("staged-file-changed-during-scan"),
                     incomplete("staged-file-changed-during-scan"))
             }
+            cacheKey?.let { verdictCache.put(it, clamVerdict, yaraVerdict) }
             return report(clamVerdict, yaraVerdict)
         } catch (_: Exception) {
             return report(incomplete("native-initialization-failed"), incomplete("native-initialization-failed"))

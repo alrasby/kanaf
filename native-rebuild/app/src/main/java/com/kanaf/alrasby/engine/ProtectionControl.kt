@@ -25,6 +25,12 @@ object ProtectionControl {
     fun installWatchEnabled(context: Context): Boolean =
         prefs(context).getBoolean(WATCH_INSTALLS, false)
 
+    fun lastInstallResult(context: Context): String = prefs(context).getString("last_install_scan", "") ?: ""
+
+    fun saveInstallResult(context: Context, report: String) {
+        prefs(context).edit().putString("last_install_scan", report.take(12_000)).apply()
+    }
+
     fun periodicEnabled(context: Context): Boolean =
         prefs(context).getBoolean(PERIODIC, false)
 
@@ -35,7 +41,8 @@ object ProtectionControl {
         prefs(context).getString(SUMMARY, "No scheduled check has completed") ?: ""
 
     fun setInstallWatch(context: Context, enabled: Boolean) {
-        prefs(context).edit().putBoolean(WATCH_INSTALLS, enabled).apply()
+        prefs(context).edit().putBoolean(WATCH_INSTALLS, enabled).commit()
+        if (!enabled) WorkManager.getInstance(context).cancelAllWorkByTag(PackageReviewWorker.TAG)
     }
 
     /** Only accept a URI grant actually persisted by Android. */

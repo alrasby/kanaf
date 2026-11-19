@@ -32,10 +32,10 @@
             <intent-filter>
                 <action android:name="android.intent.action.SEND"/>
                 <category android:name="android.intent.category.DEFAULT"/>
-                <data android:mimeType="text/plain"/>
+                <data android:mimeType="*/*"/>
             </intent-filter>
         </activity>
-        <!-- Opt-in best-effort package event prompt; not a persistent realtime scanner.
+        <!-- Opt-in OS-scheduled install/update scans; not a permanent service.
              Protected Android package broadcasts; unavailable/hidden apps are not scanned. -->
         <receiver android:name=".engine.PackageChangeReceiver" android:exported="false">
             <intent-filter>

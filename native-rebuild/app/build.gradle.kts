@@ -73,8 +73,8 @@ android {
         // Missing/mismatched digests make native release scans INCOMPLETE;
         // debug builds continue to use EICAR-only self-test fixtures.
         val nativeHashPattern = Regex("[0-9a-f]{64}")
-        val clamHash = providers.gradleProperty("kanafNativeClamRuleSha256").orNull.orEmpty()
-        val yaraHash = providers.gradleProperty("kanafNativeYaraRuleSha256").orNull.orEmpty()
+        val clamHash = providers.gradleProperty("kanafNativeClamRuleSha256").orNull ?: "306d7093473d58b01f544fccd29c8a48618309aee657a2ec5f7d3ba959e30c81"
+        val yaraHash = providers.gradleProperty("kanafNativeYaraRuleSha256").orNull ?: "33a59ad16a3871fcb8e0ccfdcd5256610e7d73926c3cbe77957461b4adaeef29"
         require(clamHash.isEmpty() || nativeHashPattern.matches(clamHash)) {
             "Invalid pinned ClamAV production rule digest"
         }
@@ -191,7 +191,7 @@ val verifyKanafProductionInputs = tasks.register("verifyKanafProductionInputs") 
         }
         val fileRoot = file("src/main/assets")
         val nativeFiles = listOf(
-            Triple("production_clamav.ndb", "kanafNativeClamRuleSha256", 8 * 1024 * 1024),
+            Triple("production_clamav.hsb", "kanafNativeClamRuleSha256", 8 * 1024 * 1024),
             Triple("production_yara.yar", "kanafNativeYaraRuleSha256", 4 * 1024 * 1024)
         )
         val nativeHashes = nativeFiles.map { (name, key, max) ->
