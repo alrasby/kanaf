@@ -123,4 +123,22 @@ class NativeArm64EngineRuntimeTest {
         assertEquals(sha256(eicar),
             (positive.yaraX as AntivirusEngine.Verdict.Detected).sha256)
     }
+    @Test fun realYaraContentRuleRunsOnHarmlessControlAndRejectsNearMiss() {
+        requireArm64()
+        val parts = listOf("Modules are loaded", "--scrypt", "processor ", "cpu model ", "Host: www.challpok.cn")
+        val positive = byteArrayOf(0x7f, 0x45, 0x4c, 0x46) + parts.joinToString("\u0000").toByteArray()
+        val nearMiss = byteArrayOf(0x7f, 0x45, 0x4c, 0x46) + parts.take(4).joinToString("\u0000").toByteArray()
+        val file = File.createTempFile("real-rule-control-", ".bin", appContext.cacheDir)
+        try {
+            file.writeBytes(positive)
+            val detected = NativeScannerBridge.scan(appContext, Uri.fromFile(file))
+            assertTrue("Real ESET content rule did not run: $detected", detected.yaraX is AntivirusEngine.Verdict.Detected)
+            assertEquals("moose_2", (detected.yaraX as AntivirusEngine.Verdict.Detected).threatName)
+            file.writeBytes(nearMiss)
+            val negative = NativeScannerBridge.scan(appContext, Uri.fromFile(file))
+            assertTrue("Near-miss must not reuse an old verdict: $negative", negative.yaraX is AntivirusEngine.Verdict.NoKnownMatch)
+        } finally { file.delete() }
+        // Generated control bytes prove rule execution, not malware recall.
+    }
+
 }

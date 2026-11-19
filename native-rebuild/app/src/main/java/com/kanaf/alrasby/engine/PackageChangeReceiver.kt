@@ -77,7 +77,7 @@ class PackageReviewWorker(context: Context, params: WorkerParameters) : Worker(c
             if (before != PackageBaseline.snapshot(context, name)) {
                 lines += "INCOMPLETE: package changed during scan; rescan required"
                 incomplete++
-            } else PackageBaseline.save(context, name, before)
+            } else if (!change.unverifiedSignerChange) PackageBaseline.save(context, name, before)
             lines += "APK files checked=$scanned; known matches=$matched; incomplete=$incomplete"
             lines += "Same exact hash across engines counts as one source. No match does not establish safety. Nothing deleted."
             ProtectionControl.saveInstallResult(context, lines.joinToString("\n"))

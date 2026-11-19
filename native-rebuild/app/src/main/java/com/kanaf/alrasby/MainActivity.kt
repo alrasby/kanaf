@@ -1073,21 +1073,27 @@ private fun KanafScreen(activity: Activity, sharedText: String?, sharedFile: Uri
         onImportSignedFeed = { if (!busy && trustedFeed.configured())
             feedPicker.launch(arrayOf("application/zip", "application/octet-stream")) },
         onShareReport = {
-            if ((hasScanReport || deviceScanStatus.ar.isNotBlank()) && !busy) runCatching {
-                val share = Intent(Intent.ACTION_SEND).apply {
-                    type = "text/plain"
-                    putExtra(Intent.EXTRA_TEXT, (
-                        "Kanaf " + BuildConfig.VERSION_NAME + " (" + BuildConfig.VERSION_CODE + ")\n" +
-                        java.util.Date().toString() + "\n" +
-                        com.kanaf.alrasby.engine.ProtectionHealth.describe(activity, arabic) + "\n\n" +
-                        if (deviceScanStatus.ar.isNotBlank()) deviceScanStatus.displayed(uiLanguage)
-                        else status.displayed(uiLanguage)).take(20_000))
+            if ((hasScanReport || deviceScanStatus.ar.isNotBlank()) && !busy) {
+                val currentReport = if (deviceScanStatus.ar.isNotBlank()) deviceScanStatus.displayed(uiLanguage)
+                    else status.displayed(uiLanguage)
+                scope.launch {
+                    val report = withContext(Dispatchers.IO) {
+                        runCatching {
+                            "Kanaf " + BuildConfig.VERSION_NAME + " (" + BuildConfig.VERSION_CODE + ")\n" +
+                                java.util.Date().toString() + "\n" +
+                                com.kanaf.alrasby.engine.ProtectionHealth.describe(activity, arabic) +
+                                "\n\n" + currentReport
+                        }
+                    }
+                    report.onSuccess { text ->
+                        runCatching {
+                            activity.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(Intent.EXTRA_TEXT, text.take(20_000))
+                            }, localized("مشاركة تقرير الفحص", "Share scan report")))
+                        }.onFailure { vaultStatus = KanafMessage("تعذر فتح واجهة المشاركة", "Sharing is unavailable") }
+                    }.onFailure { vaultStatus = KanafMessage("تعذر تجهيز التقرير", "Could not prepare report") }
                 }
-                activity.startActivity(Intent.createChooser(
-                    share, localized("مشاركة تقرير الفحص", "Share scan report")
-                ))
-            }.onFailure {
-                vaultStatus = KanafMessage("تعذر فتح واجهة المشاركة", "Sharing is unavailable")
             }
         },
         vaultItems = vaultEntries,

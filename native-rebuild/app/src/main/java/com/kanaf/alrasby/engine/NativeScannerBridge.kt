@@ -150,7 +150,18 @@ object NativeScannerBridge {
                 val clamPositiveExpected = NativeSelfTestPolicy.expected("clamav", clamPositive)
                 val clamNegative = if (clamPositiveExpected)
                     clamScanNative(benign.absolutePath, rulesFile.absolutePath) else "NOT_RUN"
-                clamOK = clamPositiveExpected && clamNegative == "NO_MATCH"
+                // Prove the real SHA-256 wildcard .hsb loader as well as the
+                // NDB content matcher with non-executable controls.
+                val hashControl = stagedFile(context, "kanaf-clam-hash-control-", ".hsb",
+                    NativeHashRules.clam(mapOf(digest(eicar) to "Kanaf.EICAR.Test")))
+                val hashPositive: String
+                val hashNegative: String
+                try {
+                    hashPositive = if (libraries.clamavLoaded) clamScanNative(testFile.absolutePath, hashControl.absolutePath) else "NOT_RUN"
+                    hashNegative = if (libraries.clamavLoaded) clamScanNative(benign.absolutePath, hashControl.absolutePath) else "NOT_RUN"
+                } finally { hashControl.delete() }
+                clamOK = clamPositiveExpected && clamNegative == "NO_MATCH" &&
+                    NativeSelfTestPolicy.expected("clamav", hashPositive) && hashNegative == "NO_MATCH"
                 val yaraPositive = if (libraries.yaraXLoaded && yaraRulesOK)
                     yaraScanNative(testFile.absolutePath, yaraRules) else "NOT_RUN"
                 val yaraPositiveExpected = NativeSelfTestPolicy.expected("yara-x", yaraPositive)

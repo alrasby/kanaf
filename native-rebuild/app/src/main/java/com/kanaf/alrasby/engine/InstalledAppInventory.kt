@@ -50,7 +50,8 @@ class InstalledAppInventory {
             val privacy = runCatching { PrivacyAudit.load(context, name) }.getOrDefault(emptyList())
             val snapshot = runCatching { PackageBaseline.snapshot(context, name) }.getOrNull()
             val change = snapshot?.let { runCatching { PackageBaseline.inspect(context, name, it) }.getOrNull() }
-            if (snapshot != null) runCatching { PackageBaseline.save(context, name, snapshot) }
+            if (snapshot != null && change != null && !change.unverifiedSignerChange)
+                runCatching { PackageBaseline.save(context, name, snapshot) }
             Entry(name, label, count, privacy, change?.addedPermissions.orEmpty(),
                 change?.unverifiedSignerChange ?: false, change?.baselineExists ?: false)
         }.distinctBy { it.packageName }

@@ -14,6 +14,7 @@ on:
       - 'native-rebuild/app/src/main/cpp/clam_scan_policy.h'
       - 'native-rebuild/app/src/main/assets/kanaf_test.ndb'
   workflow_dispatch:
+  workflow_call:
 concurrency:
   group: kanaf-arm64-runtime-probe
   cancel-in-progress: true
@@ -56,6 +57,12 @@ jobs:
           for so in "$dest"/*.so; do
             python3 native-rebuild/tools/verify_arm64_elf.py --require-16kb "$so"
           done
+      - name: Install Android build components
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager -print -quit)"
+          "$SDKMANAGER" "platforms;android-36" "build-tools;35.0.0" "ndk;27.2.12479018" "cmake;3.22.1"
       - name: Enable KVM access
         shell: bash
         run: |

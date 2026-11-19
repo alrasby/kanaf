@@ -1,0 +1,86 @@
+# Kanaf practical protection implementation — 2026-11-19
+
+Base: `rebuild/kanaf-native-v1` at `9c171ed1ac83878b01898605de888501c84345a8`.
+Work branch: `feature/verified-protection`, PR #3. No changes to the old web app.
+
+## Detection and trust
+
+- Normal native scans use digest-pinned real research assets in debug and release.
+- ClamAV `.hsb`: 30 exact Android file hashes from ESET Research (SpyLoan,
+  VajraSpy), BSD-2-Clause. Exact hashes do not detect all members of a family.
+- YARA-X: the same 30 Android file hashes plus the original ESET Linux/Moose
+  ELF content rules. ELF rules do not establish Android-family detection and
+  are not recursively applied to compressed APK members by YARA-X.
+- Three matches for the same ESET file hash are one evidence source.
+- EICAR remains an explicitly labelled, harmless diagnostic alongside real
+  rules. Readiness checks require positive AND negative NDB, HSB and YARA tests.
+- Source commit, author, licence, original file hashes and generated asset
+  hashes are in `assets/native_rules_provenance.json`. Original source and
+  licence notices are retained. `tools/build_native_rule_pack.py` reproduces
+  the generated assets and refuses changed pinned inputs.
+- The existing publisher key is unchanged. No private keys were requested,
+  generated or accessed. The real HTTPS feed was downloaded and verified as
+  version 1, SHA-256
+  `f9e2e00f5f8f442a60be9002b0a7fc11230bb0764f1948649680bd161b35f882`.
+- The packaging workflow configures this HTTPS URL:
+  `https://raw.githubusercontent.com/alrasby/kanaf/rebuild/kanaf-native-v1/native-rebuild/rules/eset-android-seed/kanaf-feed-v1.zip`.
+  An identical authenticated version is reported as up-to-date. Older feeds,
+  altered same-version data, invalid signatures and digest mismatches fail.
+- Signed SHA-256 updates replace exact-file rows in BOTH native engines.
+  Content-rule and engine updates ship through reviewed application builds.
+  Future feed versions must still be signed by the owner's existing key.
+
+## Practical features
+
+1. Opt-in install/update broadcasts enqueue unique package-specific workers.
+   Workers check the available base/split APKs, report partial coverage, and
+   inspect permission and signing-certificate changes. Android controls timing.
+2. Local certificate/permission baselines recognise Android-verified signing
+   rotation. Unverified changed signers do not overwrite the trusted baseline.
+3. App privacy review separates requested and granted sensitive permissions;
+   special access is referred to Android Settings, not guessed to be active.
+4. Android share sheet accepts a single `content://` file for local scanning,
+   or text for link inspection. Incoming `file://` paths are not accepted.
+5. Reports expose known matches, structural warnings, partial checks and
+   reasons. Export adds app version, rule version, health and export time.
+6. Process-local incremental verdict cache keys immutable full-file hashes,
+   BOTH rule digests, engine versions and resource policy. No incomplete
+   results are cached. File paths and timestamps never prove unchanged content.
+7. Protection health shows actual DNS state, last scan/update check, installed
+   signed database version, opt-in monitoring and scheduled work settings.
+8. Optional daily signed updates use WorkManager network/battery constraints.
+9. DNS diagnostics are OFF by default, RAM-only, capped at 64 events and
+   cleared on stop/disable. Exact-domain exceptions affect local ad rules only;
+   they do not override security rules or upstream filtering. NXDOMAIN is not
+   falsely classified as confirmed malicious-domain blocking.
+10. Optional HTTPS redirect inspection sends HEAD requests only, without cookies
+    or page bodies. It rejects credentials, non-443 ports, HTTP downgrades,
+    private/reserved addresses and loops. TLS connections use the validated IP
+    plus hostname verification, avoiding DNS rebinding between check/connect.
+
+## Validation and remaining acceptance gates
+
+- Local Python suite: 54 tests, one pre-existing skip; YARA-X 0.13.0 installed.
+- Real YARA rules compile; harmless ELF positive/near-miss controls pass. These
+  are rule semantics tests, not malware recall measurements.
+- CI adds host ClamAV format validation, safe HSB controls and an Android ARM64
+  translated runtime job covering real-content controls, near misses, EICAR,
+  20 MiB files and over-limit rejection.
+- `tools/evaluate_detection_pack.py` measures both formats on SHA-pinned labelled
+  corpora and reports missing samples/engines separately. Fixture matches never
+  enter malware recall rates; absent malicious samples yield null recall.
+- Independent, representative benign APK and real-malware corpora remain
+  necessary before declaring efficacy or production approval. The present
+  limited rules are not comparable in coverage to a full commercial database.
+- Device battery/RAM measurements, OEM background behaviour, VPN/DNS bypass
+  tests, expanded UI/device tests, publisher-signed release and store review
+  remain required. Production gates are retained and must not be bypassed.
+
+## Resume
+
+Read this file and PR #3 checks before repeating work. Latest local changes
+include source-pinned native assets, protection workers, privacy/certificate
+review, DNS diagnostics, redirects, share/report flows, tests and CI wiring.
+First CI caught a permission-flag constant referenced on PackageManager;
+corrected to PackageInfo. Continue from the latest PR head, inspect failed job
+logs once, fix the cause, then fetch the exact successful APK and evidence.

@@ -1474,7 +1474,7 @@ fun KanafGlassHome(
                     textAlign = TextAlign.Center
                 )
                 Text(
-                    tr("نسخة تطويرية · فحص تلقائي بطلب المستخدم وقواعد محدودة", "Preview build · on-demand automatic scanning, limited test rules"),
+                    tr("نسخة تطويرية · فحص تلقائي بطلب المستخدم وقواعد محدودة", "Preview build · on-demand automatic scanning, limited research rules"),
                     modifier = Modifier.fillMaxWidth(),
                     color = secondary, style = MaterialTheme.typography.labelSmall,
                     textAlign = TextAlign.Center

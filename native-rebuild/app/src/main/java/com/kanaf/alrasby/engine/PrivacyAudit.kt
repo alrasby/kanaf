@@ -37,7 +37,7 @@ object PrivacyAudit {
         val info = context.packageManager.getPackageInfo(packageName, PackageManager.GET_PERMISSIONS)
         return info.requestedPermissions.orEmpty().mapIndexed { index, name ->
             Permission(name, ((info.requestedPermissionsFlags?.getOrNull(index) ?: 0) and
-                PackageManager.REQUESTED_PERMISSION_GRANTED) != 0)
+                android.content.pm.PackageInfo.REQUESTED_PERMISSION_GRANTED) != 0)
         }.filter { isSensitive(it.name) }
     }
 }
