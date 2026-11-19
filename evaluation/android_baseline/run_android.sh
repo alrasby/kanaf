@@ -14,10 +14,15 @@ adb install -r -t app/build/outputs/apk/debug/app-debug.apk
 adb install -r -t app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
 cd ..
 adb shell run-as com.kanaf.alrasby mkdir -p files/independent-evaluation
-for file in /tmp/kanaf-evaluation-samples/*.sample; do
-  adb exec-in run-as com.kanaf.alrasby tee "files/independent-evaluation/$(basename "$file")" < "$file" > /dev/null
-done
-adb exec-in run-as com.kanaf.alrasby tee files/independent-evaluation/corpus-manifest.json < evaluation/android_baseline/corpus-manifest.json > /dev/null
+# exec-in only forwards stdin and never drains remote stdout; combining it
+# with tee deadlocks on larger files. Shell-v2 -T preserves binary data, drains
+# both output streams, propagates EOF and reports the remote exit status.
+# A single trusted tar stream avoids 120 separate ADB transfers. Members are
+# only SHA-named 0600 .sample data, never installed or run.
+echo 'Transferring frozen samples as app-private data'
+tar -C /tmp/kanaf-evaluation-samples -cf - . | timeout 180 adb shell -T run-as com.kanaf.alrasby tar -xf - -C files/independent-evaluation
+timeout 30 adb shell -T run-as com.kanaf.alrasby tee files/independent-evaluation/corpus-manifest.json < evaluation/android_baseline/corpus-manifest.json > /dev/null
+echo 'Corpus transfer completed; starting offline static measurement'
 adb shell svc wifi disable
 adb shell svc data disable
 mkdir -p /tmp/kanaf-evaluation-reports
