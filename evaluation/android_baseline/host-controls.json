@@ -1,0 +1,13 @@
+{
+  "sample_execution": false,
+  "controls": [
+    [
+      "positive",
+      "DETECTED:Kanaf.Control.UNOFFICIAL"
+    ],
+    [
+      "negative",
+      "NO_MATCH"
+    ]
+  ]
+}

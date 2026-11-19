@@ -1,0 +1,91 @@
+name: Kanaf independent frozen corpus benchmark
+on:
+  push:
+    branches: [evaluation/independent-baseline]
+    paths:
+      - 'evaluation/android_baseline/**'
+      - 'native-rebuild/app/src/androidTest/java/com/kanaf/alrasby/IndependentCorpusAndroidTest.kt'
+      - '.github/workflows/kanaf-independent-benchmark.yml'
+  workflow_dispatch:
+concurrency:
+  group: kanaf-independent-benchmark
+  cancel-in-progress: true
+permissions:
+  contents: read
+  actions: read
+jobs:
+  arm64-native:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Download pinned, verified ARM64 native engines
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          CLAM_RUN=43745138794
+          YARA_RUN=43745138817
+          # The ClamAV compilation job may finish before its independent
+          # APK smoke-test job. Only the successful compiler artifact is used.
+          test "$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$CLAM_RUN/jobs" --jq '.jobs[] | select(.name == "clamav") | .conclusion')" = success
+          test "$(gh run view "$YARA_RUN" --repo "$GITHUB_REPOSITORY" --json conclusion --jq .conclusion)" = success
+          dest=native-rebuild/app/src/main/jniLibs/arm64-v8a
+          mkdir -p "$dest" /tmp/kanaf-clam /tmp/kanaf-yara
+          gh run download "$CLAM_RUN" --repo "$GITHUB_REPOSITORY" -n kanaf-clamav-arm64-diagnostics -D /tmp/kanaf-clam
+          test "$(tr -d '\n' < /tmp/kanaf-clam/revision.txt)" = "5853e1396777bae4d909cd3dd44f58352e7cf9b3"
+          gh run download "$YARA_RUN" --repo "$GITHUB_REPOSITORY" -n kanaf-yarax-arm64-diagnostics -D /tmp/kanaf-yara
+          cp /tmp/kanaf-clam/arm64-output/libclamav.so "$dest/"
+          cp /tmp/kanaf-clam/arm64-output/libclammspack.so "$dest/"
+          cp /tmp/kanaf-yara/libyara_x_capi.so "$dest/"
+          for so in "$dest"/*.so; do
+            python3 native-rebuild/tools/verify_arm64_elf.py --require-16kb "$so"
+          done
+      - name: Install Android build components
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager -print -quit)"
+          "$SDKMANAGER" "platforms;android-36" "build-tools;35.0.0" "ndk;27.2.12479018" "cmake;3.22.1"
+      - name: Verify frozen corpus and unchanged production definitions
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin 4cb2ea8366a6a39def42a33c0104dc144d905d46 --depth=1
+          git diff --exit-code 4cb2ea8366a6a39def42a33c0104dc144d905d46 -- native-rebuild/app/src/main native-rebuild/app/build.gradle.kts
+          python3 evaluation/android_baseline/download_frozen.py evaluation/android_baseline/corpus-manifest.json /tmp/kanaf-evaluation-samples
+      - name: Enable KVM access
+        shell: bash
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Test actual ARM64 JNI on Android 35 translated emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          ram-size: 3072M
+          heap-size: 384M
+          emulator-boot-timeout: 900
+          disable-animations: true
+          working-directory: .
+          script: bash evaluation/android_baseline/run_android.sh
+      - name: Upload runtime instrumentation reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kanaf-independent-corpus-evidence
+          path: |
+            /tmp/kanaf-evaluation-reports/
+          if-no-files-found: warn
