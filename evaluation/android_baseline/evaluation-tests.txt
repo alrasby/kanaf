@@ -1,0 +1,11 @@
+test_actual_manifest_has_no_duplicates_or_training_hash_overlap (test_evaluation.EvaluationIntegrityTest.test_actual_manifest_has_no_duplicates_or_training_hash_overlap) ... ok
+test_all_incomplete_is_undefined_rate (test_evaluation.EvaluationIntegrityTest.test_all_incomplete_is_undefined_rate) ... ok
+test_android_summary_rejects_partial_or_duplicate_report (test_evaluation.EvaluationIntegrityTest.test_android_summary_rejects_partial_or_duplicate_report) ... ok
+test_incomplete_scans_are_excluded_from_completed_denominator (test_evaluation.EvaluationIntegrityTest.test_incomplete_scans_are_excluded_from_completed_denominator) ... ok
+test_non_apk_collector_files_do_not_inflate_apk_recall (test_evaluation.EvaluationIntegrityTest.test_non_apk_collector_files_do_not_inflate_apk_recall) ... ok
+test_zero_observed_false_alarms_does_not_mean_zero_population_rate (test_evaluation.EvaluationIntegrityTest.test_zero_observed_false_alarms_does_not_mean_zero_population_rate) ... ok
+
+----------------------------------------------------------------------
+Ran 6 tests in 0.003s
+
+OK

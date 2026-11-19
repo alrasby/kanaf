@@ -1,0 +1,96 @@
+{
+  "platform": "Linux x86_64 host baseline; not Android device results",
+  "scope": "114 files structurally APK: 54 collector-labelled malware and 60 reference-benign",
+  "counts": {
+    "clamav": {
+      "malicious": {
+        "matched": 0,
+        "unmatched": 41,
+        "incomplete": 13
+      },
+      "benign": {
+        "matched": 0,
+        "unmatched": 17,
+        "incomplete": 43
+      }
+    },
+    "yara_x": {
+      "malicious": {
+        "matched": 0,
+        "unmatched": 54,
+        "incomplete": 0
+      },
+      "benign": {
+        "matched": 0,
+        "unmatched": 60,
+        "incomplete": 0
+      }
+    }
+  },
+  "metrics": {
+    "clamav": {
+      "malicious": {
+        "total": 54,
+        "completed": 41,
+        "incomplete": 13,
+        "matched": 0,
+        "match_rate_completed": 0.0,
+        "wilson_95_completed": [
+          0,
+          0.08566757018443186
+        ],
+        "all_input_match_rate_bounds": [
+          0.0,
+          0.24074074074074073
+        ]
+      },
+      "benign": {
+        "total": 60,
+        "completed": 17,
+        "incomplete": 43,
+        "matched": 0,
+        "match_rate_completed": 0.0,
+        "wilson_95_completed": [
+          0,
+          0.1843181350088518
+        ],
+        "all_input_match_rate_bounds": [
+          0.0,
+          0.7166666666666667
+        ]
+      }
+    },
+    "yara_x": {
+      "malicious": {
+        "total": 54,
+        "completed": 54,
+        "incomplete": 0,
+        "matched": 0,
+        "match_rate_completed": 0.0,
+        "wilson_95_completed": [
+          0,
+          0.0664135880908964
+        ],
+        "all_input_match_rate_bounds": [
+          0.0,
+          0.0
+        ]
+      },
+      "benign": {
+        "total": 60,
+        "completed": 60,
+        "incomplete": 0,
+        "matched": 0,
+        "match_rate_completed": 0.0,
+        "wilson_95_completed": [
+          0,
+          0.06017185214208986
+        ],
+        "all_input_match_rate_bounds": [
+          0.0,
+          0.0
+        ]
+      }
+    }
+  }
+}

@@ -9,5 +9,11 @@
       "negative",
       "NO_MATCH"
     ]
-  ]
+  ],
+  "yara_x_controls": {
+    "positive": [
+      "moose_2"
+    ],
+    "near_miss": []
+  }
 }
