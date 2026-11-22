@@ -1,4 +1,4 @@
-name: Kanaf full ClamAV Android benchmark
+name: Kanaf repeat benign APK performance benchmark
 on:
   push:
     branches: [evaluation/full-clamav-android]
@@ -16,7 +16,11 @@ permissions:
 jobs:
   arm64-native:
     runs-on: ubuntu-24.04
-    timeout-minutes: 65
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -55,31 +59,42 @@ jobs:
           set -euo pipefail
           SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager -print -quit)"
           "$SDKMANAGER" "platforms;android-36" "build-tools;35.0.0" "ndk;27.2.12479018" "cmake;3.22.1"
-      - name: Verify frozen corpus and unchanged production definitions
-        shell: bash
+      - name: Freeze the same benign APKs and candidate code
+        env:
+          SHARD: ${{ matrix.shard }}
         run: |
           set -euo pipefail
-          git fetch origin 238bad75bde10aebb44cf4565109e40a3dbc59e1 --depth=1
-          git diff --exit-code 238bad75bde10aebb44cf4565109e40a3dbc59e1 -- native-rebuild/app/src/main native-rebuild/app/build.gradle.kts
-          python3 evaluation/android_baseline/download_frozen.py evaluation/android_baseline/corpus-manifest.json /tmp/kanaf-evaluation-samples
-      - name: Prepare original Cisco signature databases
-        run: |
-          set -euo pipefail
-          cd "$RUNNER_TEMP"
-          curl --fail --location --retry 2 -o clamav.deb \
-            https://github.com/Cisco-Talos/clamav/releases/download/clamav-1.4.6/clamav-1.4.6.linux.x86_64.deb
-          echo 'd3ee9e401974855a1edc1761b1425417d126de618d5f0c91cd51209f69f6fcc2  clamav.deb' | sha256sum -c
-          dpkg-deb -x clamav.deb clam
-          export PATH="$RUNNER_TEMP/clam/usr/local/bin:$PATH"
-          export LD_LIBRARY_PATH="$RUNNER_TEMP/clam/usr/local/lib"
-          "$GITHUB_WORKSPACE/native-rebuild/tools/prepare_official_clamav.sh" "$RUNNER_TEMP/clamav-assets"
-      - name: Retrieve and verify the 109 already measured cases
+          git fetch origin 9a8b9a8ae45b0ba851927d0e35647c6e31a2159d --depth=1
+          git diff --exit-code 9a8b9a8ae45b0ba851927d0e35647c6e31a2159d -- native-rebuild/app/src/main native-rebuild/app/build.gradle.kts
+          python3 - <<'PYTHON'
+          import json, os
+          from pathlib import Path
+          manifest = json.loads(Path("evaluation/android_baseline/corpus-manifest.json").read_bytes())
+          rows = [r for r in manifest["samples"] if r["label"] == "benign" and r["zip_has_android_manifest"]]
+          assert len(rows) == 60 and len({r["sha256"] for r in rows}) == 60
+          manifest["samples"] = rows[int(os.environ["SHARD"])::6]
+          Path(os.environ["RUNNER_TEMP"], "kanaf-benchmark-shard.json").write_text(json.dumps(manifest))
+          PYTHON
+          python3 evaluation/android_baseline/download_frozen.py "$RUNNER_TEMP/kanaf-benchmark-shard.json" /tmp/kanaf-evaluation-samples
+      - name: Extract the same official CVDs used by the baseline
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          gh run download 44504845526 --repo alrasby/kanaf -n kanaf-independent-corpus-evidence -D "$RUNNER_TEMP/benchmark-prefix"
-          echo "4862866f6392268ee7a5db7b73acefef6751140254d8fe268520ba92d7ebb9f4  $RUNNER_TEMP/benchmark-prefix/android-results.json" | sha256sum -c
+          gh run download 44503630071 --repo alrasby/kanaf -n kanaf-full-clamav-arm64-test -D "$RUNNER_TEMP/benchmark-cvd-apk"
+          cd "$RUNNER_TEMP/benchmark-cvd-apk"
+          sha256sum -c SHA256SUMS.txt
+          target="$RUNNER_TEMP/clamav-assets/official-clamav"
+          mkdir -p "$target"
+          for name in main daily bytecode; do
+            unzip -p Kanaf-Full-ClamAV-238bad7-arm64.apk "assets/official-clamav/$name.cvd" > "$target/$name.cvd"
+          done
+          cd "$target"
+          sha256sum -c <<'HASHES'
+          0b2182d229f46981ec8f535382222f7c9dfdd656b250ad47988b910a8d302365  main.cvd
+          ddc126f2b7834d1dfe5a16fc9b2851740778de5a4fc7e388dcc16d41ede09866  daily.cvd
+          6d4aa01f219e988060fc419f495d07f27e0cdf1a2cccc065971da922c76f7ffb  bytecode.cvd
+          HASHES
       - name: Compile the benchmark APKs before booting the emulator
         run: bash evaluation/android_baseline/run_android.sh build
       - name: Enable KVM access
@@ -105,7 +120,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: kanaf-independent-corpus-evidence
+          name: kanaf-benign-apk-shard-${{ matrix.shard }}
           path: |
             /tmp/kanaf-evaluation-reports/
           if-no-files-found: warn

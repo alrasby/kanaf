@@ -30,8 +30,7 @@ adb shell run-as com.kanaf.alrasby.fulltest mkdir -p files/independent-evaluatio
 # only SHA-named 0600 .sample data, never installed or run.
 echo 'Transferring frozen samples as app-private data'
 tar -C /tmp/kanaf-evaluation-samples -cf - . | timeout 180 adb shell -T run-as com.kanaf.alrasby.fulltest tar -xf - -C files/independent-evaluation
-timeout 30 adb shell -T run-as com.kanaf.alrasby.fulltest tee files/independent-evaluation/corpus-manifest.json < evaluation/android_baseline/corpus-manifest.json > /dev/null
-timeout 30 adb shell -T run-as com.kanaf.alrasby.fulltest tee files/independent-evaluation/resume-results.json < "$RUNNER_TEMP/benchmark-prefix/android-results.json" > /dev/null
+timeout 30 adb shell -T run-as com.kanaf.alrasby.fulltest tee files/independent-evaluation/corpus-manifest.json < "$RUNNER_TEMP/kanaf-benchmark-shard.json" > /dev/null
 echo 'Corpus transfer completed; starting offline static measurement'
 adb shell svc wifi disable
 adb shell svc data disable
@@ -43,11 +42,11 @@ adb shell am instrument -w -r -e class com.kanaf.alrasby.IndependentCorpusAndroi
   | tee /tmp/kanaf-evaluation-reports/instrumentation.log
 adb exec-out run-as com.kanaf.alrasby.fulltest cat files/independent-evaluation/android-results.json > /tmp/kanaf-evaluation-reports/android-results.json
 set -e
+adb logcat -d -s KanafPerf:D > /tmp/kanaf-evaluation-reports/phases.log
 grep -F 'OK (1 test)' /tmp/kanaf-evaluation-reports/instrumentation.log
 python3 - <<'PY'
 import json
 p=json.load(open('/tmp/kanaf-evaluation-reports/android-results.json'))
-assert p['complete'] and len(p['cases'])==120 and p['self_test_passed']
+assert p['complete'] and len(p['cases'])==10 and p['self_test_passed']
 assert not p['sample_execution']
 PY
-python3 evaluation/android_baseline/summarize_results.py /tmp/kanaf-evaluation-reports/android-results.json evaluation/android_baseline/corpus-manifest.json /tmp/kanaf-evaluation-reports/android-summary.json
