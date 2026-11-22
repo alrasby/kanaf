@@ -56,7 +56,14 @@ jobs:
           sdkmanager="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager -print -quit)"
           test -x "$sdkmanager"
           "$sdkmanager" 'platforms;android-36' 'build-tools;35.0.0' 'ndk;27.2.12479018' 'cmake;3.22.1'
-          bash native-rebuild/tools/gradle_retry_429.sh -p native-rebuild --no-daemon \
+          init_script="$RUNNER_TEMP/kanaf-central.init.gradle"
+          cat > "$init_script" <<'GRADLE'
+          settingsEvaluated { settings ->
+              settings.pluginManagement.repositories.maven { url = uri("https://repo1.maven.org/maven2") }
+              settings.dependencyResolutionManagement.repositories.maven { url = uri("https://repo1.maven.org/maven2") }
+          }
+          GRADLE
+          bash native-rebuild/tools/gradle_retry_429.sh -p native-rebuild --no-daemon -I "$init_script" \
             -PkanafOfficialClamAssets="$RUNNER_TEMP/clamav-assets" -PkanafArm64Runtime=true \
             :app:assembleDebug :app:testDebugUnitTest :app:assembleDebugAndroidTest
           apk="Kanaf-Full-ClamAV-${GITHUB_SHA:0:7}-arm64.apk"
