@@ -8,8 +8,8 @@ adb install -t native-rebuild/app/build/outputs/apk/androidTest/debug/app-debug-
 engine=com.kanaf.alrasby.NativeArm64EngineRuntimeTest
 ipc=com.kanaf.alrasby.NativeScannerProcessIntegrationTest
 scan=com.kanaf.alrasby.AutomaticDeviceScanAndroidTest
-tests="$engine#bothActualArm64EnginesPassEicarSelfTestThroughWorkerIpc,$engine#officialClamAvCompletesSeventyMiBAndYaraReportsItsOwnLimit,$engine#realYaraContentRuleRunsOnHarmlessControlAndRejectsNearMiss,$ipc#workerDeathFailsClosedAndNextScanRecovers,$scan#activeDeviceScanKeepsItsOwnerAfterActivityRecreation"
+tests="$engine#bothActualArm64EnginesPassEicarSelfTestThroughWorkerIpc,$engine#officialClamAvCompletesSeventyMiBAndYaraReportsItsOwnLimit,$engine#realYaraContentRuleRunsOnHarmlessControlAndRejectsNearMiss,$ipc#workerDeathFailsClosedAndNextScanRecovers,$scan#activeDeviceScanKeepsItsOwnerAfterActivityRecreation,$scan#interruptionReportRestoresLastPhaseCounterAndOriginalBuild"
 adb shell am instrument -w -r -e class "$tests" \
   com.kanaf.alrasby.fulltest.test/androidx.test.runner.AndroidJUnitRunner | tee android-runtime.txt
-grep -Eq 'OK \(5 tests\)' android-runtime.txt
+grep -Eq 'OK \(6 tests\)' android-runtime.txt
 ! grep -Eq 'FAILURES|INSTRUMENTATION_FAILED' android-runtime.txt

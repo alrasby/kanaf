@@ -22,7 +22,7 @@
             <category android:name="android.intent.category.LAUNCHER" />
         </intent>
     </queries>
-    <application android:name=".KanafApplication" android:icon="@drawable/kanaf_launcher_legacy" android:roundIcon="@mipmap/ic_launcher" android:label="Kanaf" android:theme="@style/KanafTheme" android:usesCleartextTraffic="false"
+    <application android:name=".KanafApplication" android:icon="@drawable/kanaf_launcher_legacy" android:roundIcon="@mipmap/ic_launcher" android:label="${kanafAppLabel}" android:theme="@style/KanafTheme" android:usesCleartextTraffic="false"
         android:allowBackup="false" android:fullBackupContent="false">
         <activity android:name=".MainActivity" android:exported="true" android:launchMode="singleTop">
             <intent-filter>

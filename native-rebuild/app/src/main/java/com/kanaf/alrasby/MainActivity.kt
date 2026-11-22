@@ -198,14 +198,8 @@ private fun KanafScreen(
     fun startAutomaticDeviceScan() {
         if (!busy && !deviceScan.state.value.active) deviceScan.start(sharedStorageAccess)
     }
-    LaunchedEffect(deviceScanState.active, deviceScanState.result, deviceScanState.interruptedAt) {
-        val interrupted = deviceScanState.interruptedAt
-        if (interrupted != null) {
-            deviceScanStatus = KanafMessage(
-                "توقفت جلسة الفحص السابقة. آخر تقدّم محفوظ: $interrupted. يمكنك بدء فحص جديد.",
-                "The previous scan was interrupted. Last saved progress: $interrupted. Start a new scan to retry."
-            )
-        }
+    LaunchedEffect(deviceScanState.active, deviceScanState.result, deviceScanState.interruption) {
+        deviceScanState.interruption?.let { deviceScanStatus = it.description() }
         if (automaticScanActive) {
             deviceScanStatus = KanafMessage(
                 "جارٍ فحص التطبيقات والملفات المتاحة.",
@@ -458,7 +452,7 @@ private fun KanafScreen(
                         "استخدم زر الفحص لمراجعة الجهاز", "Tap Scan to inspect your device"
                     )
                     selfTestStatus = KanafMessage.EMPTY
-                    deviceScanStatus = KanafMessage.EMPTY
+                    deviceScanStatus = deviceScanState.interruption?.description() ?: KanafMessage.EMPTY
                     scanHistoryArabic.clear()
                     scanHistoryEnglish.clear()
                 }

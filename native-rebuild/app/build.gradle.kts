@@ -48,6 +48,10 @@ android {
     }
     defaultConfig {
         buildConfigField("String", "KANAF_OFFICIAL_CLAM_DIGESTS", "\"$officialClamDigests\"")
+        val revision = providers.environmentVariable("GITHUB_SHA").orNull.orEmpty()
+            .takeIf { it.matches(Regex("[0-9a-f]{40}")) }?.take(7) ?: "local"
+        buildConfigField("String", "KANAF_BUILD_REVISION", "\"$revision\"")
+        manifestPlaceholders["kanafAppLabel"] = "Kanaf"
         applicationId = "com.kanaf.alrasby"
         minSdk = 26
         targetSdk = 36
@@ -146,6 +150,7 @@ android {
         getByName("debug") {
             if (officialClamAssets != null) {
                 applicationIdSuffix = ".fulltest"
+                manifestPlaceholders["kanafAppLabel"] = "Kanaf Test"
                 versionNameSuffix = "-full-clamav-test"
             }
         }

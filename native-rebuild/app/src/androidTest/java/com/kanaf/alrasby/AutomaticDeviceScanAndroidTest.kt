@@ -32,6 +32,27 @@ class AutomaticDeviceScanAndroidTest {
         }
     }
 
+    @Test fun interruptionReportRestoresLastPhaseCounterAndOriginalBuild() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val prefs = context.getSharedPreferences("device_scan_checkpoint", 0)
+        prefs.edit().clear().putInt("attempted", 1224).putString("phase", "files")
+            .putString("build", "previous").commit()
+        try {
+            ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+                scenario.onActivity { activity ->
+                    val session = ViewModelProvider(activity)[DeviceScanSession::class.java]
+                    val interruption = checkNotNull(session.state.value.interruption)
+                    assertFalse(session.state.value.active)
+                    assertEquals(1224, interruption.attempted)
+                    assertTrue(interruption.description().en.contains("shared files"))
+                    assertTrue(interruption.description().en.contains("Build previous"))
+                }
+            }
+        } finally {
+            prefs.edit().clear().commit()
+        }
+    }
+
     @Test fun appOnlyScanIsBoundedAndHonestAboutUnavailableNativeChecks() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val started = android.os.SystemClock.elapsedRealtime()

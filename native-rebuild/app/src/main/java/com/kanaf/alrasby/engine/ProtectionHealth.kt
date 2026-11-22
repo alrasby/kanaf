@@ -44,8 +44,13 @@ object ProtectionHealth {
             "Rule sources: ESET Research (BSD-2-Clause); ReversingLabs (MIT)"
         ).joinToString("\n") else ""
         return listOf(
+            tr("بناء كنف", "Kanaf build") + ": " + com.kanaf.alrasby.BuildConfig.VERSION_NAME +
+                " · " + com.kanaf.alrasby.BuildConfig.KANAF_BUILD_REVISION,
+            tr("قاعدة ClamAV الرسمية", "Official ClamAV database") + ": " +
+                if (OfficialClamDatabase.bundled) tr("مضمّنة في هذا البناء", "Bundled in this build")
+                else tr("تُستخدم القواعد المحلية", "Uses local rules"),
             tr("إصدارات المحركات في هذا البناء", "Engine versions in this build") + ": ClamAV 1.4.6 · YARA-X 0.13.0",
-            tr("قاعدة البصمات الموقعة", "Signed hash database") + ": " + (repo?.let { "v${it.version} · ${it.count}" } ?: tr("غير متاحة", "Unavailable")),
+            tr("حزمة بصمات الناشر", "Publisher hash feed") + ": " + (repo?.let { "v${it.version} · ${it.count}" } ?: tr("غير متاحة", "Unavailable")),
             tr("آخر تحقق ناجح من التحديثات", "Last successful update check") + ": " + date("last_update_check"),
             tr("التحديث اليومي بإذن المستخدم", "Opt-in daily updates") + ": " + state(autoUpdateEnabled(context)),
             tr("آخر فحص للجهاز", "Last device scan") + ": " + date("last_scan"),
