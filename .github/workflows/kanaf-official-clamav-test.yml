@@ -65,12 +65,15 @@ jobs:
           GRADLE
           bash native-rebuild/tools/gradle_retry_429.sh -p native-rebuild --no-daemon -I "$init_script" \
             -PkanafOfficialClamAssets="$RUNNER_TEMP/clamav-assets" -PkanafArm64Runtime=true \
+            -PkanafCrashDiagnosticsTest=true \
             :app:assembleDebug :app:testDebugUnitTest :app:assembleDebugAndroidTest
           apk="Kanaf-Full-ClamAV-${GITHUB_SHA:0:7}-arm64.apk"
           cp native-rebuild/app/build/outputs/apk/debug/app-debug.apk "$apk"
           tools="$ANDROID_HOME/build-tools/35.0.0"
           "$tools/apksigner" verify "$apk"
-          "$tools/aapt2" dump badging "$apk" | grep -F "application-label:'Kanaf Test'"
+          "$tools/aapt2" dump badging "$apk" > "$RUNNER_TEMP/kanaf-badging.txt"
+          grep -F "package: name='com.kanaf.alrasby.fulltest.diagnostics'" "$RUNNER_TEMP/kanaf-badging.txt"
+          grep -F "application-label:'Kanaf Test'" "$RUNNER_TEMP/kanaf-badging.txt"
           "$tools/zipalign" -c -P 16 4 "$apk"
           for name in main daily bytecode; do
             expected="$(sha256sum "$RUNNER_TEMP/clamav-assets/official-clamav/$name.cvd" | cut -d' ' -f1)"
@@ -93,6 +96,8 @@ jobs:
           sudo udevadm trigger --name-match=kvm
       - name: Exercise the packaged ARM64 scanners on Android
         uses: reactivecircus/android-emulator-runner@v2
+        env:
+          KANAF_TEST_APP_ID: com.kanaf.alrasby.fulltest.diagnostics
         with:
           api-level: 35
           target: google_apis

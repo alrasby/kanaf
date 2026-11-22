@@ -149,7 +149,8 @@ android {
     buildTypes {
         getByName("debug") {
             if (officialClamAssets != null) {
-                applicationIdSuffix = ".fulltest"
+                val crashDiagnostics = providers.gradleProperty("kanafCrashDiagnosticsTest").orNull == "true"
+                applicationIdSuffix = if (crashDiagnostics) ".fulltest.diagnostics" else ".fulltest"
                 manifestPlaceholders["kanafAppLabel"] = "Kanaf Test"
                 versionNameSuffix = "-full-clamav-test"
             }
