@@ -4,6 +4,7 @@
 #include "yara_scan_policy.h"
 #include "file_snapshot.h"
 #include <dlfcn.h>
+#include <chrono>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -217,15 +218,32 @@ public:
         if (!file || !directory || !temp) return incomplete("clamav-official-missing-path");
         if (!initialized_) {
             initialized_ = true;
+#ifndef NDEBUG
+            const auto began = std::chrono::steady_clock::now();
+#endif
             error_ = initialize(directory, temp);
+#ifndef NDEBUG
+            auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::steady_clock::now() - began).count();
+            __android_log_print(ANDROID_LOG_INFO, "KanafPerf", "clam_init_ms=%lld", static_cast<long long>(ms));
+#endif
         }
         if (error_) return incomplete(error_);
         struct stat input {};
         if (stat(file, &input) != 0 || !S_ISREG(input.st_mode))
             return incomplete("clamav-official-input-unavailable");
+
+        const int fd = open(file, O_RDONLY | O_CLOEXEC | O_NOFOLLOW);
+        if (fd < 0) return incomplete("clamav-official-input-unavailable");
+        unsigned char magic[4]{};
+        const auto read = pread(fd, magic, sizeof(magic), 0);
+        close(fd);
+        if (read < 0) return incomplete("clamav-official-input-unavailable");
+        const bool zip = read == sizeof(magic) && kanaf::isZipHeader(magic);
         constexpr int maxScanTimeField = 31; // CL_ENGINE_MAX_SCANTIME, milliseconds.
-        const auto budgetMs = input.st_size > 64 * kanaf::MiB ? 90'000L : 20'000L;
-        if (configure_(engine_, maxScanTimeField, budgetMs) != 0)
+        constexpr int maxFilesField = 3; // CL_ENGINE_MAX_FILES.
+        if (configure_(engine_, maxScanTimeField, kanaf::officialScanBudgetMs(input.st_size, zip)) != 0 ||
+            configure_(engine_, maxFilesField, zip ? 4096 : 2048) != 0)
             return incomplete("clamav-official-limits-unavailable");
         const char* name = nullptr;
         unsigned long scanned = 0;
@@ -335,7 +353,20 @@ std::string yaraScan(const char* file, const char* rulesSource) {
         return incomplete(kanaf::snapshotFailureReason(snapshot.status));
     }
     const auto& bytes = snapshot.bytes;
-    void* lib = dlopen("libyara_x_capi.so", RTLD_NOW | RTLD_LOCAL);
+    // A worker executes requests serially. Keep the rules and their library
+    // alive together, and give each input a fresh scanner and timeout.
+    struct CompiledRules {
+        void* library = dlopen("libyara_x_capi.so", RTLD_NOW | RTLD_LOCAL);
+        void* rules = nullptr;
+        std::string source;
+        void (*destroy)(void*) = nullptr;
+        ~CompiledRules() {
+            if (rules) destroy(rules);
+            if (library) dlclose(library);
+        }
+    };
+    static CompiledRules compiled;
+    void* lib = compiled.library;
     if (!lib) return incomplete("yara-load-failed");
     auto compile = symbol<int (*)(const char*, void**)>(lib, "yrx_compile");
     auto destroyRules = symbol<void (*)(void*)>(lib, "yrx_rules_destroy");
@@ -346,33 +377,38 @@ std::string yaraScan(const char* file, const char* rulesSource) {
     auto identifier = symbol<int (*)(const void*, const uint8_t**, size_t*)>(lib, "yrx_rule_identifier");
     auto setTimeout = symbol<int (*)(void*, uint64_t)>(lib, "yrx_scanner_set_timeout");
     if (!compile || !destroyRules || !createScanner || !destroyScanner || !onMatch || !scan || !identifier || !setTimeout) {
-        dlclose(lib);
         return incomplete("yara-api-unavailable");
     }
-    std::string answer = incomplete("yara-compile-failed");
-    void* rules = nullptr;
-    if (compile(rulesSource, &rules) == 0 && rules) {
-        void* scanner = nullptr;
-        if (createScanner(rules, &scanner) == 0 && scanner) {
-            YaraMatch match{{}, identifier};
-            // YARA-X 0.13.0 supplies a cooperative timeout in seconds.
-            // The scanner process watchdog still handles a hung native parser.
-            if (setTimeout(scanner, kanaf::kYaraTimeoutSeconds) != 0) {
-                answer = incomplete("yara-timeout-unavailable");
-            } else if (onMatch(scanner, onYaraMatch, &match) != 0) {
-                answer = incomplete("yara-callback-failed");
-            } else if (scan(scanner, bytes.empty() ? reinterpret_cast<const uint8_t*>("") : bytes.data(), bytes.size()) != 0) {
-                answer = incomplete("yara-scan-failed-or-timeout");
-            } else {
-                answer = kanaf::classifyYaraMatches(match.state);
-            }
-            destroyScanner(scanner);
-        } else {
-            answer = incomplete("yara-scanner-failed");
+    if (!compiled.rules || compiled.source != rulesSource) {
+        void* replacement = nullptr;
+        if (compile(rulesSource, &replacement) != 0 || !replacement) {
+            if (replacement) destroyRules(replacement);
+            return incomplete("yara-compile-failed");
         }
-        destroyRules(rules);
+        if (compiled.rules) destroyRules(compiled.rules);
+        compiled.rules = replacement;
+        compiled.destroy = destroyRules;
+        compiled.source = rulesSource;
     }
-    dlclose(lib);
+    std::string answer;
+    void* scanner = nullptr;
+    if (createScanner(compiled.rules, &scanner) == 0 && scanner) {
+        YaraMatch match{{}, identifier};
+        // YARA-X 0.13.0 supplies a cooperative timeout in seconds.
+        // The scanner process watchdog still handles a hung native parser.
+        if (setTimeout(scanner, kanaf::kYaraTimeoutSeconds) != 0) {
+            answer = incomplete("yara-timeout-unavailable");
+        } else if (onMatch(scanner, onYaraMatch, &match) != 0) {
+            answer = incomplete("yara-callback-failed");
+        } else if (scan(scanner, bytes.empty() ? reinterpret_cast<const uint8_t*>("") : bytes.data(), bytes.size()) != 0) {
+            answer = incomplete("yara-scan-failed-or-timeout");
+        } else {
+            answer = kanaf::classifyYaraMatches(match.state);
+        }
+        destroyScanner(scanner);
+    } else {
+        answer = incomplete("yara-scanner-failed");
+    }
     return answer;
 }
 }  // namespace
