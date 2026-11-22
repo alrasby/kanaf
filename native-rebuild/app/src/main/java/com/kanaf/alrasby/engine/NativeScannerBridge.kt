@@ -280,6 +280,8 @@ object NativeScannerBridge {
                 engineVersion = "0.13.0",
                 rulesVersion = if (production) "research-native-v2" else "EICAR-test-v1")
 
+            val timed = BuildConfig.DEBUG
+            val stageStarted = android.os.SystemClock.elapsedRealtime()
             val selected = File.createTempFile("kanaf-scan-", ".bin", context.cacheDir)
             target = selected
             var copiedBytes = -1L
@@ -309,6 +311,7 @@ object NativeScannerBridge {
                 return report(incomplete("staged-file-integrity-failed"),
                     incomplete("staged-file-integrity-failed"))
             }
+            val stageReady = android.os.SystemClock.elapsedRealtime()
             // A cached mobile verdict does not record whether the full engine
             // actually ran. Full builds reuse the compiled engine, not that verdict.
             val cacheKey = if (production && !OfficialClamDatabase.bundled &&
@@ -346,15 +349,23 @@ object NativeScannerBridge {
                     if (official is AntivirusEngine.Verdict.NoKnownMatch) localClam else official
                 }
             }
+            val clamDone = android.os.SystemClock.elapsedRealtime()
             val yaraVerdict = if (copiedBytes > YARA_INPUT_LIMIT) incomplete("yara-input-size-limit")
             else cachedVerdicts?.second ?: if (yaraGate.ready && activeYara != null) verdict(
                 yaraScanNative(selected.absolutePath, activeYara), sha256
             ) else incomplete(if (production && realYara == null)
                 "production-yara-rules-unavailable"
             else yaraGate.unavailableReason() ?: "yara-not-ready")
+            val yaraDone = android.os.SystemClock.elapsedRealtime()
             if (!StagedFileIntegrity.verify(selected, sha256, copiedBytes, inputLimit)) {
                 return report(incomplete("staged-file-changed-during-scan"),
                     incomplete("staged-file-changed-during-scan"))
+            }
+            if (timed) {
+                val done = android.os.SystemClock.elapsedRealtime()
+                Log.d("KanafPerf", "test=$selfTestOnly stage_ms=${stageReady - stageStarted} " +
+                    "clam_ms=${clamDone - stageReady} yara_ms=${yaraDone - clamDone} " +
+                    "verify_ms=${done - yaraDone}")
             }
             cacheKey?.let { verdictCache.put(it, clamVerdict, yaraVerdict) }
             return report(clamVerdict, yaraVerdict)

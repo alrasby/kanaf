@@ -58,6 +58,19 @@ struct ClamLimit {
     long long value;
 };
 inline constexpr long long MiB = 1024LL * 1024;
+// App snapshots have generic filenames. Only ZIP magic qualifies for the
+// archive budget. Other inputs keep the existing size-based deadline.
+inline constexpr bool isZipHeader(const unsigned char (&magic)[4]) {
+    return magic[0] == 'P' && magic[1] == 'K' &&
+        ((magic[2] == 3 && magic[3] == 4) ||
+         (magic[2] == 5 && magic[3] == 6) ||
+         (magic[2] == 7 && magic[3] == 8));
+}
+
+inline constexpr long long officialScanBudgetMs(long long bytes, bool zip) {
+    return bytes > 64 * MiB ? 90'000 : (zip ? 55'000 : 20'000);
+}
+
 inline constexpr std::array<ClamLimit, 5> kClamLimits{{
     {0, 128 * MiB},  // CL_ENGINE_MAX_SCANSIZE: aggregate decompressed bytes
     {1, 64 * MiB},  // CL_ENGINE_MAX_FILESIZE: per contained file

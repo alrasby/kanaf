@@ -19,6 +19,13 @@ int main() {
     static_assert(kanaf::kClamLimits[3].field == 3);
     static_assert(kanaf::kClamLimits[4].field == 31);
     static_assert(kanaf::kClamTmpDirField == 13);
+    constexpr unsigned char zip[]{'P', 'K', 3, 4};
+    constexpr unsigned char nonZip[]{'P', 'K', 3, 6};
+    static_assert(kanaf::isZipHeader(zip));
+    static_assert(!kanaf::isZipHeader(nonZip));
+    static_assert(kanaf::officialScanBudgetMs(kanaf::MiB, false) == 20'000);
+    static_assert(kanaf::officialScanBudgetMs(kanaf::MiB, true) == 55'000);
+    static_assert(kanaf::officialScanBudgetMs(65 * kanaf::MiB, true) == 90'000);
     FakeEngine tmpEngine;
     auto setString = +[](FakeEngine* engine, int field, const char*) -> int {
         assert(field == 13);
