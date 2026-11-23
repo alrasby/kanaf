@@ -14,6 +14,10 @@ class ApkStructureInspector(
     private val maxDurationNanos: Long = 25_000_000_000L,
     private val nanoTime: () -> Long = System::nanoTime
 ) {
+    private companion object {
+        val dexName = Regex("^classes(?:[2-9]|[1-9][0-9]+)?\\.dex$")
+        val libraryName = Regex("^lib/[^/]+/[^/]+\\.so$")
+    }
     init {
         require(maxEntries > 0 && maxEntryBytes > 0 &&
             maxExpandedBytes > 0 && maxDurationNanos > 0)
@@ -33,7 +37,10 @@ class ApkStructureInspector(
         data class Incomplete(val reason: String) : Result
     }
 
-    fun inspect(input: InputStream, cancelled: () -> Boolean = { false }): Result {
+    fun inspect(input: InputStream, cancelled: () -> Boolean = { false }): Result =
+        inspect(input, requireDex = true, cancelled)
+
+    internal fun inspect(input: InputStream, requireDex: Boolean, cancelled: () -> Boolean): Result {
         val startedAt = nanoTime()
         fun stopReason(): String? = when {
             cancelled() -> "cancelled"
@@ -64,8 +71,8 @@ class ApkStructureInspector(
                         name.contains('\\') || !names.add(normalized)) unsafe++
                     if (normalized == "AndroidManifest.xml") manifest = true
                     if (normalized == "resources.arsc") resources = true
-                    if (Regex("^classes([2-9][0-9]*)?\\.dex$").matches(normalized)) dex++
-                    if (Regex("^lib/[^/]+/[^/]+\\.so$").matches(normalized)) libraries++
+                    if (dexName.matches(normalized)) dex++
+                    if (libraryName.matches(normalized)) libraries++
                     var entryBytes = 0L
                     if (!entry.isDirectory) {
                         zeroReads = 0
@@ -92,7 +99,7 @@ class ApkStructureInspector(
             return Result.Incomplete("invalid-or-unreadable-apk")
         }
         stopReason()?.let { return Result.Incomplete(it) }
-        if (!manifest || dex == 0) return Result.Incomplete("missing-required-apk-components")
+        if (!manifest || (requireDex && dex == 0)) return Result.Incomplete("missing-required-apk-components")
         return Result.Complete(Summary(entries, dex, libraries, manifest, resources, unsafe, total))
     }
 }

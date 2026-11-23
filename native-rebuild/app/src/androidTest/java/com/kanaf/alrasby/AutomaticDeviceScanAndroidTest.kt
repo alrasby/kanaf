@@ -56,8 +56,10 @@ class AutomaticDeviceScanAndroidTest {
     @Test fun appOnlyScanIsBoundedAndHonestAboutUnavailableNativeChecks() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val started = android.os.SystemClock.elapsedRealtime()
+        val updates = mutableListOf<AutomaticDeviceScan.Progress>()
         val result = AutomaticDeviceScan().run(
             context, includeSharedStorage = false,
+            progress = updates::add,
             limits = AutomaticDeviceScan.Limits(
                 apkFiles = 5, sharedFiles = 1, nativeChecks = 0,
                 durationMs = 20_000L, hashBytes = 16L * 1024 * 1024
@@ -72,5 +74,13 @@ class AutomaticDeviceScanAndroidTest {
         assertTrue("App-only QA must be bounded", result.appApksAttempted <= 5)
         assertTrue("Bounded scan must terminate",
             android.os.SystemClock.elapsedRealtime() - started < 35_000L)
+        assertEquals("inventory", updates.first().phase)
+        assertEquals("apps", updates[1].phase)
+        assertEquals(result.installedApps, updates[1].applications)
+        assertEquals(0, updates[1].appApks)
+        assertEquals(1, updates.first { it.appApks > 0 }.appApks)
+        assertTrue(result.incomplete <= result.appApksAttempted)
+        assertTrue(result.incompleteReasons.values.all { it <= result.incomplete })
+        assertEquals("done", updates.last().phase)
     }
 }

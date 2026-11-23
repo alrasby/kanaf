@@ -121,6 +121,8 @@ private fun KanafScreen(
     val scope = rememberCoroutineScope()
     val uiPreferences = remember(activity) { KanafUiPreferences(activity) }
     var uiLanguage by remember { mutableStateOf(uiPreferences.language()) }
+    val arabic = uiLanguage.isArabic()
+    fun localized(ar: String, en: String) = if (arabic) ar else en
     var hiddenSections by remember { mutableStateOf(uiPreferences.hiddenSections()) }
     var status by remember {
         mutableStateOf(KanafMessage("استخدم زر الفحص لمراجعة الجهاز", "Tap Scan to inspect your device"))
@@ -171,8 +173,13 @@ private fun KanafScreen(
     var deviceScanStatus by remember { mutableStateOf(KanafMessage.EMPTY) }
     val autoScanProgress = deviceScanState.progress?.let { progress ->
         when (progress.phase) {
-            "apps" -> "APK: " + progress.attempted
-            "files" -> "Files: " + progress.attempted
+            "inventory" -> localized("جارٍ حصر التطبيقات…", "Listing installed apps…")
+            "apps" -> localized(
+                "التطبيقات المتاحة: ${progress.applications} · حزم APK التي بدأت معالجتها: ${progress.appApks}",
+                "Available apps: ${progress.applications} · APKs started: ${progress.appApks}")
+            "files" -> localized("الملفات المشتركة: ${progress.sharedFiles}",
+                "Shared files: ${progress.sharedFiles}")
+            "done" -> localized("جارٍ إعداد التقرير…", "Preparing the report…")
             else -> ""
         }
     }.orEmpty()
@@ -209,6 +216,15 @@ private fun KanafScreen(
         deviceScanState.result?.let { result ->
             deviceScanStatus = result.fold(
                 onSuccess = { scan ->
+                    fun failureStages(arabic: Boolean): String {
+                        if (scan.workerFailureStages.isEmpty()) return ""
+                        val label = if (arabic) "آخر مراحل أبلغ عنها المحرك قبل التوقف"
+                            else "Last scanner stages reported before interruption"
+                        val stages = scan.workerFailureStages.joinToString(" · ") {
+                            com.kanaf.alrasby.engine.ScanEvidenceText.workerStage(it, arabic)
+                        }
+                        return "$label: $stages.\n"
+                    }
                     val noteAr = if (scan.sharedStorageGranted)
                         "تمت مراجعة التخزين المشترك المتاح." else
                         "لم يُمنح الوصول للملفات المشتركة؛ فُحصت حزم التطبيقات فقط."
@@ -237,11 +253,16 @@ private fun KanafScreen(
                             " (تطبيقات=" + scan.nativeInstalledAttempts +
                             "، ملفات مشتركة=" + scan.nativeSharedAttempts + ")" +
                             "، تطابقات تهديد=" + scan.matches + "، عينات اختبار=" + scan.testSamples +
-                            "، فحوص غير مكتملة=" + scan.incomplete +
+                            "، ملفات بفحص غير مكتمل=" + scan.incomplete +
                             "، تحذيرات بنيوية=" + scan.structuralWarnings +
-                            "، حدود الفحص=" + scan.truncated + ".\n" +
+                            ".\n" +
+                            (if (scan.truncated) "انتهى الفحص قبل تغطية جميع الملفات المتاحة.\n" else "") +
+                            (if (scan.inventoryIssues > 0) "عناصر تعذّر حصرها: ${scan.inventoryIssues}.\n" else "") +
+                            (if (scan.workerFailures > 0) "أعطال عملية المحرك: ${scan.workerFailures}.\n" else "") +
+                            failureStages(true) +
+                            (if (scan.nativePaused) "أُوقف فحص المحركات لهذه الجلسة، واستمر فحص البصمات.\n" else "") +
                             noteAr + "\n" +
-                            "أسباب تعذر الفحص (قد تتعدد للملف الواحد):\n" + scan.incompleteReasons.entries.joinToString("\n") {
+                            "أسباب عدم الاكتمال وعدد الملفات لكل سبب (قد يجتمع أكثر من سبب في ملف):\n" + scan.incompleteReasons.entries.sortedByDescending { it.value }.joinToString("\n") {
                                 com.kanaf.alrasby.engine.ScanEvidenceText.reason(it.key, true) + " × " + it.value
                             } + "\n" + evidenceAr.take(2200) +
                             "\nبصمات أندرويد من ESET وقواعد محتوى Linux/ELF من ESET وReversingLabs. تكرار البصمة في المحركات مصدر واحد. عدم التطابق لا يثبت السلامة. لم يُحذف أي ملف.",
@@ -254,11 +275,16 @@ private fun KanafScreen(
                             " (installed=" + scan.nativeInstalledAttempts +
                             ", shared=" + scan.nativeSharedAttempts + ")" +
                             ", threat matches=" + scan.matches + ", harmless test samples=" + scan.testSamples +
-                            ", incomplete checks=" + scan.incomplete +
+                            ", files with incomplete inspection=" + scan.incomplete +
                             ", archive warnings=" + scan.structuralWarnings +
-                            ", limits reached=" + scan.truncated + ".\n" +
-                            noteEn + "\n" + "Incomplete reasons (may overlap per file):\n" +
-                            scan.incompleteReasons.entries.joinToString("\n") {
+                            ".\n" +
+                            (if (scan.truncated) "Scan ended before all accessible files were covered.\n" else "") +
+                            (if (scan.inventoryIssues > 0) "Items that could not be listed: ${scan.inventoryIssues}.\n" else "") +
+                            (if (scan.workerFailures > 0) "Scanner process failures: ${scan.workerFailures}.\n" else "") +
+                            failureStages(false) +
+                            (if (scan.nativePaused) "Native checks paused for this session. Hash checks continued.\n" else "") +
+                            noteEn + "\n" + "Files per incomplete reason (a file may have several reasons):\n" +
+                            scan.incompleteReasons.entries.sortedByDescending { it.value }.joinToString("\n") {
                                 com.kanaf.alrasby.engine.ScanEvidenceText.reason(it.key, false) + " × " + it.value
                             } + "\n" + evidenceEn.take(2200) +
                             "\nAndroid exact-file rules and ESET/ReversingLabs Linux/ELF content rules. The same IOC across engines is one source. No match does not prove safety. Nothing deleted."
@@ -550,8 +576,6 @@ private fun KanafScreen(
         vaultEntries.clear()
         vaultEntries.addAll(vault.list(activity))
     }
-    val arabic = uiLanguage.isArabic()
-    fun localized(ar: String, en: String) = if (arabic) ar else en
     val quarantinePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null && !busy) {
             otherTaskBusy = true

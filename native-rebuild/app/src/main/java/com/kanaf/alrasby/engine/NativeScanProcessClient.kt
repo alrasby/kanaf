@@ -38,10 +38,15 @@ internal object NativeScanProcessClient {
         val started = System.currentTimeMillis()
         val done = CountDownLatch(1)
         val response = AtomicReference<NativeScannerBridge.Report>()
+        val stage = AtomicReference<NativeScanProtocol.Stage>()
         fun finish(result: NativeScannerBridge.Report) {
             if (response.compareAndSet(null, result)) done.countDown()
         }
         val callback = Messenger(Handler(Looper.getMainLooper()) { msg ->
+            if (msg.what == NativeScanProtocol.RESPONSE_STAGE) {
+                NativeScanProtocol.Stage.entries.getOrNull(msg.arg1)?.let(stage::set)
+                return@Handler true
+            }
             if (msg.what != NativeScanProtocol.RESPONSE) return@Handler false
             val report = try {
                 val data = msg.data
@@ -54,7 +59,11 @@ internal object NativeScanProcessClient {
             true
         })
         val connection = object : ServiceConnection {
+            private var requestSent = false
+
             override fun onServiceConnected(name: ComponentName, binder: IBinder) {
+                if (requestSent || response.get() != null) return
+                requestSent = true
                 try {
                     val request = Message.obtain(null, mode)
                     request.replyTo = callback
@@ -68,8 +77,7 @@ internal object NativeScanProcessClient {
                 }
             }
             override fun onServiceDisconnected(name: ComponentName) {
-                val exitCause = if (mode == NativeScanProtocol.REQUEST_FILE) exitReason(context, started) else null
-                finish(NativeScanProtocol.unavailable(exitCause ?: "scanner-process-disconnected"))
+                finish(NativeScanProtocol.unavailable("scanner-process-disconnected"))
             }
             override fun onBindingDied(name: ComponentName) {
                 finish(NativeScanProtocol.unavailable("scanner-binding-died"))
@@ -92,9 +100,17 @@ internal object NativeScanProcessClient {
                     val waitMs = if (mode == NativeScanProtocol.REQUEST_DEBUG_CRASH) 20_000L
                     else NativeScanProtocol.watchdogMs(mode, allowOfficial && OfficialClamDatabase.bundled) + 10_000L
                     if (!done.await(waitMs, TimeUnit.MILLISECONDS)) {
-                        NativeScanProtocol.unavailable("scanner-timeout")
+                        NativeScanProtocol.unavailable("scanner-timeout").copy(interruptedStage = stage.get()?.name)
                     } else {
-                        response.get() ?: NativeScanProtocol.unavailable("scanner-missing-response")
+                        val report = response.get() ?: NativeScanProtocol.unavailable("scanner-missing-response")
+                        val reason = (report.clamav as? AntivirusEngine.Verdict.Incomplete)?.reason
+                        if (mode == NativeScanProtocol.REQUEST_FILE &&
+                            (reason == "scanner-process-disconnected" || reason == "scanner-binding-died")) {
+                            val cause = exitReason(context, started)
+                            (cause?.let(NativeScanProtocol::unavailable) ?: report)
+                                .copy(interruptedStage = stage.get()?.name)
+                        } else report.copy(interruptedStage = if (reason == "scanner-watchdog-timeout")
+                            stage.get()?.name else null)
                     }
                 } catch (_: InterruptedException) {
                     Thread.currentThread().interrupt()

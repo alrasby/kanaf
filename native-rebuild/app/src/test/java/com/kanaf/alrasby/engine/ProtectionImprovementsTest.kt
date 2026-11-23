@@ -28,6 +28,8 @@ class ProtectionImprovementsTest {
     }
     @Test fun signedRowsAreRenderedAsExactFileRulesWithoutRuleInjection() {
         assertEquals("$sha:*:Android.SpyLoan:73\n", NativeHashRules.clam(mapOf(sha to "Android.SpyLoan")).toString(Charsets.US_ASCII))
+        assertEquals(mapOf(sha to "Android.SpyLoan"), NativeHashRules.parseClamExact(
+            "$sha:*:Android.SpyLoan:73\n".toByteArray(Charsets.US_ASCII)))
         assertTrue(NativeHashRules.yara(mapOf(sha to "Android.SpyLoan")).contains("hash.sha256(0, filesize) == \"$sha\""))
         assertThrows(IllegalArgumentException::class.java) { NativeHashRules.yara(mapOf(sha to "\" } rule injected { condition: true }")) }
         assertThrows(IllegalArgumentException::class.java) { NativeHashRules.clam(mapOf("bad" to "Android.Test")) }

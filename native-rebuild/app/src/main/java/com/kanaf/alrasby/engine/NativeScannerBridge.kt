@@ -32,7 +32,8 @@ object NativeScannerBridge {
     data class Report(
         val clamav: AntivirusEngine.Verdict,
         val yaraX: AntivirusEngine.Verdict,
-        val gates: List<NativeEngineGate>
+        val gates: List<NativeEngineGate>,
+        val interruptedStage: String? = null
     )
 
     private external fun clamOfficialScanNative(path: String, database: String, temporary: String): String
@@ -84,8 +85,9 @@ object NativeScannerBridge {
         NativeScanProcessClient.execute(context, NativeScanProtocol.REQUEST_SELF_TEST, null)
 
     /** Only called by the scanner Service running in :scanner. Never call from the UI process. */
-    internal fun scanInWorker(context: Context, uri: Uri, allowOfficial: Boolean): Report =
-        scanSource(context, false, allowOfficial) { context.contentResolver.openInputStream(uri) }
+    internal fun scanInWorker(context: Context, uri: Uri, allowOfficial: Boolean,
+                              stage: (NativeScanProtocol.Stage) -> Unit): Report =
+        scanSource(context, false, allowOfficial, stage) { context.contentResolver.openInputStream(uri) }
 
     internal fun selfTestInWorker(context: Context): Report =
         scanSource(context, true, true) { ByteArrayInputStream(eicar) }
@@ -110,6 +112,11 @@ object NativeScannerBridge {
         }
     }
 
+    internal fun bundledExactSignatures(context: Context): Map<String, String>? =
+        verifiedProductionAsset(context, "production_clamav.hsb",
+            BuildConfig.KANAF_NATIVE_CLAM_RULE_SHA256, ProductionNativeRulePolicy.MAX_CLAM_BYTES)
+            ?.let(NativeHashRules::parseClamExact)
+
     private val OFFICIAL_RULE_VERSION = "official-" +
         BuildConfig.KANAF_OFFICIAL_CLAM_DIGESTS.split(',').getOrNull(1).orEmpty().take(12)
 
@@ -127,12 +134,14 @@ object NativeScannerBridge {
     }
 
     private fun scanSource(context: Context, selfTestOnly: Boolean, allowOfficial: Boolean,
+                           stage: (NativeScanProtocol.Stage) -> Unit = {},
                            source: () -> InputStream?): Report {
         var clamGate = NativeEngineGate("clamav", false, false, false)
         var yaraGate = NativeEngineGate("yara-x", false, false, false)
         fun report(clam: AntivirusEngine.Verdict, yara: AntivirusEngine.Verdict) =
             Report(clam, yara, listOf(clamGate, yaraGate))
 
+        stage(NativeScanProtocol.Stage.SELF_TEST)
         val libraries = NativeLibraryLoader.probe()
         val bridgeLoaded = runCatching { System.loadLibrary("kanaf_scan"); true }.getOrDefault(false)
         if (!bridgeLoaded) return report(incomplete("jni-bridge-unavailable"), incomplete("jni-bridge-unavailable"))
@@ -282,6 +291,7 @@ object NativeScannerBridge {
 
             val timed = BuildConfig.DEBUG
             val stageStarted = android.os.SystemClock.elapsedRealtime()
+            stage(NativeScanProtocol.Stage.FILE_PREPARATION)
             val selected = File.createTempFile("kanaf-scan-", ".bin", context.cacheDir)
             target = selected
             var copiedBytes = -1L
@@ -322,6 +332,7 @@ object NativeScannerBridge {
                     digest(activeYara.toByteArray())
                 ) else null
             val cachedVerdicts = cacheKey?.let(verdictCache::get)
+            stage(NativeScanProtocol.Stage.CLAMAV_LOCAL)
             val localClam = cachedVerdicts?.first ?: if (clamGate.ready && activeClam != null) verdict(
                 clamScanNative(selected.absolutePath, activeClam.absolutePath,
                     exactFileOnly = production && OfficialClamDatabase.bundled), sha256
@@ -341,7 +352,9 @@ object NativeScannerBridge {
                 }
                 selfTestOnly || localClam is AntivirusEngine.Verdict.Detected -> localClam
                 !allowOfficial -> incomplete("clamav-official-skipped-after-worker-exit")
-                else -> scanOfficial(context, selected, sha256).let { official ->
+                else -> {
+                    stage(NativeScanProtocol.Stage.CLAMAV_OFFICIAL)
+                    val official = scanOfficial(context, selected, sha256)
                     val reason = (official as? AntivirusEngine.Verdict.Incomplete)?.reason.orEmpty()
                     clamGate = clamGate.copy(rulesVersion = OFFICIAL_RULE_VERSION,
                         rulesVerified = !reason.removePrefix("INCOMPLETE:").startsWith("clamav-official-"))
@@ -350,6 +363,7 @@ object NativeScannerBridge {
                 }
             }
             val clamDone = android.os.SystemClock.elapsedRealtime()
+            stage(NativeScanProtocol.Stage.YARA_X)
             val yaraVerdict = if (copiedBytes > YARA_INPUT_LIMIT) incomplete("yara-input-size-limit")
             else cachedVerdicts?.second ?: if (yaraGate.ready && activeYara != null) verdict(
                 yaraScanNative(selected.absolutePath, activeYara), sha256

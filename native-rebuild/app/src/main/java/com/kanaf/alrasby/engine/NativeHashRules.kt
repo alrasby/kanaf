@@ -14,6 +14,17 @@ internal object NativeHashRules {
     fun clam(rows: Map<String, String>): ByteArray = checked(rows)
         .joinToString("") { "${it.key}:*:${it.value.replace(':', '_')}:73\n" }.toByteArray(Charsets.US_ASCII)
 
+    fun parseClamExact(bytes: ByteArray): Map<String, String> {
+        val rows = linkedMapOf<String, String>()
+        bytes.toString(Charsets.US_ASCII).lineSequence().filter(String::isNotEmpty).forEach { line ->
+            val fields = line.split(':')
+            require(fields.size == 4 && fields[1] == "*" && fields[3] == "73")
+            require(rows.put(fields[0], fields[2]) == null)
+        }
+        checked(rows)
+        return rows
+    }
+
     fun yara(rows: Map<String, String>): String = checked(rows)
         .mapIndexed { i, row ->
             "rule Kanaf_Updated_Exact_$i { meta: description = \"${row.value}; exact file only\" " +

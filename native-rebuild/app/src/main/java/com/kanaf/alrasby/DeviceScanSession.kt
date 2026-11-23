@@ -67,15 +67,15 @@ internal class DeviceScanSession(application: Application) : AndroidViewModel(ap
     fun start(includeSharedStorage: Boolean) {
         if (current.value.active) return
         cancellation.set(false)
-        current.value = State(active = true)
+        current.value = State(active = true, progress = AutomaticDeviceScan.Progress(0, 0, "inventory"))
         viewModelScope.launch {
             val result = withContext(Dispatchers.IO) {
                 try {
                     checkpoint.edit().putInt("attempted", 0).putInt("pid", Process.myPid())
-                        .putLong("started", System.currentTimeMillis()).putString("phase", "apps")
+                        .putLong("started", System.currentTimeMillis()).putString("phase", "inventory")
                         .putString("build", BuildConfig.KANAF_BUILD_REVISION).commit()
                     var lastSaved = 0
-                    var phase = "apps"
+                    var phase = "inventory"
                     val report = AutomaticDeviceScan().run(getApplication(), includeSharedStorage,
                         cancelled = cancellation::get, progress = { progress ->
                             current.value = State(active = true, progress = progress)
@@ -111,12 +111,14 @@ internal class DeviceScanSession(application: Application) : AndroidViewModel(ap
 
 internal fun DeviceScanSession.Interruption.description(): KanafMessage {
     val phaseAr = when (phase) {
+        "inventory" -> "حصر التطبيقات"
         "apps" -> "التطبيقات المثبتة"
         "files" -> "الملفات المشتركة"
         "done" -> "حفظ النتيجة"
         else -> "غير معروفة"
     }
     val phaseEn = when (phase) {
+        "inventory" -> "listing installed apps"
         "apps" -> "installed apps"
         "files" -> "shared files"
         "done" -> "saving the result"

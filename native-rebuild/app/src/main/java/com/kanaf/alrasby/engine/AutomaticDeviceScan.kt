@@ -19,7 +19,10 @@ import java.util.ArrayDeque
  */
 class AutomaticDeviceScan {
     data class Finding(val source: String, val label: String, val isSignature: Boolean)
-    data class Progress(val attempted: Int, val applications: Int, val phase: String)
+    data class Progress(
+        val attempted: Int, val applications: Int, val phase: String,
+        val appApks: Int = 0, val sharedFiles: Int = 0
+    )
     data class Report(
         val installedApps: Int, val appApksAttempted: Int,
         val sharedFilesAttempted: Int, val hashed: Int, val nativeChecked: Int,
@@ -30,7 +33,11 @@ class AutomaticDeviceScan {
         val nativeInstalledAttempts: Int = 0,
         val nativeSharedAttempts: Int = 0,
         val incompleteReasons: Map<String, Int> = emptyMap(),
-        val testSamples: Int = 0
+        val testSamples: Int = 0,
+        val inventoryIssues: Int = 0,
+        val workerFailures: Int = 0,
+        val nativePaused: Boolean = false,
+        val workerFailureStages: List<String> = emptyList()
     )
 
     companion object {
@@ -41,12 +48,6 @@ class AutomaticDeviceScan {
         private const val MAX_RUNTIME_MS = 8 * 60_000L
         private const val MAX_HASH_BYTES = 256L * 1024 * 1024
         private const val MAX_NATIVE_CHECKS = 100
-        private val workerFailures = setOf(
-            "scanner-process-disconnected", "scanner-binding-died", "scanner-native-crash",
-            "scanner-worker-crash", "scanner-watchdog-timeout", "scanner-timeout",
-            "scanner-worker-out-of-memory", "scanner-worker-unresponsive"
-        )
-
         fun sharedStorageGranted(): Boolean = if (Build.VERSION.SDK_INT >= 30) {
             Environment.isExternalStorageManager()
         } else true // Android <= 10: request READ_EXTERNAL_STORAGE in the UI.
@@ -80,60 +81,72 @@ class AutomaticDeviceScan {
         fun stopped() = cancelled() || Thread.currentThread().isInterrupted ||
             SystemClock.elapsedRealtime() - start > limits.durationMs
 
-        val signatures = runCatching { SignatureRepository(context).load() }.getOrNull()
+        progress(Progress(0, 0, "inventory"))
         val canReadShared = includeSharedStorage && sharedStorageGranted()
         val allocation = NativeScanAllocation(limits.nativeChecks, canReadShared)
-        // Reuse stateless hashing objects, rather than allocating a scanner
-        // and its configuration thousands of times per one-tap scan.
-        val hashEngine = HashSignatureEngine(signatures,
-            StreamScanner(maxBytes = limits.hashBytes,
-                maxDurationNanos = 25_000_000_000L,
-                signatures = signatures ?: emptyMap()))
         val packageManager = context.packageManager
-        val applications = try {
+        val applications = runCatching {
             @Suppress("DEPRECATION")
             if (Build.VERSION.SDK_INT >= 33) {
                 packageManager.getInstalledApplications(
                     PackageManager.ApplicationInfoFlags.of(0L))
             } else packageManager.getInstalledApplications(0)
-        } catch (_: Exception) { emptyList() }
-        val packages = applications.sortedBy { it.packageName }
+        }.getOrNull()
+        val packages = applications.orEmpty().sortedBy { it.packageName }
+        progress(Progress(0, packages.size, "apps"))
+        val feed = runCatching { SignatureRepository(context).loadSnapshot() }.getOrNull()
+        val bundled = if ((feed?.version ?: 0L) <= 1L)
+            runCatching { NativeScannerBridge.bundledExactSignatures(context) }.getOrNull() else null
+        val signatures = when {
+            bundled != null -> feed?.rows.orEmpty() + bundled
+            else -> feed?.rows
+        }
+        val hashEngine = HashSignatureEngine(signatures,
+            StreamScanner(maxBytes = limits.hashBytes,
+                maxDurationNanos = 25_000_000_000L,
+                signatures = signatures.orEmpty()))
         var apkAttempted = 0
         var sharedAttempted = 0
         var hashed = 0
         var nativeChecked = 0
-        var allowOfficial = true
+        val recovery = DeviceNativeScanRecovery(OfficialClamDatabase.bundled)
+        val failureStages = linkedSetOf<String>()
+        val apkInspector = ApkStructureInspector()
         var storedApksAttempted = 0
         var matched = 0
         var testSamples = 0
         var incomplete = 0
+        var inventoryIssues = if (applications == null) 1 else 0
         var structuralWarnings = 0
         var truncated = false
         val findings = ArrayList<Finding>(16)
         val incompleteReasons = linkedMapOf<String, Int>()
         fun reason(text: String) { incompleteReasons[text.take(120)] = (incompleteReasons[text.take(120)] ?: 0) + 1 }
-        fun reasons(reports: List<EngineConsensus.Report>) = reports.forEach {
-            (it.verdict as? AntivirusEngine.Verdict.Incomplete)?.let { verdict -> reason(verdict.reason) }
-        }
         val processed = HashSet<String>()
         var notifiedAt = 0
+        var notifiedPhase = "apps"
+        var notifiedTime = SystemClock.elapsedRealtime()
 
         fun notifyProgress(phase: String) {
             val attempted = apkAttempted + sharedAttempted
-            if (attempted == 0 || attempted - notifiedAt >= 12) {
+            val now = SystemClock.elapsedRealtime()
+            if (phase != notifiedPhase || attempted - notifiedAt >= 12 ||
+                (attempted != notifiedAt && (attempted == 1 || now - notifiedTime >= 250))) {
                 notifiedAt = attempted
-                progress(Progress(attempted, packages.size, phase))
+                notifiedTime = now
+                notifiedPhase = phase
+                progress(Progress(attempted, packages.size, phase, apkAttempted, sharedAttempted))
             }
         }
 
-        fun record(file: File, display: String, installedApp: Boolean) {
+        fun record(file: File, display: String, installedApp: Boolean, isSplit: Boolean,
+                   issues: MutableSet<String>) {
             val apk = installedApp || file.name.endsWith(".apk", ignoreCase = true)
             val archived = apk || file.name.endsWith(".zip", ignoreCase = true)
-            if (stopped()) { truncated = true; return }
+            if (stopped()) { truncated = true; issues.add("scan-stopped"); return }
             if (!file.isFile || !file.canRead() || file.length() <= 0 ||
                 file.length() > limits.hashBytes) {
-                incomplete++
-                reason("file-unreadable-empty-or-size-limit")
+                issues.add("file-unreadable-empty-or-size-limit")
                 return
             }
             // All three engines must describe the same immutable file snapshot.
@@ -145,23 +158,36 @@ class AutomaticDeviceScan {
                 hashVerdict is AntivirusEngine.Verdict.Detected) {
                 hashed++ // Number of successfully computed SHA-256 hashes.
             }
-            val canNativeScan = file.length() <= NativeScannerBridge.inputLimit &&
-                !stopped() && allocation.reserve(installedApp, archived)
-            val native = if (canNativeScan) {
+            val skip = when {
+                stopped() -> "scan-stopped"
+                recovery.mode == DeviceNativeScanRecovery.Mode.PAUSED -> "native-paused-after-worker-failures"
+                file.length() > NativeScannerBridge.inputLimit -> "copy-size-limit"
+                !allocation.reserve(installedApp, archived) -> "native-budget-limit"
+                else -> null
+            }
+            val native = if (skip == null) {
                 nativeChecked++
                 try {
-                    NativeScannerBridge.scan(context, Uri.fromFile(file), allowOfficial).also { report ->
+                    NativeScannerBridge.scan(context, Uri.fromFile(file),
+                        recovery.mode == DeviceNativeScanRecovery.Mode.FULL).also { report ->
                         val failure = (report.clamav as? AntivirusEngine.Verdict.Incomplete)?.reason
-                        if (failure in workerFailures) allowOfficial = false
+                        recovery.record(failure)
+                        report.interruptedStage?.let(failureStages::add)
                     }
                 } catch (_: Exception) {
-                    null
+                    recovery.record("scanner-process-unavailable")
+                    NativeScanProtocol.unavailable("scanner-process-unavailable")
                 }
             } else null
             val clam = native?.clamav
-                ?: AntivirusEngine.Verdict.Incomplete("native-unavailable-or-limited")
+                ?: AntivirusEngine.Verdict.Incomplete(requireNotNull(skip))
             val yara = native?.yaraX
-                ?: AntivirusEngine.Verdict.Incomplete("native-unavailable-or-limited")
+                ?: AntivirusEngine.Verdict.Incomplete(requireNotNull(skip))
+            fun addIncomplete(reports: List<EngineConsensus.Report>) = reports.forEach {
+                (it.verdict as? AntivirusEngine.Verdict.Incomplete)?.let { verdict ->
+                    issues.add(verdict.reason.removePrefix("INCOMPLETE:"))
+                }
+            }
             when (val consensus = AutomaticScanVerdicts.evaluate(hashVerdict, clam, yara)) {
                 is EngineConsensus.Decision.Threat -> {
                     val diagnosticOnly = consensus.detections.all {
@@ -174,13 +200,12 @@ class AutomaticDeviceScan {
                         Finding(display, match.threatName, true))
                     // A confirmed detection may coexist with an unavailable engine.
                     // The report should still expose the incomplete coverage.
-                    if (consensus.incomplete.isNotEmpty()) { incomplete++; reasons(consensus.incomplete) }
+                    addIncomplete(consensus.incomplete)
                 }
                 is EngineConsensus.Decision.NoKnownMatch -> Unit
                 is EngineConsensus.Decision.Inconclusive -> {
-                    incomplete++
-                    reasons(consensus.incomplete)
-                    if (consensus.reason != "scan-incomplete") reason(consensus.reason)
+                    addIncomplete(consensus.incomplete)
+                    if (consensus.reason != "scan-incomplete") issues.add(consensus.reason)
                     if (consensus.uncorroboratedDetections.isNotEmpty() &&
                         findings.size < 20) {
                         findings.add(Finding(
@@ -190,7 +215,7 @@ class AutomaticDeviceScan {
             }
             if (apk && file.length() <= 32L * 1024 * 1024 && !stopped()) {
                 when (val parsed = runCatching {
-                    file.inputStream().use { ApkStructureInspector().inspect(it, ::stopped) }
+                    file.inputStream().use { apkInspector.inspect(it, requireDex = !isSplit, ::stopped) }
                 }.getOrNull()) {
                     is ApkStructureInspector.Result.Complete ->
                         if (parsed.summary.unsafePaths > 0) {
@@ -198,20 +223,25 @@ class AutomaticDeviceScan {
                             if (findings.size < 20) findings.add(
                                 Finding(display, "Unsafe APK archive paths", false))
                         }
-                    else -> { incomplete++; reason("apk-structure-incomplete") }
+                    is ApkStructureInspector.Result.Incomplete ->
+                        issues.add("apk-structure-${parsed.reason}")
+                    null -> issues.add("apk-structure-incomplete")
                 }
             }
         }
 
-        fun recordOrCountFailure(file: File, display: String, installedApp: Boolean) {
+        fun recordOrCountFailure(file: File, display: String, installedApp: Boolean, isSplit: Boolean = false) {
+            val issues = linkedSetOf<String>()
             try {
-                record(file, display, installedApp)
+                record(file, display, installedApp, isSplit, issues)
             } catch (_: java.io.IOException) {
-                incomplete++
-                reason("file-read-failed")
+                issues.add("file-read-failed")
             } catch (_: SecurityException) {
+                issues.add("file-read-failed")
+            }
+            if (issues.isNotEmpty()) {
                 incomplete++
-                reason("file-read-failed")
+                issues.forEach(::reason)
             }
         }
 
@@ -223,7 +253,7 @@ class AutomaticDeviceScan {
             val apkPaths = (listOfNotNull(app.sourceDir) +
                 (app.splitSourceDirs?.toList() ?: emptyList())).distinct()
             if (apkPaths.isEmpty()) {
-                incomplete++
+                inventoryIssues++
                 continue
             }
             for (path in apkPaths) {
@@ -233,16 +263,17 @@ class AutomaticDeviceScan {
                 }
                 if (!processed.add(path)) continue
                 apkAttempted++
-                recordOrCountFailure(File(path), app.packageName.take(96), true)
                 notifyProgress("apps")
+                recordOrCountFailure(File(path), app.packageName.take(96), true, isSplit = path != app.sourceDir)
             }
         }
 
         if (canReadShared && !stopped()) {
+            notifyProgress("files")
             val root = Environment.getExternalStorageDirectory()
             val rootCanonical = runCatching { root.canonicalPath }.getOrNull()
             if (rootCanonical == null || !root.isDirectory || !root.canRead()) {
-                incomplete++
+                inventoryIssues++
             } else {
                 val queue = ArrayDeque<Pair<File, Int>>()
                 queue.add(root to 0)
@@ -268,7 +299,7 @@ class AutomaticDeviceScan {
                                 val canonical = runCatching { entry.canonicalPath }.getOrNull()
                                 if (canonical == null ||
                                     !canonical.startsWith(rootCanonical + File.separator)) {
-                                    incomplete++
+                                    inventoryIssues++
                                     continue
                                 }
                                 if (entry.isDirectory) {
@@ -291,30 +322,29 @@ class AutomaticDeviceScan {
                                 sharedAttempted++
                                 if (entry.name.endsWith(".apk", ignoreCase = true))
                                     storedApksAttempted++
-                                recordOrCountFailure(entry, entry.name.replace('\n', ' ').take(90), false)
                                 notifyProgress("files")
+                                recordOrCountFailure(entry, entry.name.replace('\n', ' ').take(90), false)
                             }
                         }
                     } catch (_: java.io.IOException) {
-                        incomplete++
-                        reason("directory-read-failed")
+                        inventoryIssues++
                     } catch (_: java.nio.file.DirectoryIteratorException) {
-                        incomplete++
-                        reason("directory-read-failed")
+                        inventoryIssues++
                     } catch (_: SecurityException) {
-                        incomplete++
-                        reason("directory-read-failed")
+                        inventoryIssues++
                     }
                 }
             }
         }
         if (cancelled() || stopped()) truncated = true
-        progress(Progress(apkAttempted + sharedAttempted, packages.size, "done"))
+        notifyProgress("done")
         return Report(
             packages.size, apkAttempted, sharedAttempted, hashed, nativeChecked,
             matched, incomplete, structuralWarnings, truncated,
             canReadShared, signatures != null, findings,
-            storedApksAttempted, allocation.installedReserved, allocation.sharedReserved, incompleteReasons.toMap(), testSamples
+            storedApksAttempted, allocation.installedReserved, allocation.sharedReserved,
+            incompleteReasons.toMap(), testSamples, inventoryIssues, recovery.failures,
+            recovery.mode == DeviceNativeScanRecovery.Mode.PAUSED, failureStages.toList()
         )
     }
 }

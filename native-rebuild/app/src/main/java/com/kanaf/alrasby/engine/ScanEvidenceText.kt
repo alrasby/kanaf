@@ -7,8 +7,16 @@ object ScanEvidenceText {
             if (arabic) "انقطع الاتصال بعملية الفحص" else "Scanner process disconnected"
         "scanner-watchdog-timeout", "scanner-timeout" ->
             if (arabic) "تجاوز محرك الفحص المهلة المحددة" else "Scanner timed out"
-        "scanner-native-crash", "scanner-worker-crash" ->
-            if (arabic) "توقفت عملية المحرك بسبب خطأ" else "Scanner process crashed"
+        "scanner-native-crash" ->
+            if (arabic) "انهيار في الكود الأصلي للمحرك" else "Native scanner code crashed"
+        "scanner-worker-crash" ->
+            if (arabic) "انهيار في عملية خدمة الفحص" else "Scanner service process crashed"
+        "native-budget-limit" ->
+            if (arabic) "بلغ الفحص الحد المخصص للمحركات في هذه الجلسة" else "Device scan native-check budget reached"
+        "native-paused-after-worker-failures" ->
+            if (arabic) "تُخطيت المحركات بعد تعثر إعادة تشغيل خدمة الفحص" else "Native checks skipped after scanner recovery failed"
+        "scan-stopped" ->
+            if (arabic) "توقف الفحص قبل إتمام معالجة الملف" else "Scan stopped before processing the file"
         "scanner-worker-out-of-memory", "clamav-official-device-memory" ->
             if (arabic) "الذاكرة المتاحة لا تكفي لإكمال فحص المحرك" else "Insufficient memory for the engine"
         "scanner-worker-unresponsive" ->
@@ -35,6 +43,14 @@ object ScanEvidenceText {
         "file-read-failed" -> if (arabic) "تعذرت قراءة الملف" else "File could not be read"
         "directory-read-failed" -> if (arabic) "تعذرت قراءة محتويات المجلد" else "Folder contents could not be read"
         "apk-structure-incomplete" -> if (arabic) "لم يكتمل تحليل بنية APK" else "APK structure analysis incomplete"
+        "apk-structure-missing-required-apk-components" ->
+            if (arabic) "حزمة APK تفتقد مكوّنات بنيوية متوقعة" else "APK lacks expected structural components"
+        "apk-structure-entry-limit" ->
+            if (arabic) "تحليل بنية APK بلغ حد عدد العناصر" else "APK structure analysis reached its entry limit"
+        "apk-structure-entry-size-limit", "apk-structure-expanded-size-limit" ->
+            if (arabic) "تحليل بنية APK بلغ حد الحجم بعد فك الضغط" else "APK structure analysis reached its expanded size limit"
+        "apk-structure-cancelled", "apk-structure-time-limit" ->
+            if (arabic) "توقف تحليل بنية APK قبل اكتماله" else "APK structure analysis stopped before completion"
         "file-changed-between-engines" -> if (arabic) "تغير الملف بين قراءات المحركات؛ أعد الفحص" else "File changed between engine reads; rescan"
         "copy-size-limit" -> if (arabic) "حجم الملف يتجاوز الحد المتاح لمحركات الفحص" else "File exceeds the input limit of the available scanners"
         "yara-input-size-limit" -> if (arabic) "حجم الملف يتجاوز حد YARA-X البالغ 64 ميبيبايت" else "File exceeds the 64 MiB YARA-X input limit"
@@ -42,7 +58,19 @@ object ScanEvidenceText {
         "cancelled" -> if (arabic) "أوقف المستخدم الفحص" else "Scan cancelled"
         "native-library-unavailable" -> if (arabic) "مكتبة المحرك غير متاحة" else "Native library unavailable"
         "signature-database-unavailable" -> if (arabic) "قاعدة التوقيعات غير متاحة" else "Signature database unavailable"
-        else -> raw
+        else -> if (raw.startsWith("apk-structure-"))
+            if (arabic) "تعذرت قراءة بنية APK (${raw.substringAfter("apk-structure-")})"
+            else "APK structure could not be read (${raw.substringAfter("apk-structure-")})"
+        else raw
+    }
+
+    fun workerStage(stage: String, arabic: Boolean): String = when (stage) {
+        "SELF_TEST" -> if (arabic) "تهيئة المحركات" else "engine setup"
+        "FILE_PREPARATION" -> if (arabic) "تهيئة الملف" else "file preparation"
+        "CLAMAV_LOCAL" -> if (arabic) "قواعد ClamAV المحلية" else "local ClamAV rules"
+        "CLAMAV_OFFICIAL" -> if (arabic) "قاعدة ClamAV الرسمية" else "official ClamAV database"
+        "YARA_X" -> "YARA-X"
+        else -> if (arabic) "غير محددة" else "unknown"
     }
 
     fun hasConflict(decision: EngineConsensus.Decision): Boolean =

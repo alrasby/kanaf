@@ -18,11 +18,11 @@ import androidx.compose.ui.unit.dp
 /** Decorative emblem only: it never represents a device-wide security verdict. */
 @Composable
 internal fun KanafShieldEmblem(busy: Boolean, dark: Boolean) {
-    val emerald = Color(0xFF3DDFB0)
-    val ice = Color(0xFFB2F5E7)
-    val muted = if (dark) Color(0xFF72A5A8) else Color(0xFF66999B)
+    val emerald = if (dark) Color(0xFF3DDFB0) else Color(0xFF007C74)
+    val edge = if (dark) Color(0xFFB2F5E7) else Color(0xFF005D5A)
+    val muted = if (dark) Color(0xFF72A5A8) else Color(0xFF237A78)
     Box(contentAlignment = Alignment.Center) {
-        Canvas(Modifier.size(156.dp)) {
+        Canvas(Modifier.size(110.dp)) {
             val center = Offset(size.width / 2f, size.height / 2f)
             drawCircle(
                 brush = Brush.radialGradient(
@@ -33,7 +33,7 @@ internal fun KanafShieldEmblem(busy: Boolean, dark: Boolean) {
                 radius = size.minDimension * 0.5f,
                 center = center
             )
-            drawCircle(muted.copy(alpha = 0.38f), radius = size.minDimension * 0.41f,
+            drawCircle(muted.copy(alpha = 0.56f), radius = size.minDimension * 0.41f,
                 center = center, style = Stroke(width = 1.5.dp.toPx()))
             drawCircle(emerald.copy(alpha = 0.22f), radius = size.minDimension * 0.33f,
                 center = center, style = Stroke(width = 1.dp.toPx()))
@@ -49,16 +49,17 @@ internal fun KanafShieldEmblem(busy: Boolean, dark: Boolean) {
                 cubicTo(x * 0.34f, y * 0.32f, x * 0.41f, y * 0.31f, x * 0.5f, y * 0.24f)
                 close()
             }
-            drawPath(shield, brush = Brush.verticalGradient(listOf(ice, emerald)),
+            drawPath(shield, color = emerald.copy(alpha = if (dark) 0.12f else 0.10f))
+            drawPath(shield, brush = Brush.verticalGradient(listOf(edge, emerald)),
                 style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round))
-            drawLine(ice, Offset(x * 0.39f, y * 0.53f),
-                Offset(x * 0.47f, y * 0.61f), strokeWidth = 3.dp.toPx(), cap = StrokeCap.Round)
-            drawLine(ice, Offset(x * 0.47f, y * 0.61f),
-                Offset(x * 0.63f, y * 0.44f), strokeWidth = 3.dp.toPx(), cap = StrokeCap.Round)
+            drawLine(edge, Offset(x * 0.39f, y * 0.53f),
+                Offset(x * 0.47f, y * 0.61f), strokeWidth = 3.5.dp.toPx(), cap = StrokeCap.Round)
+            drawLine(edge, Offset(x * 0.47f, y * 0.61f),
+                Offset(x * 0.63f, y * 0.44f), strokeWidth = 3.5.dp.toPx(), cap = StrokeCap.Round)
         }
         if (busy) {
             CircularProgressIndicator(
-                modifier = Modifier.size(146.dp),
+                modifier = Modifier.size(104.dp),
                 color = emerald,
                 trackColor = Color.Transparent,
                 strokeWidth = 3.dp

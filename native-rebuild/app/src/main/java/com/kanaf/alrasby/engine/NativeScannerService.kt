@@ -71,7 +71,13 @@ class NativeScannerService : Service() {
                     if (requestType == NativeScanProtocol.REQUEST_SELF_TEST) {
                         NativeScannerBridge.selfTestInWorker(this@NativeScannerService)
                     } else {
-                        NativeScannerBridge.scanInWorker(this@NativeScannerService, requireNotNull(uri), allowOfficial)
+                        NativeScannerBridge.scanInWorker(
+                            this@NativeScannerService, requireNotNull(uri), allowOfficial
+                        ) { stage ->
+                            val update = Message.obtain(null, NativeScanProtocol.RESPONSE_STAGE)
+                            update.arg1 = stage.ordinal
+                            try { reply.send(update) } catch (_: Exception) { /* Client ended the request. */ }
+                        }
                     }
                 } catch (failure: Exception) {
                     Log.w("KanafScanner", "Worker exception: " + failure.javaClass.simpleName)

@@ -150,12 +150,18 @@ android {
             if (officialClamAssets != null) {
                 val crashDiagnostics = providers.gradleProperty("kanafCrashDiagnosticsTest").orNull == "true"
                 val coverageTest = providers.gradleProperty("kanafCoverageTest").orNull == "true"
+                val deviceScanTest = providers.gradleProperty("kanafDeviceScanTest").orNull == "true"
                 applicationIdSuffix = when {
+                    deviceScanTest -> ".fulltest.devicescan"
                     coverageTest -> ".fulltest.coverage"
                     crashDiagnostics -> ".fulltest.diagnostics"
                     else -> ".fulltest"
                 }
-                manifestPlaceholders["kanafAppLabel"] = if (coverageTest) "Kanaf Coverage Test" else "Kanaf Test"
+                manifestPlaceholders["kanafAppLabel"] = when {
+                    deviceScanTest -> "Kanaf Scan Test"
+                    coverageTest -> "Kanaf Coverage Test"
+                    else -> "Kanaf Test"
+                }
                 versionNameSuffix = "-full-clamav-test"
             }
         }

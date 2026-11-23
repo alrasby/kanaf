@@ -35,6 +35,12 @@ class ApkStructureInspectorTest {
         assertEquals("missing-required-apk-components", (result as ApkStructureInspector.Result.Incomplete).reason)
     }
 
+    @Test fun installedResourceSplitCanHaveNoDex() {
+        val data = ByteArrayInputStream(archive("AndroidManifest.xml", "resources.arsc"))
+        val result = ApkStructureInspector().inspect(data, requireDex = false) { false }
+        assertEquals(0, (result as ApkStructureInspector.Result.Complete).summary.dexFiles)
+    }
+
     @Test fun traversalIsReportedWithoutExtraction() {
         val result = ApkStructureInspector().inspect(ByteArrayInputStream(archive("AndroidManifest.xml", "classes.dex", "../escape")))
         assertEquals(1, (result as ApkStructureInspector.Result.Complete).summary.unsafePaths)

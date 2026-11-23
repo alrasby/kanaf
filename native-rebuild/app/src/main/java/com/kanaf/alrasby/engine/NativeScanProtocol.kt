@@ -7,6 +7,8 @@ internal object NativeScanProtocol {
     const val RESPONSE = 3
     /** Debuggable builds only. Forces scanner worker death for instrumentation recovery tests. */
     const val REQUEST_DEBUG_CRASH = 4
+    const val RESPONSE_STAGE = 5
+    enum class Stage { SELF_TEST, FILE_PREPARATION, CLAMAV_LOCAL, CLAMAV_OFFICIAL, YARA_X }
     const val URI_KEY = "scan_uri"
     const val ALLOW_OFFICIAL_KEY = "allow_official"
 
