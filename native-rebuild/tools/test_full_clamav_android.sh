@@ -8,13 +8,14 @@ adb install -t native-rebuild/app/build/outputs/apk/androidTest/debug/app-debug-
 engine=com.kanaf.alrasby.NativeArm64EngineRuntimeTest
 ipc=com.kanaf.alrasby.NativeScannerProcessIntegrationTest
 scan=com.kanaf.alrasby.AutomaticDeviceScanAndroidTest
+ui=com.kanaf.alrasby.KanafUiNavigationTest
 test_app_id="${KANAF_TEST_APP_ID:-com.kanaf.alrasby.fulltest}"
 tests="$engine#bothActualArm64EnginesPassEicarSelfTestThroughWorkerIpc,$engine#officialClamAvCompletesSeventyMiBAndYaraReportsItsOwnLimit,$engine#officialClamAvScansCompressedEntriesInApkShapedArchive,$engine#realYaraContentRuleRunsOnHarmlessControlAndRejectsNearMiss,$ipc#workerDeathFailsClosedAndNextScanRecovers,$scan#activeDeviceScanKeepsItsOwnerAfterActivityRecreation,$scan#interruptionReportRestoresLastPhaseCounterAndOriginalBuild,$scan#appOnlyScanIsBoundedAndHonestAboutUnavailableNativeChecks"
 adb shell am instrument -w -r -e class "$tests" \
   "${test_app_id}.test/androidx.test.runner.AndroidJUnitRunner" | tee android-runtime.txt
 grep -Eq 'OK \(8 tests\)' android-runtime.txt
 ! grep -Eq 'FAILURES|INSTRUMENTATION_FAILED' android-runtime.txt
-adb shell am instrument -w -r -e class "$ipc#yaraStageDeathRetriesWithOfficialClamavAndContinuesClamavOnly" \
+adb shell am instrument -w -r -e class "$ipc#yaraStageDeathRetriesWithOfficialClamavAndContinuesClamavOnly,$ui#featureDescriptionsHaveCompactReadableTextInBothLanguages" \
   "${test_app_id}.test/androidx.test.runner.AndroidJUnitRunner" | tee -a android-runtime.txt
-grep -Eq 'OK \(1 test\)' android-runtime.txt
+grep -Eq 'OK \(2 tests\)' android-runtime.txt
 ! grep -Eq 'FAILURES|INSTRUMENTATION_FAILED' android-runtime.txt

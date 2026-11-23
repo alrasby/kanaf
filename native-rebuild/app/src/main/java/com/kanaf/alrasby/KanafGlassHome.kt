@@ -39,6 +39,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
@@ -61,6 +62,9 @@ private const val SCAN_TOOLS_PAGE = 10
 private val Teal = Color(0xFF146C70)
 private val Aqua = Color(0xFF3DDFB0)
 private val Night = Color(0xFF0A1729)
+
+internal val Typography.kanafDescription
+    get() = bodyMedium.copy(fontSize = 13.sp, lineHeight = 19.sp)
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -205,6 +209,8 @@ fun KanafGlassHome(
     }
     val arabic = uiLanguage.isArabic()
     fun tr(ar: String, en: String) = if (arabic) ar else en
+    val descriptionStyle = MaterialTheme.typography.kanafDescription
+    val supportingDescriptionStyle = MaterialTheme.typography.bodySmall.copy(fontSize = 11.5.sp)
     if (confirmQuarantine) {
         AlertDialog(
             onDismissRequest = { confirmQuarantine = false },
@@ -272,7 +278,8 @@ fun KanafGlassHome(
                 KanafPrivacyDisclosure.VPN_TITLE_EN)) },
             text = {
                 Column(Modifier.heightIn(max = 340.dp).verticalScroll(rememberScrollState())) {
-                    Text(tr(KanafPrivacyDisclosure.VPN_AR, KanafPrivacyDisclosure.VPN_EN))
+                    Text(tr(KanafPrivacyDisclosure.VPN_AR, KanafPrivacyDisclosure.VPN_EN),
+                        style = descriptionStyle)
                 }
             },
             confirmButton = {
@@ -292,7 +299,7 @@ fun KanafGlassHome(
             text = {
                 Column(Modifier.heightIn(max = 400.dp).verticalScroll(rememberScrollState())) {
                     Text(tr(KanafPrivacyDisclosure.PRIVACY_AR,
-                        KanafPrivacyDisclosure.PRIVACY_EN))
+                        KanafPrivacyDisclosure.PRIVACY_EN), style = descriptionStyle)
                 }
             },
             confirmButton = {
@@ -360,7 +367,7 @@ fun KanafGlassHome(
                         Text(tr(
                             "افحص التطبيقات والملفات المتاحة بضغطة واحدة. لا اختيار ملفات ولا حذف تلقائي.",
                             "One-tap inspection of installed apps and accessible files. No picker or automatic deletion."
-                        ), color = secondary, style = MaterialTheme.typography.bodyMedium,
+                        ), color = secondary, style = descriptionStyle,
                             textAlign = TextAlign.Center)
                         Spacer(Modifier.height(14.dp))
                         Button(onClick = onDeviceScan, enabled = !busy,
@@ -395,7 +402,7 @@ fun KanafGlassHome(
                                 tr("إذن الملفات المشتركة متاح", "Shared-files permission available")
                             else tr("فحص التطبيقات متاح؛ إذن الملفات يوسّع نطاق الفحص.",
                                 "App scanning is available; files permission expands coverage."),
-                            color = secondary, style = MaterialTheme.typography.bodySmall
+                            color = secondary, style = supportingDescriptionStyle
                         )
                     }
                     val homeSections = KanafSection.entries.filter { it.id !in hiddenSections } + listOf(null, null)
@@ -484,7 +491,7 @@ fun KanafGlassHome(
                                 "Encrypted malware/phishing DNS protection without ad blocking.")
                         else tr("مرشح محلي للإعلانات والتتبع، مع DNS مشفر واختيار مزوّد واحد.",
                                 "Local ad/tracker blocking with encrypted DNS and one selected provider."),
-                            color = secondary, style = MaterialTheme.typography.bodySmall)
+                            color = secondary, style = supportingDescriptionStyle)
                         Row(
                             modifier = Modifier.fillMaxWidth().heightIn(min = 60.dp),
                             verticalAlignment = Alignment.CenterVertically,
@@ -501,7 +508,7 @@ fun KanafGlassHome(
                                     if (vpnRequested)
                                         tr("الاتصال عبر المزوّد المختار", "Using selected provider")
                                     else tr("فعّل بعد اختيار المزوّد", "Choose a provider, then enable"),
-                                    color = secondary, style = MaterialTheme.typography.bodySmall
+                                    color = secondary, style = supportingDescriptionStyle
                                 )
                             }
                             Switch(
@@ -530,7 +537,7 @@ fun KanafGlassHome(
                             Text(tr(
                                 "المزوّد الصارم في إعدادات الهاتف يمنع تشغيل المرشح؛ اختر «تلقائي» من إعدادات Android.",
                                 "A strict Android Private DNS provider blocks Kanaf; choose Automatic in phone settings."
-                            ), color = secondary, style = MaterialTheme.typography.bodySmall)
+                            ), color = secondary, style = supportingDescriptionStyle)
                         }
                     }
 
@@ -541,7 +548,7 @@ fun KanafGlassHome(
                         Text(tr(
                             "فعّل نطاقًا واحدًا. يمكنك التبديل بين المزوّدين أثناء التشغيل بعد التحقق من الاتصال المشفّر.",
                             "Enable one provider. Switch securely while filtering after the new provider is verified."
-                        ), color = secondary, style = MaterialTheme.typography.bodySmall)
+                        ), color = secondary, style = supportingDescriptionStyle)
                         for (host in DnsProviderStore.choices) {
                             val chosen = selectedDnsProvider == host
                             val providerActive = chosen && vpnRequested
@@ -662,7 +669,7 @@ fun KanafGlassHome(
                         Text(tr(
                             "عدادات مؤقتة وسجل تشخيص اختياري. يدعم كنف طلبات DNS عبر IPv4 وIPv6 الموجهة إلى خادمه، لكن فحص الاتصال لا يثبت منع كل التجاوزات.",
                             "Session-only counters with optional temporary diagnostic history. Kanaf handles IPv4 and IPv6 queries to its DNS servers, but this check cannot prove leak prevention."
-                        ), color = secondary, style = MaterialTheme.typography.bodySmall)
+                        ), color = secondary, style = supportingDescriptionStyle)
                         Text(dnsSessionStats, color = ink,
                             style = MaterialTheme.typography.bodyMedium,
                             modifier = Modifier.testTag("dns_session_stats"))
@@ -710,7 +717,7 @@ fun KanafGlassHome(
                         Text(tr(
                             "الزران يفتحان إعدادات Android مباشرة؛ لا يستطيع كنف تغيير وضع النظام دون صلاحية خاصة. وضع «تلقائي» متوافق مع مرشح كنف المشفّر.",
                             "Both buttons open Android settings directly. Kanaf cannot change the system mode without special permission. Automatic works with encrypted Kanaf DNS."
-                        ), color = secondary, style = MaterialTheme.typography.bodySmall)
+                        ), color = secondary, style = supportingDescriptionStyle)
                     }
 
                     TextButton(
@@ -784,7 +791,7 @@ fun KanafGlassHome(
                         Text(tr(
                             "فحص التطبيقات يبدأ من الرئيسية دون اختيار أي ملف. إذن الملفات المشتركة مطلوب مرة واحدة فقط لتوسيع النطاق؛ ولا يتيح قراءة بيانات التطبيقات الخاصة.",
                             "Installed-app scanning starts from Home without a file picker. One-time shared-files permission expands coverage but cannot access private app data."
-                        ), color = secondary, style = MaterialTheme.typography.bodySmall)
+                        ), color = secondary, style = supportingDescriptionStyle)
                         OutlinedButton(onClick = onRequestSharedStorage,
                             modifier = Modifier.fillMaxWidth()
                                 .testTag("request_storage_scan_access")) {
@@ -828,7 +835,7 @@ fun KanafGlassHome(
                         Text(tr(
                             "ألصق رابطًا أو نصًا يحتوي على روابط، أو شاركه إلى كنف من تطبيق آخر.",
                             "Paste a link or message containing links, or share text to Kanaf from another app."
-                        ), color = secondary, style = MaterialTheme.typography.bodyMedium)
+                        ), color = secondary, style = descriptionStyle)
                         Spacer(Modifier.height(12.dp))
                         OutlinedTextField(
                             value = linkInput,
@@ -852,7 +859,7 @@ fun KanafGlassHome(
                         Text(tr(
                             "تحليل محلي دون فتح الرابط أو إرسال بياناته. عند توافر Kanaf AI التجريبي تُعرض درجة احتمالية مبنية على نص الرابط وبيانات تاريخية، لا فحص سمعة أو ضمان سلامة.",
                             "Local analysis without opening or uploading the URL. When experimental Kanaf AI is included, its historical URL-text score is advisory; no site reputation check or safety guarantee."
-                        ), color = secondary, style = MaterialTheme.typography.bodySmall)
+                        ), color = secondary, style = supportingDescriptionStyle)
                     }
                     linkReport?.let { report ->
                         GlassPanel(card, stroke) {
@@ -1031,12 +1038,12 @@ fun KanafGlassHome(
                         Text(tr(
                             "مكتبة ARM64 أصلية. لا تُعتمد نتائجها حتى تنجح قواعد الاختبار والفحص الذاتي.",
                             "Native ARM64 library. Results are accepted only after rule verification and self-tests."
-                        ), color = secondary)
+                        ), color = secondary, style = descriptionStyle)
                         if (com.kanaf.alrasby.engine.OfficialClamDatabase.bundled) {
                             Text(tr(
                                 "ملفات ClamAV الرسمية مضمّنة: main وdaily وbytecode. يتحقق المحرك من توقيعاتها قبل تشغيلها.",
                                 "Official ClamAV main, daily and bytecode databases are included. The engine verifies their signatures before use."
-                            ), color = secondary)
+                            ), color = secondary, style = descriptionStyle)
                         }
                         Spacer(Modifier.height(16.dp))
                         Text("YARA-X 0.13.0", color = if (dark) Aqua else Teal,
@@ -1044,7 +1051,7 @@ fun KanafGlassHome(
                         Text(tr(
                             "تشمل الحزمة الإضافية 177 بصمة تطابق ملفات أندرويد بعينها، تغطي 15 عائلة وحملة، وثلاث قواعد محتوى لملفات Linux/ELF.",
                             "Supplemental rules include 177 Android exact-file hashes across 15 families and campaigns, plus three Linux/ELF content rules."
-                        ), color = secondary)
+                        ), color = secondary, style = descriptionStyle)
                     }
                     GlassPanel(card, stroke) {
                         Text(tr("مصادر القواعد وتراخيصها", "Rule sources and licences"), color = ink,
@@ -1071,7 +1078,7 @@ fun KanafGlassHome(
                         Text(tr(
                             "اختبر ClamAV وYARA-X باستخدام عينة EICAR الآمنة المدمجة، دون اختيار ملف أو الاتصال بالإنترنت.",
                             "Run the native ClamAV and YARA-X engines on the built-in harmless EICAR test sample, entirely offline."
-                        ), color = secondary)
+                        ), color = secondary, style = descriptionStyle)
                         Spacer(Modifier.height(12.dp))
                         Button(
                             onClick = onTestEngines, enabled = !busy,
@@ -1097,11 +1104,11 @@ fun KanafGlassHome(
                         ) else tr(
                             "تضم هذه النسخة قواعد محلية وتفحص المحركات ملفات حتى 64 ميبيبايت.",
                             "This build includes local rules and scans files up to 64 MiB with its native engines."
-                        ), color = secondary)
+                        ), color = secondary, style = descriptionStyle)
                         Text(tr(
                             "يوضح التقرير المحركات التي فحصت الملف وأي جزء تعذّر بسبب حد الحجم أو الوقت أو الوصول إلى الملف.",
                             "The report shows which engines scanned the file and whether size, time, or file access limited the result."
-                        ), color = secondary)
+                        ), color = secondary, style = descriptionStyle)
                     }
                 }
                 if (page == 3) {
@@ -1111,7 +1118,7 @@ fun KanafGlassHome(
                         Text(tr(
                             "استيراد قاعدة بصمات SHA-256 من حزمة موقعة بواسطة مفتاح الإنتاج المثبت داخل التطبيق. لا يمكن الوثوق بمفتاح أو قاعدة يأتيان من مصدر غير مُعتمد.",
                             "Import an offline SHA-256 database only if its RSA signature verifies against the production key pinned inside Kanaf. An untrusted source cannot supply its own key."
-                        ), color = secondary, style = MaterialTheme.typography.bodyMedium)
+                        ), color = secondary, style = descriptionStyle)
                         Spacer(Modifier.height(12.dp))
                         OutlinedButton(onClick = onImportSignedFeed,
                             enabled = canImportSignedFeed && !busy,
@@ -1122,7 +1129,7 @@ fun KanafGlassHome(
                             Text(tr(
                                 "غير مفعّل: لم يُثبّت مفتاح توقيع إنتاجي موثوق في البناء. تحديث البصمات الموقعة غير متاح.",
                                 "Disabled: no trusted production signing key is embedded in this build. Signed exact-file updates are unavailable."
-                            ), color = secondary, style = MaterialTheme.typography.bodySmall)
+                            ), color = secondary, style = supportingDescriptionStyle)
                         }
                         if (signedFeedStatus.isNotBlank()) {
                             Text(signedFeedStatus, color = secondary, style = MaterialTheme.typography.bodySmall)
@@ -1140,7 +1147,7 @@ fun KanafGlassHome(
                         Text(tr(
                             "نموذج الروابط التجريبي منفصل عن نموذج APK. كلاهما محلي، ولا يصل للرسائل أو المكالمات خفية ولا يحذف الملفات. لا تُعتمد درجات النموذج التجريبي لتحديد سلامة الروابط.",
                             "The experimental URL model is separate from APK scanning. Both are offline and never secretly access messages/calls or delete files. Pilot scores do not establish link safety."
-                        ), color = secondary, style = MaterialTheme.typography.bodySmall)
+                        ), color = secondary, style = supportingDescriptionStyle)
                     }
                     GlassPanel(card, stroke) {
                         Text(tr("اللغة والعرض", "Language & display"), color = ink,
@@ -1148,7 +1155,7 @@ fun KanafGlassHome(
                         Text(tr(
                             "تتغير لغة الواجهة واتجاهها فورًا دون إعادة تشغيل. تتوفر العربية والإنجليزية حاليًا؛ اللغات الأخرى تتبع الإنجليزية مؤقتًا حتى تكتمل ترجمتها.",
                             "Language and layout direction change immediately without a restart. Arabic and English are currently available; other system languages use English until translated."
-                        ), color = secondary, style = MaterialTheme.typography.bodySmall)
+                        ), color = secondary, style = supportingDescriptionStyle)
                         Spacer(Modifier.height(10.dp))
                         listOf(KanafLanguage.SYSTEM, KanafLanguage.ARABIC, KanafLanguage.ENGLISH)
                             .forEach { option ->
@@ -1175,7 +1182,7 @@ fun KanafGlassHome(
                                         Text(label, color = ink, style = MaterialTheme.typography.bodyMedium,
                                             fontWeight = FontWeight.SemiBold)
                                         Text(detail, color = secondary,
-                                            style = MaterialTheme.typography.bodySmall)
+                                            style = supportingDescriptionStyle)
                                     }
                                 }
                             }
@@ -1186,7 +1193,7 @@ fun KanafGlassHome(
                         Text(tr(
                             "أظهر أو أخفِ الأقسام غير الضرورية لك لتبقى الواجهة بسيطة. الإخفاء لا يعطل الميزة ولا يمسح بياناتها. يظل الفحص وزر الإعدادات متاحين دائمًا.",
                             "Show or hide optional sections to simplify navigation. Hiding a section does not disable its feature or delete data. Scan and Settings always remain accessible."
-                        ), color = secondary, style = MaterialTheme.typography.bodySmall)
+                        ), color = secondary, style = supportingDescriptionStyle)
                         Spacer(Modifier.height(8.dp))
                         KanafSection.OPTIONAL.forEach { section ->
                             val label = when (section) {
@@ -1231,7 +1238,7 @@ fun KanafGlassHome(
                                 Text(tr(
                                     "الاحتفاظ بآخر عشر نتائج مختصرة في الذاكرة فقط، دون أسماء الملفات. إيقاف هذا الخيار يمسح السجل فورًا.",
                                     "Store up to ten brief scan results in memory, without file names. Disabling this option clears the session history immediately."
-                                ), color = secondary, style = MaterialTheme.typography.bodySmall)
+                                ), color = secondary, style = supportingDescriptionStyle)
                             }
                             Spacer(Modifier.width(12.dp))
                             Switch(checked = keepSessionHistory, onCheckedChange = onSessionHistoryChanged)
@@ -1244,7 +1251,7 @@ fun KanafGlassHome(
                         Text(tr(
                             "يفحص كنف حزم التطبيقات بطلب المستخدم دون اختيار ملف، ويمكنه فحص الملفات المشتركة بعد إذن أندرويد. لا يستطيع قراءة بيانات التطبيقات الخاصة أو ملفات النظام.",
                             "Kanaf scans installed APKs on request without a file picker. It inspects shared files with Android's special access, but cannot read private app data or protected system files."
-                        ), color = secondary, style = MaterialTheme.typography.bodyMedium)
+                        ), color = secondary, style = descriptionStyle)
                         Spacer(Modifier.height(12.dp))
                         OutlinedButton(onClick = onOpenSystemApps,
                             modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
@@ -1254,7 +1261,7 @@ fun KanafGlassHome(
                         Text(tr(
                             "يفتح إعدادات أندرويد الرسمية لإدارة الأذونات يدويًا. لا يغيّر كنف أذونات التطبيقات الأخرى.",
                             "Opens official Android settings for manual controls. Kanaf does not modify other apps' permissions."
-                        ), color = secondary, style = MaterialTheme.typography.bodySmall)
+                        ), color = secondary, style = supportingDescriptionStyle)
                     }
                     GlassPanel(card, stroke) {
                         Text(tr("تحديث قواعد ومحركات الكشف", "Threat rules & engine updates"),
@@ -1263,7 +1270,7 @@ fun KanafGlassHome(
                         Text(tr(
                             "يتحقق كنف من قاعدة تهديدات موقعة من الناشر. تحديث ملفات المحركات الأصلية يتطلب تحديث التطبيق نفسه.",
                             "Kanaf checks a publisher-signed threat database. Native engine binaries update through application releases."
-                        ), color = secondary, style = MaterialTheme.typography.bodySmall)
+                        ), color = secondary, style = supportingDescriptionStyle)
                         OutlinedButton(onClick = onUpdateThreatRules, enabled = !busy,
                             modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
                                 .testTag("update_detection_rules")) {
@@ -1280,12 +1287,12 @@ fun KanafGlassHome(
                         Text(tr(
                             "كنف — استوديو الأمان والخصوصية. يقدّم فحصًا محليًا وتحليل روابط ومراجعة تطبيقات وخزنة مشفرة. هذه نسخة تطويرية؛ لا تضمن خلو الجهاز من البرمجيات الخبيثة.",
                             "Kanaf Security & Privacy Studio provides local file and link inspection, app review and an encrypted vault. This is a development build; it does not certify a device is malware-free."
-                        ), color = secondary, style = MaterialTheme.typography.bodyMedium)
+                        ), color = secondary, style = descriptionStyle)
                         Spacer(Modifier.height(8.dp))
                         Text(tr(
                             "لا تُرفع ملفات الفحص لخوادم. تُخزن اختيارات الواجهة داخل الجهاز. يبقى الحجر اليدوي وحذف الأصل متاحين فقط عند اختيارك وموافقتك الصريحة.",
                             "Selected files are not uploaded. Presentation settings stay on-device. Manual document quarantine and original deletion require your explicit selection and consent."
-                        ), color = secondary, style = MaterialTheme.typography.bodySmall)
+                        ), color = secondary, style = supportingDescriptionStyle)
                     }
                 }
                 if (page == 6) {
@@ -1296,7 +1303,7 @@ fun KanafGlassHome(
                         Text(tr(
                             "تحتفظ كنف بنسخة مشفرة محليًا بمفتاح من Android Keystore. لا تتصل بالإنترنت ولا تحفظ أسماء الملفات. تبقى الملفات الأصلية في مكانها؛ ليست هذه ميزة حجر تلقائي.",
                             "Kanaf keeps an encrypted local copy using Android Keystore. No uploads or original filenames are stored. Original files are unchanged; this is not automatic quarantine."
-                        ), color = secondary, style = MaterialTheme.typography.bodyMedium)
+                        ), color = secondary, style = descriptionStyle)
                         Spacer(Modifier.height(12.dp))
                         Button(onClick = { confirmVaultSave = true }, enabled = !busy,
                             modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
@@ -1313,7 +1320,7 @@ fun KanafGlassHome(
                         Text(tr(
                             "ملفات حتى 64 ميجابايت. يؤدي مسح بيانات التطبيق أو فقدان مفتاح Keystore إلى تعذر استعادة النسخ المشفرة.",
                             "Files up to 16 MiB. Clearing app data or losing the Android Keystore key makes vault files unrecoverable."
-                        ), color = secondary, style = MaterialTheme.typography.bodySmall)
+                        ), color = secondary, style = supportingDescriptionStyle)
                         if (vaultStatus.isNotBlank()) {
                             Spacer(Modifier.height(12.dp))
                             Text(vaultStatus, color = ink, style = MaterialTheme.typography.bodyMedium)
@@ -1362,7 +1369,7 @@ fun KanafGlassHome(
                         Text(tr(
                             "يعرض كنف التطبيقات القابلة للتشغيل التي يسمح أندرويد برؤيتها، مع عدد الأذونات المطلوبة. هذه مراجعة معلومات وليست كشفًا عن الفيروسات، ولا يغيّر كنف أي إذن من تلقاء نفسه.",
                             "Lists launchable apps visible under Android package rules, with their requested permission counts. This is information review, NOT malware detection. Kanaf cannot silently change permissions."
-                        ), color = secondary, style = MaterialTheme.typography.bodyMedium)
+                        ), color = secondary, style = descriptionStyle)
                         Spacer(Modifier.height(12.dp))
                         Button(onClick = onLoadApps, enabled = !busy,
                             modifier = Modifier.fillMaxWidth().testTag("privacy_load_apps")) {
@@ -1453,7 +1460,7 @@ fun KanafGlassHome(
                         }
                         Text(tr("تنزيل قاعدة البصمات عبر HTTPS والتحقق من توقيع الناشر؛ الجدولة تقريبية بحسب أندرويد.",
                             "Downloads the hash feed over HTTPS and verifies the publisher signature; Android controls timing."),
-                            color = secondary, style = MaterialTheme.typography.bodySmall)
+                            color = secondary, style = supportingDescriptionStyle)
                         TextButton(onClick = {
                             panelScope.launch {
                                 healthSummary = withContext(Dispatchers.IO) { ProtectionHealth.describe(appContext, uiLanguage.isArabic()) }
@@ -1479,7 +1486,7 @@ fun KanafGlassHome(
                         Text(tr(
                             "يفحص كنف ملفات APK المتاحة للتطبيق الجديد أو المحدّث، ويقارن الصلاحيات وشهادة التوقيع عند وجود سجل سابق. يرصد الأحداث أثناء حياة العملية، ويستخدم مراجعة تغيّر التطبيقات في الخلفية كل 15 دقيقة تقريبًا أو لاحقًا وفق قيود أندرويد. تظهر حالات تعذر الفحص بوضوح.",
                             "Kanaf scans accessible APKs after install/update broadcasts and compares permissions and signing certificates with an existing baseline. Live process broadcasts are backed by a delta inventory approximately every 15 minutes or later under Android limits; incomplete checks are reported."
-                        ), color = secondary, style = MaterialTheme.typography.bodyMedium)
+                        ), color = secondary, style = descriptionStyle)
                         Spacer(Modifier.height(12.dp))
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween) {
@@ -1494,7 +1501,7 @@ fun KanafGlassHome(
                         Text(tr(
                             "اختر مجلدًا محددًا تمنح كنف حق قراءته. يعمل الفحص كل 24 ساعة تقريبًا بحسب قيود البطارية، ويطابق بصمات SHA-256 لحد أقصى 32 ملفًا ضمن المجلد ومجلداته الفرعية في الدورة. لا يفحص الجهاز كله ولا يعمل كحماية فورية.",
                             "Choose a folder explicitly. Android schedules an approximate 24-hour check of up to 32 files in the selected folder and its subfolders against local SHA-256 signatures. This is not a whole-device or realtime scan."
-                        ), color = secondary, style = MaterialTheme.typography.bodyMedium)
+                        ), color = secondary, style = descriptionStyle)
                         Spacer(Modifier.height(12.dp))
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween) {
@@ -1521,7 +1528,7 @@ fun KanafGlassHome(
                         Text(tr(
                             "بصمات ESET لأندرويد وقواعد محتوى ESET وReversingLabs لملفات Linux/ELF محدودة النطاق. على أندرويد الحديث لا يمكن للتطبيق العادي قراءة ملفات جميع التطبيقات أو اعتراض استخدامها. لا يُصدر كنف حكم سلامة عند تعذر الفحص.",
                             "ESET Android file hashes and ESET/ReversingLabs Linux/ELF content rules have limited scope. Android limits inspection of unrelated apps and private files. Kanaf does not declare unchecked content safe."
-                        ), color = secondary, style = MaterialTheme.typography.bodyMedium)
+                        ), color = secondary, style = descriptionStyle)
                     }
                 }
                 if (page == 5) {

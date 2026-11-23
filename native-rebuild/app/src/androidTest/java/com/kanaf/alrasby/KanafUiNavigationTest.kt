@@ -1,14 +1,19 @@
 package com.kanaf.alrasby
 
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.unit.sp
 import androidx.test.platform.app.InstrumentationRegistry
 import android.os.Build
 import org.junit.After
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
 
@@ -74,6 +79,30 @@ class KanafUiNavigationTest {
         rule.onNodeWithTag("device_scan_button").performClick()
         rule.onNodeWithTag("scan_apps_only").assertExists()
         rule.onNodeWithTag("grant_files_for_auto_scan").assertExists()
+    }
+
+    @Test fun featureDescriptionsHaveCompactReadableTextInBothLanguages() {
+        fun assertDescription(text: String) {
+            val layouts = mutableListOf<TextLayoutResult>()
+            rule.onNodeWithText(text, substring = true).performScrollTo()
+                .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+            val layout = layouts.single()
+            assertEquals(13.sp, layout.layoutInput.style.fontSize)
+            assertEquals(19.sp, layout.layoutInput.style.lineHeight)
+            assertFalse(layout.hasVisualOverflow)
+        }
+
+        for (arabic in listOf(false, true)) {
+            rule.onNodeWithTag("settings_button").performClick()
+            rule.onNodeWithTag(if (arabic) "lang_ar" else "lang_en").performScrollTo().performClick()
+            rule.onNodeWithTag("settings_button").performClick()
+            assertDescription(if (arabic) "افحص التطبيقات والملفات المتاحة بضغطة واحدة"
+                else "One-tap inspection of installed apps")
+            rule.onNodeWithTag("nav_engines").performScrollTo().performClick()
+            assertDescription(if (arabic) "اختبر ClamAV وYARA-X باستخدام عينة"
+                else "Run the native ClamAV and YARA-X engines")
+            rule.onNodeWithTag("settings_button").performClick()
+        }
     }
 
     @Test fun advancedScanToolsMovedAwayFromHome() {

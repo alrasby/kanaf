@@ -979,7 +979,7 @@ private fun KanafScreen(
             text = { Text(localized(
                 "يمكنك فحص التطبيقات فورًا دون أذونات إضافية. لتضمين التنزيلات والصور والملفات المشتركة، يحتاج كنف إلى موافقة واحدة من إعدادات Android. لا يصل إلى بيانات التطبيقات الخاصة ولا يحذف شيئًا.",
                 "You can scan installed apps without extra permissions. To include downloads, photos and shared files, allow Android's one-time file access. Private app data remains protected and nothing is deleted."
-            )) },
+            ), style = MaterialTheme.typography.kanafDescription) },
             confirmButton = {
                 TextButton(onClick = {
                     askFilesBeforeScan = false
