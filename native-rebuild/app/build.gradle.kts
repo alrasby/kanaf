@@ -151,13 +151,16 @@ android {
                 val crashDiagnostics = providers.gradleProperty("kanafCrashDiagnosticsTest").orNull == "true"
                 val coverageTest = providers.gradleProperty("kanafCoverageTest").orNull == "true"
                 val deviceScanTest = providers.gradleProperty("kanafDeviceScanTest").orNull == "true"
+                val engineRecoveryTest = providers.gradleProperty("kanafEngineRecoveryTest").orNull == "true"
                 applicationIdSuffix = when {
+                    engineRecoveryTest -> ".fulltest.enginerecovery"
                     deviceScanTest -> ".fulltest.devicescan"
                     coverageTest -> ".fulltest.coverage"
                     crashDiagnostics -> ".fulltest.diagnostics"
                     else -> ".fulltest"
                 }
                 manifestPlaceholders["kanafAppLabel"] = when {
+                    engineRecoveryTest -> "Kanaf Engine Test"
                     deviceScanTest -> "Kanaf Scan Test"
                     coverageTest -> "Kanaf Coverage Test"
                     else -> "Kanaf Test"

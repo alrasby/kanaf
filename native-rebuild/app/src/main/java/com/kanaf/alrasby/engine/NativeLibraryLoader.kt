@@ -12,7 +12,7 @@ object NativeLibraryLoader {
     )
 
     @Synchronized
-    fun probe(): Result {
+    fun probe(allowYara: Boolean = true): Result {
         val errors = mutableListOf<String>()
         fun load(name: String): Boolean = try {
             System.loadLibrary(name)
@@ -28,7 +28,7 @@ object NativeLibraryLoader {
         // ClamAV has an explicit DT_NEEDED dependency on libclammspack.
         val mspack = load("clammspack")
         val clamav = mspack && load("clamav")
-        val yara = load("yara_x_capi")
+        val yara = allowYara && load("yara_x_capi")
         return Result(clamav, yara, errors.toList())
     }
 

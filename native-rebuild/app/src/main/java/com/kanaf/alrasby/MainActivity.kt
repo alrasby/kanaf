@@ -249,17 +249,19 @@ private fun KanafScreen(
                             "، ملفات مشتركة=" + scan.sharedFilesAttempted +
                             "، ملفات APK محفوظة=" + scan.storedApksAttempted +
                             "، بصمات محسوبة=" + scan.hashed +
-                            "، محاولات فحص أصلية=" + scan.nativeChecked +
+                            "، ملفات أُرسلت إلى المحركات=" + scan.nativeChecked +
                             " (تطبيقات=" + scan.nativeInstalledAttempts +
                             "، ملفات مشتركة=" + scan.nativeSharedAttempts + ")" +
                             "، تطابقات تهديد=" + scan.matches + "، عينات اختبار=" + scan.testSamples +
                             "، ملفات بفحص غير مكتمل=" + scan.incomplete +
                             "، تحذيرات بنيوية=" + scan.structuralWarnings +
                             ".\n" +
+                            "فحوص المحركات المكتملة: ClamAV ${scan.clamavCompleted} · YARA-X ${scan.yaraCompleted}.\n" +
                             (if (scan.truncated) "انتهى الفحص قبل تغطية جميع الملفات المتاحة.\n" else "") +
                             (if (scan.inventoryIssues > 0) "عناصر تعذّر حصرها: ${scan.inventoryIssues}.\n" else "") +
                             (if (scan.workerFailures > 0) "أعطال عملية المحرك: ${scan.workerFailures}.\n" else "") +
                             failureStages(true) +
+                            (if (scan.yaraPaused) "توقف YARA-X بقية الجلسة بعد تعطل عملية الفحص.\n" else "") +
                             (if (scan.nativePaused) "أُوقف فحص المحركات لهذه الجلسة، واستمر فحص البصمات.\n" else "") +
                             noteAr + "\n" +
                             "أسباب عدم الاكتمال وعدد الملفات لكل سبب (قد يجتمع أكثر من سبب في ملف):\n" + scan.incompleteReasons.entries.sortedByDescending { it.value }.joinToString("\n") {
@@ -271,17 +273,19 @@ private fun KanafScreen(
                             ", shared files=" + scan.sharedFilesAttempted +
                             ", stored APKs=" + scan.storedApksAttempted +
                             ", SHA-256 completed=" + scan.hashed +
-                            ", native checks attempted=" + scan.nativeChecked +
+                            ", files submitted to native engines=" + scan.nativeChecked +
                             " (installed=" + scan.nativeInstalledAttempts +
                             ", shared=" + scan.nativeSharedAttempts + ")" +
                             ", threat matches=" + scan.matches + ", harmless test samples=" + scan.testSamples +
                             ", files with incomplete inspection=" + scan.incomplete +
                             ", archive warnings=" + scan.structuralWarnings +
                             ".\n" +
+                            "Completed engine checks: ClamAV ${scan.clamavCompleted} · YARA-X ${scan.yaraCompleted}.\n" +
                             (if (scan.truncated) "Scan ended before all accessible files were covered.\n" else "") +
                             (if (scan.inventoryIssues > 0) "Items that could not be listed: ${scan.inventoryIssues}.\n" else "") +
                             (if (scan.workerFailures > 0) "Scanner process failures: ${scan.workerFailures}.\n" else "") +
                             failureStages(false) +
+                            (if (scan.yaraPaused) "YARA-X paused for this session after the process failed.\n" else "") +
                             (if (scan.nativePaused) "Native checks paused for this session. Hash checks continued.\n" else "") +
                             noteEn + "\n" + "Files per incomplete reason (a file may have several reasons):\n" +
                             scan.incompleteReasons.entries.sortedByDescending { it.value }.joinToString("\n") {

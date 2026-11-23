@@ -11,6 +11,8 @@ internal object NativeScanProtocol {
     enum class Stage { SELF_TEST, FILE_PREPARATION, CLAMAV_LOCAL, CLAMAV_OFFICIAL, YARA_X }
     const val URI_KEY = "scan_uri"
     const val ALLOW_OFFICIAL_KEY = "allow_official"
+    const val ALLOW_YARA_KEY = "allow_yara"
+    const val DEBUG_STOP_AT_YARA_KEY = "debug_stop_at_yara"
 
     // The first official scan may verify, unpack and compile the full database.
     fun watchdogMs(mode: Int, officialBundled: Boolean): Long =

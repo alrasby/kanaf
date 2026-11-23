@@ -37,7 +37,10 @@ class AutomaticDeviceScan {
         val inventoryIssues: Int = 0,
         val workerFailures: Int = 0,
         val nativePaused: Boolean = false,
-        val workerFailureStages: List<String> = emptyList()
+        val workerFailureStages: List<String> = emptyList(),
+        val yaraPaused: Boolean = false,
+        val clamavCompleted: Int = 0,
+        val yaraCompleted: Int = 0
     )
 
     companion object {
@@ -109,6 +112,8 @@ class AutomaticDeviceScan {
         var sharedAttempted = 0
         var hashed = 0
         var nativeChecked = 0
+        var clamavCompleted = 0
+        var yaraCompleted = 0
         val recovery = DeviceNativeScanRecovery(OfficialClamDatabase.bundled)
         val failureStages = linkedSetOf<String>()
         val apkInspector = ApkStructureInspector()
@@ -167,22 +172,18 @@ class AutomaticDeviceScan {
             }
             val native = if (skip == null) {
                 nativeChecked++
-                try {
-                    NativeScannerBridge.scan(context, Uri.fromFile(file),
-                        recovery.mode == DeviceNativeScanRecovery.Mode.FULL).also { report ->
-                        val failure = (report.clamav as? AntivirusEngine.Verdict.Incomplete)?.reason
-                        recovery.record(failure)
-                        report.interruptedStage?.let(failureStages::add)
-                    }
-                } catch (_: Exception) {
-                    recovery.record("scanner-process-unavailable")
-                    NativeScanProtocol.unavailable("scanner-process-unavailable")
+                recovery.scan(::stopped, observe = { report ->
+                    report.interruptedStage?.let(failureStages::add)
+                }) { allowOfficial, allowYara ->
+                    NativeScannerBridge.scan(context, Uri.fromFile(file), allowOfficial, allowYara)
                 }
             } else null
             val clam = native?.clamav
                 ?: AntivirusEngine.Verdict.Incomplete(requireNotNull(skip))
             val yara = native?.yaraX
                 ?: AntivirusEngine.Verdict.Incomplete(requireNotNull(skip))
+            if (clam !is AntivirusEngine.Verdict.Incomplete) clamavCompleted++
+            if (yara !is AntivirusEngine.Verdict.Incomplete) yaraCompleted++
             fun addIncomplete(reports: List<EngineConsensus.Report>) = reports.forEach {
                 (it.verdict as? AntivirusEngine.Verdict.Incomplete)?.let { verdict ->
                     issues.add(verdict.reason.removePrefix("INCOMPLETE:"))
@@ -344,7 +345,8 @@ class AutomaticDeviceScan {
             canReadShared, signatures != null, findings,
             storedApksAttempted, allocation.installedReserved, allocation.sharedReserved,
             incompleteReasons.toMap(), testSamples, inventoryIssues, recovery.failures,
-            recovery.mode == DeviceNativeScanRecovery.Mode.PAUSED, failureStages.toList()
+            recovery.mode == DeviceNativeScanRecovery.Mode.PAUSED, failureStages.toList(),
+            recovery.yaraPaused, clamavCompleted, yaraCompleted
         )
     }
 }

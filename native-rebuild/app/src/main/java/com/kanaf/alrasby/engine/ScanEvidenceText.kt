@@ -15,6 +15,8 @@ object ScanEvidenceText {
             if (arabic) "بلغ الفحص الحد المخصص للمحركات في هذه الجلسة" else "Device scan native-check budget reached"
         "native-paused-after-worker-failures" ->
             if (arabic) "تُخطيت المحركات بعد تعثر إعادة تشغيل خدمة الفحص" else "Native checks skipped after scanner recovery failed"
+        "yara-paused-after-worker-failure" ->
+            if (arabic) "تُخطي YARA-X بعد تعطل عملية المحرك" else "YARA-X skipped following a scanner process failure"
         "scan-stopped" ->
             if (arabic) "توقف الفحص قبل إتمام معالجة الملف" else "Scan stopped before processing the file"
         "scanner-worker-out-of-memory", "clamav-official-device-memory" ->

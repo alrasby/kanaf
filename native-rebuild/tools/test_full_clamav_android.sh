@@ -14,3 +14,7 @@ adb shell am instrument -w -r -e class "$tests" \
   "${test_app_id}.test/androidx.test.runner.AndroidJUnitRunner" | tee android-runtime.txt
 grep -Eq 'OK \(8 tests\)' android-runtime.txt
 ! grep -Eq 'FAILURES|INSTRUMENTATION_FAILED' android-runtime.txt
+adb shell am instrument -w -r -e class "$ipc#yaraStageDeathRetriesWithOfficialClamavAndContinuesClamavOnly" \
+  "${test_app_id}.test/androidx.test.runner.AndroidJUnitRunner" | tee -a android-runtime.txt
+grep -Eq 'OK \(1 test\)' android-runtime.txt
+! grep -Eq 'FAILURES|INSTRUMENTATION_FAILED' android-runtime.txt

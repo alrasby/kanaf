@@ -59,6 +59,9 @@ class NativeScannerService : Service() {
             // The bound client receives a disconnect or its own timeout; never CLEAN.
             val requestType = message.what
             val allowOfficial = message.data.getBoolean(NativeScanProtocol.ALLOW_OFFICIAL_KEY, true)
+            val allowYara = message.data.getBoolean(NativeScanProtocol.ALLOW_YARA_KEY, true)
+            val debugStopAtYara = applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0 &&
+                message.data.getBoolean(NativeScanProtocol.DEBUG_STOP_AT_YARA_KEY)
             val deadlineMs = NativeScanProtocol.watchdogMs(requestType, allowOfficial && OfficialClamDatabase.bundled)
             val watchdog = Runnable {
                 Log.w("KanafScanner", "Scanner watchdog expired for request type $requestType")
@@ -72,11 +75,14 @@ class NativeScannerService : Service() {
                         NativeScannerBridge.selfTestInWorker(this@NativeScannerService)
                     } else {
                         NativeScannerBridge.scanInWorker(
-                            this@NativeScannerService, requireNotNull(uri), allowOfficial
+                            this@NativeScannerService, requireNotNull(uri), allowOfficial, allowYara
                         ) { stage ->
                             val update = Message.obtain(null, NativeScanProtocol.RESPONSE_STAGE)
                             update.arg1 = stage.ordinal
                             try { reply.send(update) } catch (_: Exception) { /* Client ended the request. */ }
+                            if (debugStopAtYara && stage == NativeScanProtocol.Stage.YARA_X) {
+                                Process.killProcess(Process.myPid())
+                            }
                         }
                     }
                 } catch (failure: Exception) {

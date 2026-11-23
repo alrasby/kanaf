@@ -10,6 +10,8 @@ import com.kanaf.alrasby.engine.NativeScannerBridge
 import com.kanaf.alrasby.engine.NativeScannerService
 import com.kanaf.alrasby.engine.NativeScanProcessClient
 import com.kanaf.alrasby.engine.NativeScanProtocol
+import com.kanaf.alrasby.engine.DeviceNativeScanRecovery
+import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -73,5 +75,38 @@ class NativeScannerProcessIntegrationTest {
         )
         assertTrue(report.clamav is AntivirusEngine.Verdict.Incomplete)
         assertTrue(report.yaraX is AntivirusEngine.Verdict.Incomplete)
+    }
+
+    @Test fun yaraStageDeathRetriesWithOfficialClamavAndContinuesClamavOnly() {
+        val recovery = DeviceNativeScanRecovery(officialAvailable = true)
+        val file = File.createTempFile("engine-recovery-control-", ".txt", appContext.cacheDir)
+        try {
+            file.writeText("benign control for scanner process recovery")
+            val uri = Uri.fromFile(file)
+            val requests = mutableListOf<Pair<Boolean, Boolean>>()
+            val stages = mutableListOf<String>()
+            fun scan() = recovery.scan(stopped = { false }, observe = { report ->
+                report.interruptedStage?.let(stages::add)
+            }) { allowOfficial, allowYara ->
+                requests.add(allowOfficial to allowYara)
+                NativeScanProcessClient.execute(appContext, NativeScanProtocol.REQUEST_FILE, uri,
+                    allowOfficial, allowYara, debugStopAtYara = allowYara)
+            }
+
+            val retried = scan()
+            val next = scan()
+            assertEquals(listOf("YARA_X"), stages)
+            assertEquals(listOf(true to true, true to false, true to false), requests)
+            assertEquals(1, recovery.failures)
+            for (result in listOf(retried, next)) {
+                assertTrue("ClamAV must finish after the YARA-X worker exit: $result",
+                    result.clamav is AntivirusEngine.Verdict.NoKnownMatch)
+                assertTrue(result.gates.single { it.engineId == "clamav" }.rulesVersion?.startsWith("official-") == true)
+                assertEquals(AntivirusEngine.Verdict.Incomplete("yara-paused-after-worker-failure"), result.yaraX)
+                assertFalse(result.gates.single { it.engineId == "yara-x" }.libraryLoaded)
+            }
+        } finally {
+            file.delete()
+        }
     }
 }

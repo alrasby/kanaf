@@ -28,6 +28,7 @@ object NativeScannerBridge {
     // signature trust, file hashes, or library load failures.
     private val verdictCache = NativeVerdictCache()
     private val passedEngineSelfTest = java.util.concurrent.atomic.AtomicBoolean(false)
+    private val passedClamSelfTest = java.util.concurrent.atomic.AtomicBoolean(false)
 
     data class Report(
         val clamav: AntivirusEngine.Verdict,
@@ -77,17 +78,17 @@ object NativeScannerBridge {
      */
     fun scan(context: Context, uri: Uri): Report = scan(context, uri, true)
 
-    internal fun scan(context: Context, uri: Uri, allowOfficial: Boolean): Report =
-        NativeScanProcessClient.execute(context, NativeScanProtocol.REQUEST_FILE, uri, allowOfficial)
+    internal fun scan(context: Context, uri: Uri, allowOfficial: Boolean, allowYara: Boolean = true): Report =
+        NativeScanProcessClient.execute(context, NativeScanProtocol.REQUEST_FILE, uri, allowOfficial, allowYara)
 
     /** Built-in harmless EICAR self-test, executed in a separate worker process. */
     fun selfTest(context: Context): Report =
         NativeScanProcessClient.execute(context, NativeScanProtocol.REQUEST_SELF_TEST, null)
 
     /** Only called by the scanner Service running in :scanner. Never call from the UI process. */
-    internal fun scanInWorker(context: Context, uri: Uri, allowOfficial: Boolean,
+    internal fun scanInWorker(context: Context, uri: Uri, allowOfficial: Boolean, allowYara: Boolean,
                               stage: (NativeScanProtocol.Stage) -> Unit): Report =
-        scanSource(context, false, allowOfficial, stage) { context.contentResolver.openInputStream(uri) }
+        scanSource(context, false, allowOfficial, allowYara, stage) { context.contentResolver.openInputStream(uri) }
 
     internal fun selfTestInWorker(context: Context): Report =
         scanSource(context, true, true) { ByteArrayInputStream(eicar) }
@@ -134,6 +135,7 @@ object NativeScannerBridge {
     }
 
     private fun scanSource(context: Context, selfTestOnly: Boolean, allowOfficial: Boolean,
+                           allowYara: Boolean = true,
                            stage: (NativeScanProtocol.Stage) -> Unit = {},
                            source: () -> InputStream?): Report {
         var clamGate = NativeEngineGate("clamav", false, false, false)
@@ -142,7 +144,7 @@ object NativeScannerBridge {
             Report(clam, yara, listOf(clamGate, yaraGate))
 
         stage(NativeScanProtocol.Stage.SELF_TEST)
-        val libraries = NativeLibraryLoader.probe()
+        val libraries = NativeLibraryLoader.probe(allowYara)
         val bridgeLoaded = runCatching { System.loadLibrary("kanaf_scan"); true }.getOrDefault(false)
         if (!bridgeLoaded) return report(incomplete("jni-bridge-unavailable"), incomplete("jni-bridge-unavailable"))
 
@@ -152,7 +154,8 @@ object NativeScannerBridge {
         var target: File? = null
         try {
             val clamBytes = context.assets.open("kanaf_test.ndb").use { it.readBytes() }
-            val yaraBytes = context.assets.open("kanaf_test.yar").use { it.readBytes() }
+            val yaraBytes = if (allowYara) context.assets.open("kanaf_test.yar").use { it.readBytes() }
+                else byteArrayOf()
             val clamRulesOK = digest(clamBytes) == CLAM_RULE_HASH
             val yaraRulesOK = digest(yaraBytes) == YARA_RULE_HASH
             val rulesFile = stagedFile(context, "kanaf-clam-", ".ndb", clamBytes)
@@ -162,15 +165,15 @@ object NativeScannerBridge {
             // Negative self-test prevents a scanner that reports every file as infected.
             val clamOK: Boolean
             val yaraOK: Boolean
-            val cached = !selfTestOnly && passedEngineSelfTest.get() &&
-                libraries.clamavLoaded && libraries.yaraXLoaded &&
-                clamRulesOK && yaraRulesOK
+            val cached = !selfTestOnly && libraries.clamavLoaded && clamRulesOK &&
+                if (allowYara) passedEngineSelfTest.get() && libraries.yaraXLoaded && yaraRulesOK
+                else passedClamSelfTest.get()
             if (cached) {
                 // Reuse only a positive AND negative native EICAR diagnostic
                 // already passed in this same scanner process. Every actual
                 // user file still goes through BOTH native engines.
                 clamOK = true
-                yaraOK = true
+                yaraOK = allowYara
             } else {
                 val testFile = stagedFile(context, "kanaf-eicar-", ".txt", eicar)
                 test = testFile
@@ -241,9 +244,9 @@ object NativeScannerBridge {
                 } finally {
                     benign.delete()
                 }
-                if (clamOK && yaraOK && clamRulesOK && yaraRulesOK &&
-                    libraries.clamavLoaded && libraries.yaraXLoaded) {
-                    passedEngineSelfTest.set(true)
+                if (clamOK && clamRulesOK && libraries.clamavLoaded) {
+                    passedClamSelfTest.set(true)
+                    if (yaraOK && yaraRulesOK && libraries.yaraXLoaded) passedEngineSelfTest.set(true)
                 }
             }
             // Debug builds use EICAR fixtures for diagnostics. In production
@@ -254,13 +257,13 @@ object NativeScannerBridge {
             val realClam = if (production) verifiedProductionAsset(context,
                 "production_clamav.hsb", BuildConfig.KANAF_NATIVE_CLAM_RULE_SHA256,
                 ProductionNativeRulePolicy.MAX_CLAM_BYTES) else null
-            val realYara = if (production) verifiedProductionAsset(context,
+            val realYara = if (production && allowYara) verifiedProductionAsset(context,
                 "production_yara.yar", BuildConfig.KANAF_NATIVE_YARA_RULE_SHA256,
                 ProductionNativeRulePolicy.MAX_YARA_BYTES) else null
             // The signed feed updates exact-file rules in BOTH native engines.
             // Retain the independently pinned content rules, but replace old
             // exact hashes so a later signed feed can revoke an obsolete IOC.
-            val trustedRows = if (production && realClam != null && realYara != null &&
+            val trustedRows = if (production && realClam != null && (!allowYara || realYara != null) &&
                 BuildConfig.KANAF_SIGNATURE_MIN_VERSION > 0L)
                 SignatureRepository(context).loadSnapshot()
                     .takeIf { it.version > 1L }?.rows else null
@@ -363,10 +366,13 @@ object NativeScannerBridge {
                 }
             }
             val clamDone = android.os.SystemClock.elapsedRealtime()
-            stage(NativeScanProtocol.Stage.YARA_X)
-            val yaraVerdict = if (copiedBytes > YARA_INPUT_LIMIT) incomplete("yara-input-size-limit")
+            val yaraVerdict = if (!allowYara) incomplete("yara-paused-after-worker-failure")
+            else if (copiedBytes > YARA_INPUT_LIMIT) incomplete("yara-input-size-limit")
             else cachedVerdicts?.second ?: if (yaraGate.ready && activeYara != null) verdict(
-                yaraScanNative(selected.absolutePath, activeYara), sha256
+                run {
+                    stage(NativeScanProtocol.Stage.YARA_X)
+                    yaraScanNative(selected.absolutePath, activeYara)
+                }, sha256
             ) else incomplete(if (production && realYara == null)
                 "production-yara-rules-unavailable"
             else yaraGate.unavailableReason() ?: "yara-not-ready")

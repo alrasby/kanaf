@@ -22,7 +22,8 @@ import java.util.concurrent.atomic.AtomicReference
 
 /** Bounded synchronous IPC facade; MUST be invoked from Dispatchers.IO, never the UI thread. */
 internal object NativeScanProcessClient {
-    fun execute(context: Context, mode: Int, uri: Uri?, allowOfficial: Boolean = true): NativeScannerBridge.Report {
+    fun execute(context: Context, mode: Int, uri: Uri?, allowOfficial: Boolean = true,
+                allowYara: Boolean = true, debugStopAtYara: Boolean = false): NativeScannerBridge.Report {
         if (Looper.myLooper() == Looper.getMainLooper()) {
             return NativeScanProtocol.unavailable("scanner-called-on-main-thread")
         }
@@ -70,6 +71,8 @@ internal object NativeScanProcessClient {
                     request.data = Bundle().apply {
                         if (uri != null) putParcelable(NativeScanProtocol.URI_KEY, uri)
                         putBoolean(NativeScanProtocol.ALLOW_OFFICIAL_KEY, allowOfficial)
+                        putBoolean(NativeScanProtocol.ALLOW_YARA_KEY, allowYara)
+                        if (debugStopAtYara) putBoolean(NativeScanProtocol.DEBUG_STOP_AT_YARA_KEY, true)
                     }
                     Messenger(binder).send(request)
                 } catch (_: Exception) {
