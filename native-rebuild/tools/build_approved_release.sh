@@ -23,6 +23,18 @@ case "$action" in
     # Do not allow Gradle or signing to run at all if key materials and
     # independently audited production input files are not present.
     python3 tools/release_input_inventory.py --distribution "$channel" --strict
+    : "${KANAF_OFFICIAL_CLAM_ASSETS:?set the absolute path prepared by tools/prepare_official_clamav.sh}"
+    if [[ "$KANAF_OFFICIAL_CLAM_ASSETS" != /* ]] || ! command -v sigtool >/dev/null; then
+      echo "KANAF_RELEASE_BLOCKED: an absolute ClamAV assets path and trusted sigtool are required" >&2
+      exit 2
+    fi
+    for database in main daily bytecode; do
+      info="$(LC_ALL=C sigtool --info "$KANAF_OFFICIAL_CLAM_ASSETS/official-clamav/$database.cvd")"
+      if ! grep -Fxq 'Verification OK.' <<< "$info"; then
+        echo "KANAF_RELEASE_BLOCKED: invalid official ClamAV signature for $database.cvd" >&2
+        exit 2
+      fi
+    done
     export ORG_GRADLE_PROJECT_kanafReleaseDistribution="$channel"
     if [[ "$channel" == play ]]; then
       export ORG_GRADLE_PROJECT_kanafPlayDnsSecurityOnly=true
@@ -41,6 +53,7 @@ case "$action" in
         "app/src/main/jniLibs/arm64-v8a/$so"
     done
     bash tools/gradle_retry_429.sh --no-daemon \
+      "-PkanafOfficialClamAssets=$KANAF_OFFICIAL_CLAM_ASSETS" \
       :app:verifyKanafProductionInputs :app:assembleRelease :app:bundleRelease
     apk="app/build/outputs/apk/release/app-release.apk"
     aab="app/build/outputs/bundle/release/app-release.aab"

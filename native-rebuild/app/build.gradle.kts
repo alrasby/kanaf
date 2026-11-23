@@ -99,11 +99,10 @@ android {
         }
         buildConfigField("String", "KANAF_MODEL_PUBLIC_KEY_BASE64", "\"$modelKey\"")
         // Production native rules are independently reviewed binary assets.
-        // Missing/mismatched digests make native release scans INCOMPLETE;
-        // debug builds continue to use EICAR-only self-test fixtures.
+        // Missing/mismatched digests make scans using these rules incomplete.
         val nativeHashPattern = Regex("[0-9a-f]{64}")
-        val clamHash = providers.gradleProperty("kanafNativeClamRuleSha256").orNull ?: "01ffb619ca82f9a3080ecec434b31bd9677460c749a522236a060c8bd13c1c3f"
-        val yaraHash = providers.gradleProperty("kanafNativeYaraRuleSha256").orNull ?: "0943fe73accf2a766ac69b08fa71a67306a97b702654d185cd9db64a4d98d8fc"
+        val clamHash = providers.gradleProperty("kanafNativeClamRuleSha256").orNull ?: "278fc6319e8c7fcdab71a406c4d54b982976d629aa7a7557afb01786f4384840"
+        val yaraHash = providers.gradleProperty("kanafNativeYaraRuleSha256").orNull ?: "6dae2485444661e6b70447c189e2bd0a0f8d5b16145e7f61d2af8ae587775f2e"
         require(clamHash.isEmpty() || nativeHashPattern.matches(clamHash)) {
             "Invalid pinned ClamAV production rule digest"
         }
@@ -150,8 +149,13 @@ android {
         getByName("debug") {
             if (officialClamAssets != null) {
                 val crashDiagnostics = providers.gradleProperty("kanafCrashDiagnosticsTest").orNull == "true"
-                applicationIdSuffix = if (crashDiagnostics) ".fulltest.diagnostics" else ".fulltest"
-                manifestPlaceholders["kanafAppLabel"] = "Kanaf Test"
+                val coverageTest = providers.gradleProperty("kanafCoverageTest").orNull == "true"
+                applicationIdSuffix = when {
+                    coverageTest -> ".fulltest.coverage"
+                    crashDiagnostics -> ".fulltest.diagnostics"
+                    else -> ".fulltest"
+                }
+                manifestPlaceholders["kanafAppLabel"] = if (coverageTest) "Kanaf Coverage Test" else "Kanaf Test"
                 versionNameSuffix = "-full-clamav-test"
             }
         }
@@ -191,6 +195,8 @@ val verifyKanafProductionInputs = tasks.register("verifyKanafProductionInputs") 
             block("play-distribution-requires-security-only-dns")
         if (distribution == "direct" && playDnsMode)
             block("direct-distribution-must-not-impersonate-play")
+        if (officialClamAssets == null)
+            block("missing-official-clamav-databases")
         fun sha(bytes: ByteArray): String =
             MessageDigest.getInstance("SHA-256").digest(bytes)
                 .joinToString("") { "%02x".format(it.toInt() and 255) }

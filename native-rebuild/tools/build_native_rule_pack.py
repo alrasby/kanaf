@@ -21,8 +21,8 @@ def build(root=ROOT):
         raise ValueError("Pinned ESET seed changed; review provenance before updating")
     additions = (root / "rules/native-v1/eset-android-additions.tsv").read_bytes()
     sources = (root / "rules/native-v1/eset-android-additions.json").read_bytes()
-    if digest(additions) != "40f53e78b98ad7d9089e4b8ab6ae16e664268619f5fc2ecd505fb2e7ef87fb66" or \
-            digest(sources) != "e82c18cb427e12da57f45875db5700c6d8fa4807fdaa44aa81406e76f9844820":
+    if digest(additions) != "a0e6e59765040639a6efa2fcce30b2370672a44eb1a3559e23ebb12031c90c77" or \
+            digest(sources) != "4d6fedec056f459497fc1a01780b82e963bdfa91831e0a7fe43bd9f479cdf757":
         raise ValueError("Pinned ESET Android additions or source provenance changed")
     content = (root / "rules/native-v1/linux-moose.yar").read_bytes()
     # This hash pins the original upstream file, including its licence and author.

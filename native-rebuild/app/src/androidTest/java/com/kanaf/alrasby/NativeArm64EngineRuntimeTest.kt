@@ -10,6 +10,8 @@ import com.kanaf.alrasby.engine.OfficialClamDatabase
 import com.kanaf.alrasby.engine.ThreatFamily
 import java.io.File
 import java.security.MessageDigest
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
@@ -107,6 +109,30 @@ class NativeArm64EngineRuntimeTest {
             assertTrue("ClamAV did not complete the 70 MiB control: $result",
                 result.clamav is AntivirusEngine.Verdict.NoKnownMatch)
             assertEquals(AntivirusEngine.Verdict.Incomplete("yara-input-size-limit"), result.yaraX)
+        } finally {
+            file.delete()
+        }
+    }
+
+    @Test fun officialClamAvScansCompressedEntriesInApkShapedArchive() {
+        requireArm64()
+        assumeTrue(OfficialClamDatabase.bundled)
+        val file = File.createTempFile("apk-archive-control-", ".apk", appContext.cacheDir)
+        try {
+            ZipOutputStream(file.outputStream()).use { archive ->
+                archive.putNextEntry(ZipEntry("AndroidManifest.xml"))
+                archive.write("<manifest package=\"com.kanaf.archive.control\"/>".toByteArray())
+                archive.closeEntry()
+                archive.putNextEntry(ZipEntry("assets/sample.txt"))
+                archive.write(NativeScannerBridge.eicarReferenceForTests())
+                archive.closeEntry()
+            }
+            val result = NativeScannerBridge.scan(appContext, Uri.fromFile(file))
+            assertTrue(result.gates.single { it.engineId == "clamav" }.rulesVersion?.startsWith("official-") == true)
+            assertTrue("Official ClamAV did not detect the compressed EICAR control: $result",
+                result.clamav is AntivirusEngine.Verdict.Detected)
+            assertEquals(ThreatFamily.Kind.TEST_SAMPLE,
+                ThreatFamily.classify((result.clamav as AntivirusEngine.Verdict.Detected).threatName))
         } finally {
             file.delete()
         }

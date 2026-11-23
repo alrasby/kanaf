@@ -133,6 +133,12 @@ jobs:
           fi
           grep -q 'play-distribution-requires-security-only-dns' /tmp/kanaf-play-channel-negative.log ||
             { tail -n 80 /tmp/kanaf-play-channel-negative.log; exit 1; }
+          if gradle --no-daemon -PkanafReleaseDistribution=direct :app:verifyKanafProductionInputs > /tmp/kanaf-official-clam-negative.log 2>&1; then
+            echo "::error::Release accepted missing official ClamAV databases"
+            exit 1
+          fi
+          grep -q 'missing-official-clamav-databases' /tmp/kanaf-official-clam-negative.log ||
+            { tail -n 80 /tmp/kanaf-official-clam-negative.log; exit 1; }
           if gradle --no-daemon :app:verifyKanafProductionInputs > /tmp/kanaf-production-gate.log 2>&1; then
             echo "::error::Unsafe: production preflight accepted missing publisher assets"
             exit 1

@@ -9,8 +9,8 @@ engine=com.kanaf.alrasby.NativeArm64EngineRuntimeTest
 ipc=com.kanaf.alrasby.NativeScannerProcessIntegrationTest
 scan=com.kanaf.alrasby.AutomaticDeviceScanAndroidTest
 test_app_id="${KANAF_TEST_APP_ID:-com.kanaf.alrasby.fulltest}"
-tests="$engine#bothActualArm64EnginesPassEicarSelfTestThroughWorkerIpc,$engine#officialClamAvCompletesSeventyMiBAndYaraReportsItsOwnLimit,$engine#realYaraContentRuleRunsOnHarmlessControlAndRejectsNearMiss,$ipc#workerDeathFailsClosedAndNextScanRecovers,$scan#activeDeviceScanKeepsItsOwnerAfterActivityRecreation,$scan#interruptionReportRestoresLastPhaseCounterAndOriginalBuild"
+tests="$engine#bothActualArm64EnginesPassEicarSelfTestThroughWorkerIpc,$engine#officialClamAvCompletesSeventyMiBAndYaraReportsItsOwnLimit,$engine#officialClamAvScansCompressedEntriesInApkShapedArchive,$engine#realYaraContentRuleRunsOnHarmlessControlAndRejectsNearMiss,$ipc#workerDeathFailsClosedAndNextScanRecovers,$scan#activeDeviceScanKeepsItsOwnerAfterActivityRecreation,$scan#interruptionReportRestoresLastPhaseCounterAndOriginalBuild"
 adb shell am instrument -w -r -e class "$tests" \
   "${test_app_id}.test/androidx.test.runner.AndroidJUnitRunner" | tee android-runtime.txt
-grep -Eq 'OK \(6 tests\)' android-runtime.txt
+grep -Eq 'OK \(7 tests\)' android-runtime.txt
 ! grep -Eq 'FAILURES|INSTRUMENTATION_FAILED' android-runtime.txt

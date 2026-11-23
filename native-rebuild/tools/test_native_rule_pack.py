@@ -18,8 +18,10 @@ class NativeRulePackTest(unittest.TestCase):
             manifest = pack.build(root)
             for name, sha in manifest["assets"].items():
                 self.assertEqual(hashlib.sha256((pack.ROOT / "app/src/main/assets" / name).read_bytes()).hexdigest(), sha)
-            self.assertEqual(manifest["android_exact_hashes"], 149)
-            self.assertEqual(len(manifest["android_labels"]), 12)
+            self.assertEqual(manifest["android_exact_hashes"], 177)
+            self.assertEqual(len(manifest["android_labels"]), 15)
+            for label in ("Android.BirdCall", "Android.DarkNights", "Android.ExoticVisit"):
+                self.assertIn(label, manifest["android_labels"])
             seed = root / "rules/eset-android-seed/signatures.tsv"
             seed.write_bytes(seed.read_bytes() + b"\n")
             with self.assertRaises(ValueError):

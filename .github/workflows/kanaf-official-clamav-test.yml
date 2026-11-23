@@ -50,6 +50,11 @@ jobs:
           export PATH="$RUNNER_TEMP/clam/usr/local/bin:$PATH"
           export LD_LIBRARY_PATH="$RUNNER_TEMP/clam/usr/local/lib"
           "$GITHUB_WORKSPACE/native-rebuild/tools/prepare_official_clamav.sh" "$RUNNER_TEMP/clamav-assets"
+          for name in main daily bytecode; do
+            database="$RUNNER_TEMP/clamav-assets/official-clamav/$name.cvd"
+            LC_ALL=C sigtool --info "$database" | awk '/^(Build time|Version|Signatures):/'
+            LC_ALL=C sigtool --list-sigs="$database" | awk '/^Andr\./ { count++ } END { print "Andr. signature names: " count+0 }'
+          done | tee "$GITHUB_WORKSPACE/CLAMAV-DATABASES.txt"
       - name: Build, test, and verify APK
         run: |
           set -euo pipefail
@@ -65,15 +70,15 @@ jobs:
           GRADLE
           bash native-rebuild/tools/gradle_retry_429.sh -p native-rebuild --no-daemon -I "$init_script" \
             -PkanafOfficialClamAssets="$RUNNER_TEMP/clamav-assets" -PkanafArm64Runtime=true \
-            -PkanafCrashDiagnosticsTest=true \
+            -PkanafCoverageTest=true \
             :app:assembleDebug :app:testDebugUnitTest :app:assembleDebugAndroidTest
           apk="Kanaf-Full-ClamAV-${GITHUB_SHA:0:7}-arm64.apk"
           cp native-rebuild/app/build/outputs/apk/debug/app-debug.apk "$apk"
           tools="$ANDROID_HOME/build-tools/35.0.0"
           "$tools/apksigner" verify "$apk"
           "$tools/aapt2" dump badging "$apk" > "$RUNNER_TEMP/kanaf-badging.txt"
-          grep -F "package: name='com.kanaf.alrasby.fulltest.diagnostics'" "$RUNNER_TEMP/kanaf-badging.txt"
-          grep -F "application-label:'Kanaf Test'" "$RUNNER_TEMP/kanaf-badging.txt"
+          grep -F "package: name='com.kanaf.alrasby.fulltest.coverage'" "$RUNNER_TEMP/kanaf-badging.txt"
+          grep -F "application-label:'Kanaf Coverage Test'" "$RUNNER_TEMP/kanaf-badging.txt"
           "$tools/zipalign" -c -P 16 4 "$apk"
           for name in main daily bytecode; do
             expected="$(sha256sum "$RUNNER_TEMP/clamav-assets/official-clamav/$name.cvd" | cut -d' ' -f1)"
@@ -89,6 +94,7 @@ jobs:
           path: |
             Kanaf-Full-ClamAV-*-arm64.apk
             SHA256SUMS.txt
+            CLAMAV-DATABASES.txt
       - name: Enable hardware acceleration on the ephemeral runner
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -97,7 +103,7 @@ jobs:
       - name: Exercise the packaged ARM64 scanners on Android
         uses: reactivecircus/android-emulator-runner@v2
         env:
-          KANAF_TEST_APP_ID: com.kanaf.alrasby.fulltest.diagnostics
+          KANAF_TEST_APP_ID: com.kanaf.alrasby.fulltest.coverage
         with:
           api-level: 35
           target: google_apis

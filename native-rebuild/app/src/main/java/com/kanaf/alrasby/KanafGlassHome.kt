@@ -1042,8 +1042,8 @@ fun KanafGlassHome(
                         Text("YARA-X 0.13.0", color = if (dark) Aqua else Teal,
                             style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                         Text(tr(
-                            "القواعد المضمّنة تشمل 149 بصمة لملفات أندرويد عبر 12 عائلة وحملة، وثلاث قواعد محتوى لملفات Linux/ELF.",
-                            "Bundled rules include 149 Android exact-file hashes across 12 families and campaigns, plus three Linux/ELF content rules."
+                            "تشمل الحزمة الإضافية 177 بصمة تطابق ملفات أندرويد بعينها، تغطي 15 عائلة وحملة، وثلاث قواعد محتوى لملفات Linux/ELF.",
+                            "Supplemental rules include 177 Android exact-file hashes across 15 families and campaigns, plus three Linux/ELF content rules."
                         ), color = secondary)
                     }
                     GlassPanel(card, stroke) {

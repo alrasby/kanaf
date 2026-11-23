@@ -9,11 +9,14 @@
     "ESET Research",
     "ReversingLabs"
   ],
-  "android_exact_hashes": 149,
+  "android_exact_hashes": 177,
   "android_labels": [
     "Android.AridSpy",
     "Android.BadBazaar",
+    "Android.BirdCall",
     "Android.CallPhantom",
+    "Android.DarkNights",
+    "Android.ExoticVisit",
     "Android.GhostSpy",
     "Android.GravityRAT",
     "Android.HamsterKombatCampaign",
@@ -74,6 +77,35 @@
       "label": "Android.GravityRAT",
       "records": 3,
       "sha256": "859c4d1aca4bd0b3be121310b19206d59157687b6401ef388a2fc3ea34feb012"
+    },
+    "virtual_invaders": {
+      "label": "Android.ExoticVisit",
+      "records": 20,
+      "sha256": "c76eef3631a5045cdb784bdf9b2f5bc71a4f35a54ace3b9561157fb671649253"
+    },
+    "scarcruft": {
+      "label": "Android.BirdCall",
+      "records": 6,
+      "sha256": "8ab7d0d5148d27cbe438da26f7f5ca56df5a32f7d31c2d19347fb7fafb5110cc",
+      "included_sha1": [
+        "01a33066fbc6253304c92760916329abd50c3191",
+        "03e3ece9f48cf4104aafc535790ca2fb3c6b26cf",
+        "2b81f78ec4c3f8d6cf8f677d141c5d13c35333af",
+        "59a9b9d47ae36411b277544f25ad2cc955d8dd2c",
+        "7356d7868c81499fb4e720f7c9530e5763b4c1d0",
+        "fc0c691db7e2d2bd3b0b4c1e24d18df72168b7d9"
+      ],
+      "sha1_file_sha256": "ed57a096e5738e41ea8b982a8cf7b932043bb1b14e587c7a8948047598749cc4"
+    },
+    "thewizards": {
+      "label": "Android.DarkNights",
+      "records": 2,
+      "sha256": "b183ccc10188e92131436444ec04eb280fc7b68e179a65c6b335dde693388e33",
+      "included_sha1": [
+        "2d376adf44dbd9cf5db08884e76192d0bc9984c4",
+        "5b70a853d8e989ad102d639fbf7636b697313abc"
+      ],
+      "sha1_file_sha256": "59906b1db36aff655eaa199743e33ab839738ef9578b70edc3b72da0654a1bff"
     }
   },
   "linux_elf_content_rules": 3,
@@ -81,12 +113,12 @@
   "reversinglabs_source_commit": "e0a0be54aa1e11ccfd6854e4f19e9476f328fd84",
   "source_files": {
     "signatures.tsv": "f9e2e00f5f8f442a60be9002b0a7fc11230bb0764f1948649680bd161b35f882",
-    "eset-android-additions.tsv": "40f53e78b98ad7d9089e4b8ab6ae16e664268619f5fc2ecd505fb2e7ef87fb66",
+    "eset-android-additions.tsv": "a0e6e59765040639a6efa2fcce30b2370672a44eb1a3559e23ebb12031c90c77",
     "linux-moose.yar": "600beb24cb82f01d145f7353f5eb081153dffcd7c31adcf940a66094fa19b28a",
     "reversinglabs-acidrain.yara": "33416451fa8920e3a17f9844843dfb5173732c040a139f875558a0e8ab27024c"
   },
   "assets": {
-    "production_clamav.hsb": "01ffb619ca82f9a3080ecec434b31bd9677460c749a522236a060c8bd13c1c3f",
-    "production_yara.yar": "0943fe73accf2a766ac69b08fa71a67306a97b702654d185cd9db64a4d98d8fc"
+    "production_clamav.hsb": "278fc6319e8c7fcdab71a406c4d54b982976d629aa7a7557afb01786f4384840",
+    "production_yara.yar": "6dae2485444661e6b70447c189e2bd0a0f8d5b16145e7f61d2af8ae587775f2e"
   }
 }

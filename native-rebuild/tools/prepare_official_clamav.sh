@@ -16,6 +16,8 @@ trap 'rm -f "$config"; rm -rf "$updater_dir"' EXIT
 printf 'DatabaseDirectory "%s"\nDatabaseMirror database.clamav.net\nScriptedUpdates no\n' "$updater_dir" > "$config"
 freshclam --config-file="$config"
 for name in main daily bytecode; do
-    sigtool --info "$updater_dir/$name.cvd"
+    info="$(LC_ALL=C sigtool --info "$updater_dir/$name.cvd")"
+    printf '%s\n' "$info"
+    grep -Fxq 'Verification OK.' <<< "$info"
     cp "$updater_dir/$name.cvd" "$assets_root/official-clamav/$name.cvd"
 done
